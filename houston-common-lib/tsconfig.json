@@ -1,0 +1,54 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"useDefineForClassFields": true,
+		"module": "ESNext",
+		"moduleResolution": "Node",
+		"lib": [
+			"ESNext",
+			"DOM"
+		],
+		"strict": true,
+		"sourceMap": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"esModuleInterop": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noImplicitReturns": true,
+		"skipLibCheck": true,
+		"rootDir": "./lib",
+		"outDir": "dist",
+		"alwaysStrict": true,
+		"strictFunctionTypes": true,
+		"strictNullChecks": true,
+		"strictPropertyInitialization": true,
+		"forceConsistentCasingInFileNames": true,
+		"noImplicitAny": true,
+		"noImplicitThis": true,
+		"noFallthroughCasesInSwitch": true,
+		"emitDecoratorMetadata": true,
+		"experimentalDecorators": true,
+		"downlevelIteration": true,
+		"declaration": true,
+		"pretty": true,
+		"allowJs": true,
+		"checkJs": false,
+		"baseUrl": ".",
+		"paths": {
+			"@/*": [
+				"./lib/*"
+			]
+		}
+	},
+	"include": [
+		"typings/**/*.d.ts",
+		"lib/**/*.ts",
+		"lib/**/*.d.ts",
+		"lib/**/*.js"
+	],
+	"exclude": [
+		"dist",
+		"node_modules",
+	]
+}

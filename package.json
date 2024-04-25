@@ -1,0 +1,8 @@
+{
+    "name": "@45drives/houston-common",
+    "version": "1.0.0",
+    "private": true,
+    "workspaces": [
+        "houston-common-*"
+    ]
+}

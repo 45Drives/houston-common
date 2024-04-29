@@ -2,7 +2,8 @@
     "includeVersion": true,
     "entryPoints": ["lib/index.ts"],
     "plugin": [
-        "typedoc-umlclass"
+        "typedoc-umlclass",
+        "typedoc-plugin-mdn-links"
     ],
     "umlClassDiagram": {
         "type": "detailed",

@@ -7,7 +7,8 @@
 	"out": "docs",
 	"readme": "none",
     "plugin": [
-        "typedoc-umlclass"
+        "typedoc-umlclass",
+        "typedoc-plugin-mdn-links"
     ],
     "umlClassDiagram": {
         "type": "detailed",

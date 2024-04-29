@@ -30,7 +30,7 @@ jobs:
     - name: Generate autodocs
       run:  |
         yarn set version stable
-        yarn install --no-lockfile
+        yarn
         yarn docs
     - id: "upload-documentation"
       name: "Upload Pages artifact"

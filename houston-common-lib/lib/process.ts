@@ -2,18 +2,53 @@ import { Server } from "@/server";
 import cockpit from "cockpit";
 import { Result, Ok, Err } from "@thames/monads";
 
-const utf8Decoder = new TextDecoder("utf-8");
+const utf8Decoder = new TextDecoder("utf-8", { fatal: false });
 const utf8Encoder = new TextEncoder();
 
-export interface ProcessOptions
-  extends Pick<
-    cockpit.SpawnOptions,
-    "directory" | "environ" | "pty" | "superuser"
-  > {
-  /**
-   * Do not start process immediately - must call Process.execute() to start
-   */
-  defer?: boolean;
+export type CommandOptions = Omit<
+  cockpit.SpawnOptions,
+  "host" | "binary" | "err" | "environ"
+>;
+
+export type EnvironKV = `${string}=${string}`;
+
+export class Command {
+  public readonly argv: string[];
+  public readonly spawnOptions: cockpit.SpawnOptions & { binary: true };
+
+  constructor(
+    argv: string[],
+    opts: CommandOptions = {},
+    environ?: EnvironKV[]
+  ) {
+    this.argv = argv;
+    this.spawnOptions = {
+      ...opts,
+      binary: true,
+      err: "message",
+      environ,
+    };
+  }
+
+  public getName(): string {
+    return this.argv[0];
+  }
+
+  public toString(): string {
+    return `Command(${JSON.stringify(this.argv)}, ${JSON.stringify(this.spawnOptions)})`;
+  }
+}
+
+export class BashCommand extends Command {
+  constructor(
+    script: string,
+    args: string[] = [],
+    opts: CommandOptions & { arg0?: string } = {},
+    environ?: EnvironKV[]
+  ) {
+    const arg0 = opts.arg0 ?? "HoustonBashCommand";
+    super(["/usr/bin/env", "bash", "-c", script, arg0, ...args], opts, environ);
+  }
 }
 
 export class ProcessError extends Error {}
@@ -22,25 +57,19 @@ export class NonZeroExit extends ProcessError {}
 
 export class ProcessBase {
   public readonly server: Server;
-  public readonly argv: string[];
-  public readonly spawnOptions: cockpit.SpawnOptions & { binary: true };
+  public readonly command: Command;
 
-  constructor(
-    server: Server,
-    argv: string[],
-    spawnOptions: cockpit.SpawnOptions & { binary: true }
-  ) {
+  constructor(server: Server, command: Command) {
     this.server = server;
-    this.argv = argv;
-    this.spawnOptions = spawnOptions;
+    this.command = command;
   }
 
   public getName(): string {
-    return this.argv[0];
+    return this.command.getName();
   }
 
   public toString(): string {
-    return `Process(${JSON.stringify(this.argv)}, ${JSON.stringify(this.spawnOptions)})`;
+    return `Process(${this.server}, ${this.command})`;
   }
 }
 
@@ -52,14 +81,13 @@ export class ExitedProcess extends ProcessBase {
 
   constructor(
     server: Server,
-    argv: string[],
-    spawnOptions: cockpit.SpawnOptions & { binary: true },
+    command: Command,
     exitStatus: number,
     stdout: Uint8Array,
     stderr: string,
     killedBy?: string
   ) {
-    super(server, argv, spawnOptions);
+    super(server, command);
     this.exitStatus = exitStatus;
     this.stdout = stdout;
     this.stderr = stderr;
@@ -86,22 +114,28 @@ export class ExitedProcess extends ProcessBase {
   failed(): boolean {
     return !this.succeeded();
   }
+
+  logDebug(logger: (...args: any[]) => void = console.log): void {
+    logger(`${this}:
+stdout:
+${this.getStdout()}
+stderr:
+${this.getStderr()}`);
+  }
+
+  toString(): string {
+    const str = `Exited${super.toString()} (exited ${this.exitStatus})`;
+    if (!this.killedBy)
+      return str;
+    return str + ` (killed by ${this.killedBy})`;
+  }
 }
 
 export class Process extends ProcessBase {
   private spawnHandle?: cockpit.Spawn<Uint8Array>;
 
-  constructor(server: Server, argv: string[], options: ProcessOptions = {}) {
-    const {
-      defer,
-      ...spawnOptions
-    }: ProcessOptions & cockpit.SpawnOptions & { binary: true } = {
-      ...options,
-      binary: true,
-      err: "message",
-      host: server.host,
-    };
-    super(server, argv, spawnOptions);
+  constructor(server: Server, command: Command, defer?: boolean) {
+    super(server, command);
 
     if (defer !== true) {
       this.execute();
@@ -109,7 +143,10 @@ export class Process extends ProcessBase {
   }
 
   public execute(): Process {
-    this.spawnHandle = cockpit.spawn(this.argv, this.spawnOptions);
+    this.spawnHandle = cockpit.spawn(this.command.argv, {
+      ...this.command.spawnOptions,
+      host: this.server.host,
+    });
     return this;
   }
 
@@ -127,8 +164,7 @@ export class Process extends ProcessBase {
             Ok(
               new ExitedProcess(
                 this.server,
-                this.argv,
-                this.spawnOptions,
+                this.command,
                 exitStatus,
                 stdout,
                 stderr
@@ -163,8 +199,7 @@ export class Process extends ProcessBase {
             Ok(
               new ExitedProcess(
                 this.server,
-                this.argv,
-                this.spawnOptions,
+                this.command,
                 ex.exit_status,
                 stdout,
                 ex.message

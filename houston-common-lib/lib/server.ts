@@ -1,44 +1,45 @@
 import { Result, Ok, Err } from "@thames/monads";
 import {
+  Command,
+  CommandOptions,
   Process,
-  ProcessOptions,
   ExitedProcess,
   ProcessError,
 } from "@/process";
 
 export class Server {
-  public readonly host: string;
+  public readonly host?: string;
   private hostname?: string;
   private ipAddress?: string;
 
   constructor(host?: string) {
-    this.host = host ?? "localhost";
+    this.host = host;
   }
 
-  spawnProcess(argv: string[], options?: ProcessOptions): Process {
-    return new Process(this, argv, options);
+  spawnProcess(command: Command, defer: boolean = false): Process {
+    return new Process(this, command, defer);
   }
 
   execute(
-    argv: string[],
-    options?: ProcessOptions,
-    failIfNonZero: boolean = false
+    command: Command,
+    failIfNonZero?: boolean
   ): Promise<Result<ExitedProcess, ProcessError>> {
-    return this.spawnProcess(argv, options).wait(failIfNonZero);
+    return this.spawnProcess(command).wait(failIfNonZero);
   }
 
   async isAccessible(): Promise<Result<true, ProcessError>> {
-    return (await this.execute(["true"])).andThen(() => Ok(true));
+    return (await this.execute(new Command(["true"]), true)).andThen(() =>
+      Ok(true)
+    );
   }
 
   async getHostname(
     cache: boolean = true
   ): Promise<Result<string, ProcessError>> {
     if (this.hostname === undefined || cache === false) {
-      return (await this.execute(["hostname"])).match({
-        ok: (proc) => Ok((this.hostname = proc.getStdout().trim())),
-        err: (e) => Err(e),
-      });
+      return (await this.execute(new Command(["hostname"]), true)).map(
+        (proc) => (this.hostname = proc.getStdout().trim())
+      );
     }
     return Ok(this.hostname);
   }
@@ -46,26 +47,24 @@ export class Server {
   async getIpAddress(cache: boolean = true): Promise<Result<string, Error>> {
     if (this.ipAddress === undefined || cache === false) {
       const target = "1.1.1.1";
-      return (await this.execute(["ip", "route", "get", target], {}, true)).match({
-        ok: (proc) => {
-          const match = proc.getStdout().match(/src (ipAddress:[^\t ]+) /);
-          if (match === null || match.groups === undefined) {
-            const e = Error(`Malformed output from ${proc}`);
-            console.log(e);
-            console.log(proc.getStdout());
-            return Err(e);
-          }
-          this.ipAddress = match.groups["ipAddress"];
-          return Ok(this.ipAddress);
-        },
-        err: (e) => Err(e),
+      return (
+        await this.execute(new Command(["ip", "route", "get", target]), true)
+      ).andThen((proc) => {
+        const match = proc.getStdout().match(/src (ipAddress:[^\t ]+) /);
+        if (match === null || match.groups === undefined) {
+          const e = Error(`Malformed output from ${proc}`);
+          console.log(e);
+          console.log(proc.getStdout());
+          return Err(e);
+        }
+        this.ipAddress = match.groups["ipAddress"];
+        return Ok(this.ipAddress);
       });
     }
     return Ok(this.ipAddress);
   }
 
-  async getServer(host: string): Promise<Result<Server, Error>> {
-    const server = new Server(host);
-    return (await server.isAccessible()).andThen(() => Ok(server));
+  toString(): string {
+    return `Server(${this.host ?? "localhost"})`;
   }
 }

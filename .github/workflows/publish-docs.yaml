@@ -31,7 +31,7 @@ jobs:
       run:  |
         yarn set version stable
         yarn
-        yarn docs
+        yarn --cwd houston-common-lib docs
     - id: "upload-documentation"
       name: "Upload Pages artifact"
       uses: "actions/upload-pages-artifact@v2"

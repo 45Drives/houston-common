@@ -15,6 +15,5 @@
         "format": "png",
         "legend": "only-included",
         "verboseOutput": true
-    },
-    "logLevel": "Verbose"
+    }
 }

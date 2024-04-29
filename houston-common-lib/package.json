@@ -21,7 +21,7 @@
 		"build": "tsc --noEmit && vite build",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"docs:lib": "typedoc --out ../docs"
+		"docs": "typedoc --out ../docs"
 	},
 	"devDependencies": {
 		"typedoc": "^0.25.13",

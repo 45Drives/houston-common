@@ -9,6 +9,9 @@
         "location": "local",
         "format": "png",
         "legend": "only-included",
-        "verboseOutput": true
+        "verboseOutput": true,
+        "style": {
+            "backgroundColor": "white"
+        }
     }
 }

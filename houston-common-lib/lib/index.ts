@@ -19,13 +19,6 @@
  * @module
  */
 
-export * from '@/server';
-export * from '@/path';
-export * from '@/user';
-export * from '@/group';
-
-import { Server } from '@/server';
-
-const houston = new Server();
+import * as houston from "@/houston";
 
 export default houston;

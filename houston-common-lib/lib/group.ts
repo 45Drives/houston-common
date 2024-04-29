@@ -1,19 +1,19 @@
-import { Server } from '@/server';
-import { User } from '@/user';
+import { Server } from "@/server";
+import { User } from "@/user";
 
 export class Group {
-    constructor(
-        public name: string,
-        public gid: number,
-        public _memberLogins: string[],
-        public server: Server
-    ) {}
+  constructor(
+    public name: string,
+    public gid: number,
+    public _memberLogins: string[],
+    public server: Server
+  ) {}
 
-    getMembers(): User[] {
-        
-    }
+  getMembers(): User[] {
+    return []; // TODO
+  }
 
-    getPrimaryMember(): User | null {
-
-    }
-};
+  // getPrimaryMember(): User | null {
+  //   // TODO
+  // }
+}

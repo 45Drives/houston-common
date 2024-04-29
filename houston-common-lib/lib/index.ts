@@ -1,7 +1,7 @@
-/** 
+/**
  * @description
  * Various functions and classes to aid in creating plugins for Cockpit
- * 
+ *
  * ## Processes
  *   - {@link process} - Process spawning API (succeeds/replaces useSpawn)
  *   - {@link useSpawn useSpawn()} - Running a process on the server
@@ -16,9 +16,7 @@
  *   - {@link canonicalPath canonicalPath()} - Canonicalize/normalize path
  *   - {@link systemdUnitEscape systemdUnitEscape()} - String to valid Systemd unit name
  *   - {@link systemdUnitUnescape systemdUnitUnescape()} - Valid Systemd unit name back to original string
- * @module
+ * 
  */
 
-import * as houston from "@/houston";
-
-export default houston;
+export * from '@/houston';

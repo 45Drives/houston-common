@@ -1,7 +1,6 @@
 import { Result, Ok, Err } from "@thames/monads";
 import {
   Command,
-  CommandOptions,
   Process,
   ExitedProcess,
   ProcessError,

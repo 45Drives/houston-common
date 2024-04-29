@@ -1,5 +1,6 @@
 import { Server } from "@/server";
-import { Result, Ok, Err } from "@thames/monads";
+import { Result, Ok } from "@thames/monads";
+
 
 export * from '@/server';
 export * from '@/process';

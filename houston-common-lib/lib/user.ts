@@ -13,11 +13,11 @@ export class User {
         public server: Server
     ) { }
 
-    getPrimaryGroup(): Group {
-
-    }
+    // getPrimaryGroup(): Group {
+    //      // TODO
+    // }
 
     getGroups(): Group[] {
-        
+        return []; // TODO
     }
 };

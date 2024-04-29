@@ -1,0 +1,15 @@
+{
+    "includeVersion": true,
+    "entryPoints": ["lib/index.ts"],
+    "plugin": [
+        "typedoc-umlclass"
+    ],
+    "umlClassDiagram": {
+        "type": "detailed",
+        "location": "local",
+        "format": "png",
+        "legend": "only-included",
+        "verboseOutput": true
+    },
+    "logLevel": "Verbose"
+}

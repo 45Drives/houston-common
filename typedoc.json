@@ -1,0 +1,20 @@
+{
+	"$schema": "https://typedoc.org/schema.json",
+	"name": "Houston Common Library",
+	"entryPointStrategy": "packages",
+	"entryPoints": ["houston-common-*"],
+	"exclude": ["**/node_modules/**"],
+	"out": "docs",
+	"readme": "none",
+    "plugin": [
+        "typedoc-umlclass"
+    ],
+    "umlClassDiagram": {
+        "type": "detailed",
+        "location": "local",
+        "format": "png",
+        "legend": "only-included",
+        "verboseOutput": true
+    },
+    "logLevel": "Verbose"
+}

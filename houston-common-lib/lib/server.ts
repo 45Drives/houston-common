@@ -2,11 +2,14 @@ import { Result, Ok, Err } from "@thames/monads";
 import { Command, Process, ExitedProcess, ProcessError } from "@/process";
 import { User } from "@/user";
 import { Group } from "@/group";
+import { Directory, File } from "@/path";
 
 export class Server {
   public readonly host?: string;
   private hostname?: string;
   private ipAddress?: string;
+  private localUsers?: User[];
+  private localGroups?: Group[];
 
   constructor(host?: string) {
     this.host = host;
@@ -42,7 +45,7 @@ export class Server {
           console.log(proc.getStdout());
           return Err(e);
         }
-        this.ipAddress = match.groups["ipAddress"];
+        this.ipAddress = match.groups["ipAddress"] as string;
         return Ok(this.ipAddress);
       });
     }
@@ -55,13 +58,106 @@ export class Server {
 
   execute(
     command: Command,
-    failIfNonZero?: boolean
+    failIfNonZero: boolean = true
   ): Promise<Result<ExitedProcess, ProcessError>> {
     return this.spawnProcess(command).wait(failIfNonZero);
   }
 
-  getLocalUsers(): User[] {
-    
+  async getLocalUsers(
+    cache: boolean = true
+  ): Promise<Result<User[], ProcessError>> {
+    if (this.localUsers === undefined || cache === false) {
+      return (
+        await this.execute(new Command(["cat", "/etc/passwd"]), true)
+      ).map((proc) => {
+        this.localUsers = proc
+          .getStdout()
+          .split("\n")
+          .map((line) => {
+            const [login, _, uidStr, gidStr, name, home, shell] =
+              line.split(":");
+            if (
+              login === undefined ||
+              uidStr === undefined ||
+              gidStr === undefined ||
+              name === undefined ||
+              home === undefined ||
+              shell === undefined
+            ) {
+              return null;
+            }
+            const uid = parseInt(uidStr);
+            const gid = parseInt(gidStr);
+            if (isNaN(uid) || isNaN(gid)) {
+              return null;
+            }
+            return new User(
+              this,
+              login,
+              uid,
+              gid,
+              name,
+              new Directory(this, home),
+              new File(this, shell)
+            );
+          })
+          .filter((user): user is User => user instanceof User);
+        return this.localUsers;
+      });
+    }
+    return Ok(this.localUsers);
+  }
+
+  async getLocalGroups(
+    cache: boolean = true
+  ): Promise<Result<Group[], ProcessError>> {
+    if (this.localGroups === undefined || cache === false) {
+      return (await this.execute(new Command(["cat", "/etc/group"]), true)).map(
+        (proc) => {
+          this.localGroups = proc
+            .getStdout()
+            .split("\n")
+            .map((line) => {
+              const [name, _, gidStr, membersStr] = line.split(":");
+              if (
+                name === undefined ||
+                gidStr === undefined ||
+                membersStr === undefined
+              ) {
+                return null;
+              }
+              const gid = parseInt(gidStr);
+              if (isNaN(gid)) {
+                return null;
+              }
+              return new Group(this, name, gid, membersStr.split(","));
+            })
+            .filter((group): group is Group => group instanceof Group);
+          return this.localGroups;
+        }
+      );
+    }
+    return Ok(this.localGroups);
+  }
+
+  async getUserGroups(user: User): Promise<Result<Group[], ProcessError>> {
+    const userGroupNamesResult = (
+      await this.execute(new Command(["groups", user.login]), true)
+    ).map((proc) =>
+      proc
+        .getStdout()
+        /* remove "user : " present in some distros */
+        .replace(/^[^:]+:/, "")
+        .trim()
+        .split(" ")
+    );
+    if (userGroupNamesResult.isErr()) {
+      return Err(userGroupNamesResult.unwrapErr());
+    }
+    const userGroupNames = await userGroupNamesResult.unwrap();
+    return (await this.getLocalGroups()).map((localGroups) =>
+      localGroups.filter((group) => group.name in userGroupNames)
+    );
   }
 
   toString(): string {

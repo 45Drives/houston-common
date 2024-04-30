@@ -46,7 +46,8 @@ export class Path {
   ): Promise<Result<boolean, ProcessError>> {
     return (
       await server.execute(
-        new Command(["test", testFlag, this.path], commandOptions)
+        new Command(["test", testFlag, this.path], commandOptions),
+        false
       )
     ).andThen((proc) => Ok(proc.exitStatus === 0));
   }

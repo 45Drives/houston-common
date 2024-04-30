@@ -35,6 +35,7 @@
 		"pretty": true,
 		"allowJs": true,
 		"checkJs": false,
+		"noUncheckedIndexedAccess": true,
 		"baseUrl": ".",
 		"paths": {
 			"@/*": [

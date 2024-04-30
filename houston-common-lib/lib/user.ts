@@ -4,20 +4,12 @@ import { Server } from '@/server';
 
 export class User {
     constructor(
+        public server: Server,
         public login: string,
         public uid: number,
         public _primaryGroupID: number,
         public name: string,
         public home: Directory,
-        public shell: File,
-        public server: Server
+        public shell: File
     ) { }
-
-    // getPrimaryGroup(): Group {
-    //      // TODO
-    // }
-
-    getGroups(): Group[] {
-        return []; // TODO
-    }
 };

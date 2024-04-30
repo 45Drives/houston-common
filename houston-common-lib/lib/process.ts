@@ -27,7 +27,7 @@ export class Command {
   }
 
   public getName(): string {
-    return this.argv[0];
+    return this.argv[0] ?? "";
   }
 
   public toString(): string {
@@ -147,7 +147,7 @@ export class Process extends ProcessBase {
   }
 
   public wait(
-    failIfNonZero: boolean = false
+    failIfNonZero: boolean = true
   ): Promise<Result<ExitedProcess, ProcessError>> {
     return new Promise((resolve) => {
       if (this.spawnHandle === undefined) {

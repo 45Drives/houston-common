@@ -91,7 +91,7 @@ export class Server {
             if (isNaN(uid) || isNaN(gid)) {
               return null;
             }
-            return new User(
+            return User(
               this,
               login,
               uid,
@@ -101,7 +101,7 @@ export class Server {
               new File(this, shell)
             );
           })
-          .filter((user): user is User => user instanceof User);
+          .filter((user): user is User => user !== null);
         return this.localUsers;
       });
     }
@@ -130,7 +130,7 @@ export class Server {
               if (isNaN(gid)) {
                 return null;
               }
-              return new Group(this, name, gid, membersStr.split(","));
+              return Group(this, name, gid, membersStr.split(","));
             })
             .filter((group): group is Group => group instanceof Group);
           return this.localGroups;
@@ -157,6 +157,45 @@ export class Server {
     const userGroupNames = await userGroupNamesResult.unwrap();
     return (await this.getLocalGroups()).map((localGroups) =>
       localGroups.filter((group) => group.name in userGroupNames)
+    );
+  }
+
+  async getGroupMembers(group: Group): Promise<Result<User[], ProcessError>> {
+    return (await this.getLocalUsers()).map((localUsers) =>
+      localUsers.filter((user) => user.login in group.members)
+    );
+  }
+
+  async getUserByLogin(
+    login: string
+  ): Promise<Result<User | null, ProcessError>> {
+    return (await this.getLocalUsers()).map(
+      (localUsers) =>
+        localUsers.filter((user) => user.login === login)[0] ?? null
+    );
+  }
+
+  async getUserByUid(uid: number): Promise<Result<User | null, ProcessError>> {
+    return (await this.getLocalUsers()).map(
+      (localUsers) => localUsers.filter((user) => user.uid === uid)[0] ?? null
+    );
+  }
+
+  async getGroupByName(
+    groupName: string
+  ): Promise<Result<Group | null, ProcessError>> {
+    return (await this.getLocalGroups()).map(
+      (localGroups) =>
+        localGroups.filter((group) => group.name === groupName)[0] ?? null
+    );
+  }
+
+  async getGroupByGid(
+    gid: number
+  ): Promise<Result<Group | null, ProcessError>> {
+    return (await this.getLocalGroups()).map(
+      (localGroups) =>
+        localGroups.filter((group) => group.gid === gid)[0] ?? null
     );
   }
 

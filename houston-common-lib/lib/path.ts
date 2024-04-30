@@ -1,11 +1,5 @@
 import { Server } from "@/server";
-import {
-  Command,
-  Process,
-  ProcessError,
-  CommandOptions,
-  BashCommand,
-} from "@/process";
+import { Command, ProcessError, CommandOptions } from "@/process";
 import { Result, Ok, Err } from "@thames/monads";
 import { User } from "@/user";
 import { Group } from "@/group";
@@ -207,11 +201,11 @@ export class Ownership {
   constructor(group: Group);
   constructor(user: User, group: Group);
   constructor(userOrGroup: User | Group, group?: Group) {
-    if (userOrGroup instanceof Group) {
-      this.group = userOrGroup;
-    } else {
+    if ("uid" in userOrGroup) {
       this.user = userOrGroup;
       this.group = group;
+    } else {
+      this.group = userOrGroup;
     }
   }
 

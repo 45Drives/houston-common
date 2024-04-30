@@ -2,9 +2,9 @@
 	"$schema": "https://typedoc.org/schema.json",
 	"name": "Houston Common Library",
 	"entryPointStrategy": "packages",
-	"entryPoints": ["houston-common-*"],
-	"exclude": ["**/node_modules/**"],
+	"entryPoints": ["houston-common-lib"],
 	"out": "docs",
+    "includeVersion": false,
 	"readme": "none",
     "plugin": [
         "typedoc-umlclass",

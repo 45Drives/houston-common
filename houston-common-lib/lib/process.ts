@@ -5,10 +5,6 @@ import { Result, Ok, Err } from "@thames/monads";
 const utf8Decoder = new TextDecoder("utf-8", { fatal: false });
 const utf8Encoder = new TextEncoder();
 
-export {
-  cockpit
-};
-
 export type CommandOptions = Omit<
   cockpit.SpawnOptions,
   "host" | "binary" | "err" | "environ"
@@ -39,7 +35,9 @@ export class Command {
   }
 
   public toString(): string {
-    return `Command(${JSON.stringify(this.argv)}, ${JSON.stringify(this.spawnOptions)})`;
+    return `Command(${JSON.stringify(this.argv)}, ${JSON.stringify(
+      this.spawnOptions
+    )})`;
   }
 }
 
@@ -129,8 +127,7 @@ ${this.getStderr()}`);
 
   toString(): string {
     const str = `Exited${super.toString()} (exited ${this.exitStatus})`;
-    if (!this.killedBy)
-      return str;
+    if (!this.killedBy) return str;
     return str + ` (killed by ${this.killedBy})`;
   }
 }

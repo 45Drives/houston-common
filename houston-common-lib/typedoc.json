@@ -10,7 +10,6 @@
         "location": "local",
         "format": "png",
         "legend": "only-included",
-        "verboseOutput": true,
         "style": {
             "backgroundColor": "white"
         }

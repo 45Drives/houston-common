@@ -17,7 +17,7 @@ import { resolve } from 'path';
 export default defineConfig({
 	resolve: {
 		alias: {
-			'@': '/lib'
+			'@': resolve(__dirname, 'lib')
 		}
 	},
 	build: {
@@ -29,16 +29,16 @@ export default defineConfig({
 			fileName: 'index',
 			formats: ['es', 'cjs']
 		},
-		// rollupOptions: {
-		// 	// make sure to externalize deps that shouldn't be bundled
-		// 	// into your library
-		// 	external: [/^@45drives/],
-		// 	output: {
-		// 		// Provide global variables to use in the UMD build
-		// 		// for externalized deps
-		// 		globals: {}
-		// 	}
-		// }
+		rollupOptions: {
+			// make sure to externalize deps that shouldn't be bundled
+			// into your library
+			external: [/^@45drives/, 'cockpit'],
+			output: {
+				// Provide global variables to use in the UMD build
+				// for externalized deps
+				globals: {}
+			}
+		}
 	},
 	test: {
 		globals: true,

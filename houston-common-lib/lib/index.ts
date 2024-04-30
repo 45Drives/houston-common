@@ -19,4 +19,8 @@
  * 
  */
 
+import cockpit from 'cockpit';
+
+export { cockpit };
+
 export * from '@/houston';

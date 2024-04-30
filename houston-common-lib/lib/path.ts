@@ -168,7 +168,7 @@ export class ModeOctet {
   }
 }
 
-class Mode {
+export class Mode {
   owner: ModeOctet;
   group: ModeOctet;
   other: ModeOctet;

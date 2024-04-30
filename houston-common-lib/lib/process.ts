@@ -7,10 +7,8 @@ const utf8Encoder = new TextEncoder();
 
 export type CommandOptions = Omit<
   cockpit.SpawnOptions,
-  "host" | "binary" | "err" | "environ"
+  "host" | "binary" | "err"
 >;
-
-export type EnvironKV = `${string}=${string}`;
 
 export class Command {
   public readonly argv: string[];
@@ -18,15 +16,13 @@ export class Command {
 
   constructor(
     argv: string[],
-    opts: CommandOptions = {},
-    environ?: EnvironKV[]
+    opts: CommandOptions = {}
   ) {
     this.argv = argv;
     this.spawnOptions = {
       ...opts,
       binary: true,
-      err: "message",
-      environ,
+      err: "message"
     };
   }
 
@@ -45,11 +41,10 @@ export class BashCommand extends Command {
   constructor(
     script: string,
     args: string[] = [],
-    opts: CommandOptions & { arg0?: string } = {},
-    environ?: EnvironKV[]
+    opts: CommandOptions & { arg0?: string } = {}
   ) {
     const arg0 = opts.arg0 ?? "HoustonBashCommand";
-    super(["/usr/bin/env", "bash", "-c", script, arg0, ...args], opts, environ);
+    super(["/usr/bin/env", "bash", "-c", script, arg0, ...args], opts);
   }
 }
 

@@ -1,10 +1,7 @@
 import { Result, Ok, Err } from "@thames/monads";
-import {
-  Command,
-  Process,
-  ExitedProcess,
-  ProcessError,
-} from "@/process";
+import { Command, Process, ExitedProcess, ProcessError } from "@/process";
+import { User } from "@/user";
+import { Group } from "@/group";
 
 export class Server {
   public readonly host?: string;
@@ -13,17 +10,6 @@ export class Server {
 
   constructor(host?: string) {
     this.host = host;
-  }
-
-  spawnProcess(command: Command, defer: boolean = false): Process {
-    return new Process(this, command, defer);
-  }
-
-  execute(
-    command: Command,
-    failIfNonZero?: boolean
-  ): Promise<Result<ExitedProcess, ProcessError>> {
-    return this.spawnProcess(command).wait(failIfNonZero);
   }
 
   async isAccessible(): Promise<Result<true, ProcessError>> {
@@ -61,6 +47,21 @@ export class Server {
       });
     }
     return Ok(this.ipAddress);
+  }
+
+  spawnProcess(command: Command, defer: boolean = false): Process {
+    return new Process(this, command, defer);
+  }
+
+  execute(
+    command: Command,
+    failIfNonZero?: boolean
+  ): Promise<Result<ExitedProcess, ProcessError>> {
+    return this.spawnProcess(command).wait(failIfNonZero);
+  }
+
+  getLocalUsers(): User[] {
+    
   }
 
   toString(): string {

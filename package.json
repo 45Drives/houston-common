@@ -3,8 +3,10 @@
     "version": "1.0.0",
     "private": true,
     "scripts": {
-        "docs": "yarn build:ui && yarn typedoc",
-        "build": "yarn build:lib && yarn build:ui"
+        "docs:common": "yarn build:ui && yarn typedoc",
+        "docs": "yarn docs:common",
+        "build:common": "yarn build:lib && yarn build:ui",
+        "build": "yarn build:common"
     },
     "workspaces": [
         "houston-common-*"

@@ -5,9 +5,9 @@ import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
 import VueDevTools from 'vite-plugin-vue-devtools'
 
-import path from 'path';
+import path from 'path'
 
-import dts from 'vite-plugin-dts';
+import dts from 'vite-plugin-dts'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -18,7 +18,7 @@ export default defineConfig({
     dts({
       tsconfigPath: './tsconfig.app.json',
       rollupTypes: true,
-      entryRoot: 'lib',
+      entryRoot: 'lib'
     })
   ],
   resolve: {
@@ -30,7 +30,7 @@ export default defineConfig({
     minify: true,
     lib: {
       entry: path.resolve(__dirname, 'lib/index.ts'),
-      name: "Houston Common UI",
+      name: 'Houston Common UI',
       fileName: 'index',
       formats: ['es', 'cjs']
     },
@@ -42,7 +42,8 @@ export default defineConfig({
         // Provide global variables to use in the UMD build
         // for externalized deps
         globals: {
-          vue: 'Vue'
+          vue: 'Vue',
+          cockpit: 'cockpit'
         }
       }
     }

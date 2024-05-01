@@ -115,7 +115,7 @@ If not, see <https://www.gnu.org/licenses/>.
 
 <script lang="ts">
 
-import { ref, inject, provide, type InjectionKey, type Ref } from 'vue';
+import { ref, /* inject, provide, type InjectionKey, type Ref */ } from 'vue';
 import { InformationCircleIcon, ExclamationCircleIcon, MinusCircleIcon, CheckCircleIcon } from '@heroicons/vue/outline';
 import { XIcon } from '@heroicons/vue/solid';
 
@@ -146,7 +146,6 @@ export class Notification {
     public readonly key: symbol;
     public remove: () => void;
     public removerTimeout?: number;
-    // public removeTimerHandle?: 
     constructor(title: string, body: string, level: NotificationLevel = "info", timeout: number | "never" = 10_000) {
         this.title = title;
         this.body = body;
@@ -157,11 +156,15 @@ export class Notification {
         this.remove = () => { };
     }
 
-    addAction(label: string, callback: () => void | PromiseLike<void>): this {
-        this.actions.push({ key: Symbol(), label, callback: async () => {
-            await callback();
-            this.remove();
-        } });
+    addAction(label: string, callback: () => void | PromiseLike<void>, removesNotification: boolean = true): this {
+        this.actions.push({
+            key: Symbol(), label, callback: async () => {
+                await callback();
+                if (removesNotification) {
+                    this.remove();
+                }
+            }
+        });
         return this;
     }
 
@@ -179,8 +182,8 @@ export class Notification {
 }
 
 const notificationList = ref<Notification[]>([]);
-const notificationInjectionKey = Symbol("notificationList") as InjectionKey<Ref<Notification[]>>;
-provide(notificationInjectionKey, notificationList);
+// const notificationInjectionKey = Symbol("notificationList") as InjectionKey<Ref<Notification[]>>;
+// provide(notificationInjectionKey, notificationList);
 
 
 /**
@@ -196,10 +199,10 @@ provide(notificationInjectionKey, notificationList);
  * @param notif Notification to show
  */
 export function pushNotification(notif: Notification): Notification {
-    const notificationList = inject(notificationInjectionKey);
-    if (notificationList === undefined) {
-        throw new Error("Notification list not provided!");
-    }
+    // const notificationList = inject(notificationInjectionKey);
+    // if (notificationList === undefined) {
+    //     throw new Error("Notification list not provided!");
+    // }
     notif.startRemoveTimeout();
     notif.remove = () => {
         notif.stopRemoveTimeout();
@@ -211,7 +214,7 @@ export function pushNotification(notif: Notification): Notification {
 
 export default {
     setup() {
-        const notificationList = inject(notificationInjectionKey);
+        // const notificationList = inject(notificationInjectionKey);
 
         return {
             notificationList

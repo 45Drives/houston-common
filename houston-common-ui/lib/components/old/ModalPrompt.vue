@@ -31,7 +31,7 @@
 import { ref, defineExpose } from 'vue';
 import ModalConfirm from './ModalConfirm.vue';
 // import { DynamicFormResult } from '../composables/useDynamicFormGeneration';
-import { useDynamicFormGenerationPromise, DynamicFormPromise } from '../composables/useDynamicFormGenerationPromise';
+import { useDynamicFormGenerationPromise, DynamicFormPromise } from '../../composables/useDynamicFormGenerationPromise';
 import DynamicFormRenderer from './DynamicFormRenderer.vue';
 
 /**

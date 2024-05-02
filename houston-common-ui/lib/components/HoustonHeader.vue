@@ -16,86 +16,11 @@ You should have received a copy of the GNU General Public License along with 45D
 If not, see <https://www.gnu.org/licenses/>. 
 -->
 
-<template>
-	<div class="px-3 sm:px-5 flex items-center bg-plugin-header font-redhat shadow-lg z-10">
-		<div class="flex flex-row flex-wrap items-baseline basis-32 grow shrink-0 gap-x-4">
-			<div class="flex flex-row items-center my-5">
-				<Logo
-					:darkMode="darkMode"
-					class="h-6"
-				/>
-			</div>
-			<slot />
-			<LoadingSpinner
-				v-if="showSpinner"
-				class="size-icon self-center"
-			/>
-		</div>
-		<h1
-			class="text-red-800 dark:text-white text-base sm:text-2xl cursor-pointer grow-0 text-center"
-			@click="home"
-		>{{ moduleName }}</h1>
-		<div class="flex basis-32 justify-end items-center grow shrink-0 gap-buttons">
-			<div
-				:class="[infoButtonInHeader ? '' : 'md:fixed md:right-2 md:bottom-2 md:z-50 flex flex-row items-stretch']">
-				<button @click="showInfo = true">
-					<QuestionMarkCircleIcon class="size-icon icon-default" />
-				</button>
-				<div
-					class="overflow-y-auto"
-					:style="{ 'scrollbar-gutter': infoNudgeScrollbar ? 'stable' : 'auto' }"
-				></div>
-			</div>
-			<button
-				@click="darkMode = !darkMode"
-				@click.right.prevent="vape"
-			>
-				<SunIcon
-					v-if="darkMode"
-					class="size-icon-lg icon-default"
-				/>
-				<MoonIcon
-					v-else
-					class="size-icon-lg icon-default"
-				/>
-			</button>
-		</div>
-	</div>
-	<ModalPopup
-		:show="showInfo"
-		:headerText="`${moduleName} ${pluginVersion}`"
-		confirmText="Close"
-		@close="showInfo = false"
-	>
-		<div class="flex flex-col">
-			<span>
-				Created by
-				<a
-					class="text-link"
-					href="https://www.45drives.com/?utm_source=Houston&utm_medium=UI&utm_campaign=OS-Link"
-					target="_blank"
-				>45Drives</a> for Houston UI (Cockpit)
-			</span>
-			<a
-				class="text-link"
-				:href="sourceURL"
-				target="_blank"
-			>Source Code</a>
-			<a
-				class="text-link"
-				:href="issuesURL"
-				target="_blank"
-			>Issue Tracker</a>
-		</div>
-	</ModalPopup>
-</template>
-
 <script lang="ts">
-import { SunIcon, MoonIcon, QuestionMarkCircleIcon } from "@heroicons/vue/20/solid";
 import { ref, watch, inject, defineComponent, type Ref, type WatchSource } from "vue";
-import LoadingSpinner from "./LoadingSpinner.vue";
-import ModalPopup from './ModalPopup.vue';
-import Logo from './Logo.vue';
+import LoadingSpinner from "@/components/LoadingSpinner.vue";
+import { useGlobalProcessingState } from '@/composables/useGlobalProcessingState';
+import Logo45Drives from '@/components/Logo45Drives.vue';
 
 /**
  * Default header for Cockpit (Houston) plugins
@@ -103,24 +28,9 @@ import Logo from './Logo.vue';
 export default defineComponent({
 	props: {
 		moduleName: String,
-		sourceURL: String,
-		issuesURL: String,
-		showSpinner: Boolean,
-		infoButtonInHeader: Boolean,
-		infoNudgeScrollbar: Boolean,
-		pluginVersion: Number
 	},
 	setup(props) {
-		const showInfo = ref(false);
-		const darkMode = inject<Ref<boolean>>('darkModeInjectionKey') ?? ref(false);
-		function getTheme() {
-			let prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-			let theme = cockpit.localStorage.getItem("houston-color-theme");
-			if (theme === null)
-				return prefersDark;
-			return theme === "dark";
-		}
-		darkMode.value = getTheme();
+		const { globalProcessingState } = useGlobalProcessingState();
 		function home() {
 			cockpit.location.go('/');
 		}
@@ -157,32 +67,41 @@ export default defineComponent({
 				}
 			}, 500);
 		}
-		watch(() => darkMode.value, (darkMode: WatchSource<boolean>, _oldDarkMode: WatchSource<boolean> | undefined) => {
-			cockpit.localStorage.setItem("houston-color-theme", darkMode ? "dark" : "light");
-			if (darkMode) {
-				document.documentElement.classList.add("dark");
-			} else {
-				document.documentElement.classList.remove("dark");
-			}
-		}, { immediate: true });
-		cockpit.onvisibilitychange = () => darkMode.value = getTheme();
+
 		return {
-			showInfo,
-			darkMode,
+			globalProcessingState,
 			home,
 			vape,
 		};
 	},
 	components: {
-		SunIcon,
-		MoonIcon,
 		LoadingSpinner,
-		ModalPopup,
-		QuestionMarkCircleIcon,
-		Logo,
+		Logo45Drives,
 	}
 });
 </script>
+
+<template>
+	<div class="px-3 sm:px-5 flex items-center bg-plugin-header font-redhat shadow-lg z-10">
+		<div class="flex flex-row flex-wrap items-baseline basis-32 grow shrink-0 gap-x-4">
+			<div class="flex flex-row items-center my-5">
+				<Logo45Drives class="h-6" />
+			</div>
+			<slot name="header-left"></slot>
+			<LoadingSpinner
+				v-if="globalProcessingState"
+				class="size-icon self-center"
+			/>
+		</div>
+		<h1
+			class="text-red-800 dark:text-white text-base sm:text-2xl cursor-pointer grow-0 text-center"
+			@click="home"
+		>{{ moduleName }}</h1>
+		<div class="flex basis-32 justify-end items-center grow shrink-0 gap-buttons">
+			<slot name="header-right"></slot>
+		</div>
+	</div>
+</template>
 
 <style scoped>
 @import "@45drives/houston-common-css/src/index.css";

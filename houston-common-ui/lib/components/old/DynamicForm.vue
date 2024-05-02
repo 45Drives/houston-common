@@ -7,7 +7,7 @@
 <script lang="ts" setup>
 import { ref, watch } from 'vue';
 import DynamicFormRenderer from './DynamicFormRenderer.vue';
-import { useDynamicFormGeneration, type DynamicFormInputsSchema } from '../composables/useDynamicFormGeneration';
+import { useDynamicFormGeneration, type DynamicFormInputsSchema } from '../../composables/useDynamicFormGeneration';
 
 type Props = {
 	/**

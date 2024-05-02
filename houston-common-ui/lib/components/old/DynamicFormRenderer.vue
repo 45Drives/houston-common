@@ -160,7 +160,7 @@
  * Component to render inputs array from {@link useDynamicFormGeneration} via prop
  */
 
-import { type AnyTemplateReqs } from '../composables/useDynamicFormGeneration';
+import { type AnyTemplateReqs } from '../../composables/useDynamicFormGeneration';
 import { ExclamationCircleIcon } from '@heroicons/vue/20/solid';
 
 type Props = {

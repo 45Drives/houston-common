@@ -15,11 +15,6 @@ You should have received a copy of the GNU General Public License along with 45D
 If not, see <https://www.gnu.org/licenses/>. 
 -->
 
-<template>
-	<div
-		class="aspect-square animate-spin border-neutral-300 border-t-neutral-500 dark:border-neutral-500 dark:border-t-neutral-200 rounded-full" />
-</template>
-
 <script lang="ts">
 import { defineComponent } from "vue";
 
@@ -29,6 +24,12 @@ import { defineComponent } from "vue";
  */
 export default defineComponent({});
 </script>
+
+<template>
+	<div
+		class="aspect-square animate-spin border-2 border-neutral-300 border-t-neutral-500 dark:border-neutral-500 dark:border-t-neutral-200 rounded-full">
+	</div>
+</template>
 
 <style scoped>
 @import "@45drives/houston-common-css/src/index.css";

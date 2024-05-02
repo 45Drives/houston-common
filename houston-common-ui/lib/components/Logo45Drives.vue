@@ -1,3 +1,9 @@
+<script setup lang="ts">
+import { useDarkModeState } from '@/composables/useDarkModeState';
+
+const darkMode = useDarkModeState();
+</script>
+
 <template>
 	<svg
 		viewBox="0 0 927.2956 162.9455"
@@ -71,11 +77,3 @@
 		/>
 	</svg>
 </template>
-
-<script setup lang="ts">
-import { defineProps } from 'vue';
-
-const props = defineProps({
-	darkMode: Boolean,
-});
-</script>

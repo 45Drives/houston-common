@@ -83,7 +83,9 @@ If not, see <https://www.gnu.org/licenses/>.
                                     v-for="action in notification.actions"
                                     :key="action.key"
                                     @click="action.callback()"
-                                    class="rounded-md text-sm font-medium text-primary"
+                                    class="rounded-md text-sm font-medium"
+                                    :class="action.processing ? 'text-muted cursor-wait' : 'text-primary'"
+                                    :disabled="action.processing"
                                 >
                                     {{ action.label }}
                                 </button>
@@ -100,7 +102,7 @@ If not, see <https://www.gnu.org/licenses/>.
                                 class="icon-default"
                             >
                                 <span class="sr-only">Close</span>
-                                <XIcon
+                                <XMarkIcon
                                     class="size-icon"
                                     aria-hidden="true"
                                 />
@@ -115,9 +117,9 @@ If not, see <https://www.gnu.org/licenses/>.
 
 <script lang="ts">
 
-import { ref, /* inject, provide, type InjectionKey, type Ref */ } from 'vue';
-import { InformationCircleIcon, ExclamationCircleIcon, MinusCircleIcon, CheckCircleIcon } from '@heroicons/vue/outline';
-import { XIcon } from '@heroicons/vue/solid';
+import { ref, reactive } from 'vue';
+import { InformationCircleIcon, ExclamationCircleIcon, MinusCircleIcon, CheckCircleIcon } from '@heroicons/vue/24/outline';
+import { XMarkIcon } from '@heroicons/vue/20/solid';
 
 /** Notification passed to showNotification
  * 
@@ -129,10 +131,11 @@ import { XIcon } from '@heroicons/vue/solid';
  * @property {function} addAction - add action to notification
  */
 
-export interface NotificationAction {
+interface NotificationAction {
     key: symbol;
     label: string;
     callback: () => void;
+    processing: boolean;
 }
 
 export type NotificationLevel = "info" | "warning" | "error" | "success" | "denied";
@@ -157,14 +160,20 @@ export class Notification {
     }
 
     addAction(label: string, callback: () => void | PromiseLike<void>, removesNotification: boolean = true): this {
-        this.actions.push({
-            key: Symbol(), label, callback: async () => {
+        const action = reactive<NotificationAction>({
+            key: Symbol(),
+            label,
+            callback: async () => {
+                action.processing = true;
                 await callback();
+                action.processing = false;
                 if (removesNotification) {
                     this.remove();
                 }
-            }
+            },
+            processing: false,
         });
+        this.actions.push(action);
         return this;
     }
 
@@ -182,9 +191,6 @@ export class Notification {
 }
 
 const notificationList = ref<Notification[]>([]);
-// const notificationInjectionKey = Symbol("notificationList") as InjectionKey<Ref<Notification[]>>;
-// provide(notificationInjectionKey, notificationList);
-
 
 /**
  * Push a notification
@@ -199,14 +205,11 @@ const notificationList = ref<Notification[]>([]);
  * @param notif Notification to show
  */
 export function pushNotification(notif: Notification): Notification {
-    // const notificationList = inject(notificationInjectionKey);
-    // if (notificationList === undefined) {
-    //     throw new Error("Notification list not provided!");
-    // }
+    notif = reactive(notif);
     notif.startRemoveTimeout();
     notif.remove = () => {
         notif.stopRemoveTimeout();
-        notificationList.value = notificationList.value.filter(n => n !== notif);
+        notificationList.value = notificationList.value.filter(n => n.key !== notif.key);
     };
     notificationList.value = [...notificationList.value, notif];
     return notif;
@@ -214,8 +217,6 @@ export function pushNotification(notif: Notification): Notification {
 
 export default {
     setup() {
-        // const notificationList = inject(notificationInjectionKey);
-
         return {
             notificationList
         };
@@ -225,7 +226,11 @@ export default {
         ExclamationCircleIcon,
         MinusCircleIcon,
         CheckCircleIcon,
-        XIcon,
+        XMarkIcon,
     }
 };
 </script>
+
+<style scoped>
+@import "@45drives/houston-common-css/src/index.css";
+</style>

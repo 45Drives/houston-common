@@ -25,23 +25,12 @@ export default defineConfig({
 		// lib property is set in build script
 		lib: {
 			entry: resolve(__dirname, 'lib/index.ts'),
-			name: 'Cockpit Helpers',
+			name: 'Houston Common Library',
 			// the proper extensions will be added
 			fileName: 'index',
 			formats: ['es', 'cjs']
 		},
-		rollupOptions: {
-			// make sure to externalize deps that shouldn't be bundled
-			// into your library
-			external: [/^@45drives/, 'cockpit'],
-			output: {
-				// Provide global variables to use in the UMD build
-				// for externalized deps
-				globals: {
-					cockpit: 'cockpit'
-				}
-			}
-		}
+		sourcemap: true,
 	},
 	test: {
 		globals: true,

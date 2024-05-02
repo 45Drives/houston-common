@@ -1,3 +1,5 @@
+/// <reference path="./cockpit.d.ts" />
+
 declare module "cockpit" {
   interface Transport {
     origin: string | null;
@@ -27,7 +29,7 @@ declare module "cockpit" {
     exit_signal: string | null;
   }
 
-  interface Spawn<T> {
+  interface Spawn<T> extends DeferredPromise<T> {
     then(
       callback: (data: T, message: string) => void | PromiseLike<void>
     ): Spawn<T>;
@@ -78,5 +80,5 @@ declare module "cockpit" {
   export const localStorage: StorageHelper;
   export const sessionStorage: StorageHelper;
 
-  export let onvisibilitychange: function | undefined;
+  export let onvisibilitychange: Function | undefined;
 }

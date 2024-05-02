@@ -1,18 +1,18 @@
 import { Server } from "@/server";
-import cockpit from "cockpit";
+import Cockpit from "cockpit";
 import { Result, Ok, Err } from "@thames/monads";
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: false });
 const utf8Encoder = new TextEncoder();
 
 export type CommandOptions = Omit<
-  cockpit.SpawnOptions,
+  Cockpit.SpawnOptions,
   "host" | "binary" | "err"
 >;
 
 export class Command {
   public readonly argv: string[];
-  public readonly spawnOptions: cockpit.SpawnOptions & { binary: true };
+  public readonly spawnOptions: Cockpit.SpawnOptions & { binary: true };
 
   constructor(
     argv: string[],
@@ -128,7 +128,7 @@ ${this.getStderr()}`);
 }
 
 export class Process extends ProcessBase {
-  private spawnHandle?: cockpit.Spawn<Uint8Array>;
+  private spawnHandle?: Cockpit.Spawn<Uint8Array>;
 
   constructor(server: Server, command: Command, defer?: boolean) {
     super(server, command);

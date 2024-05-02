@@ -19,8 +19,4 @@
  * 
  */
 
-import type cockpit from 'cockpit';
-
-export { type cockpit };
-
 export * from '@/houston';

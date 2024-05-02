@@ -8,7 +8,8 @@
     ".": {
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    }
+    },
+    "./style.css": "./dist/style.css"
   },
   "types": "dist/index.d.ts",
   "scripts": {
@@ -29,6 +30,7 @@
   "devDependencies": {
     "@heroicons/vue": "^2.1.3",
     "@rushstack/eslint-patch": "^1.8.0",
+    "@tailwindcss/forms": "^0.5.7",
     "@tsconfig/node20": "^20.1.4",
     "@types/jsdom": "^21.1.6",
     "@types/node": "^20.12.5",
@@ -38,11 +40,15 @@
     "@vue/eslint-config-typescript": "^13.0.0",
     "@vue/test-utils": "^2.4.5",
     "@vue/tsconfig": "^0.5.1",
+    "autoprefixer": "^10.4.19",
     "eslint": "^8.57.0",
     "eslint-plugin-vue": "^9.23.0",
     "jsdom": "^24.0.0",
     "npm-run-all2": "^6.1.2",
+    "postcss": "^8.4.38",
+    "postcss-modules": "^6.0.0",
     "prettier": "^3.2.5",
+    "tailwindcss": "^3.4.3",
     "typescript": "~5.4.0",
     "vite": "^5.2.8",
     "vite-plugin-dts": "^3.9.0",

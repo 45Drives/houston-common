@@ -161,7 +161,7 @@
  */
 
 import { type AnyTemplateReqs } from '../composables/useDynamicFormGeneration';
-import { ExclamationCircleIcon } from '@heroicons/vue/solid';
+import { ExclamationCircleIcon } from '@heroicons/vue/20/solid';
 
 type Props = {
 	/**

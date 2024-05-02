@@ -91,12 +91,11 @@ If not, see <https://www.gnu.org/licenses/>.
 </template>
 
 <script lang="ts">
-import { SunIcon, MoonIcon, QuestionMarkCircleIcon } from "@heroicons/vue/solid";
+import { SunIcon, MoonIcon, QuestionMarkCircleIcon } from "@heroicons/vue/20/solid";
 import { ref, watch, inject, defineComponent, type Ref, type WatchSource } from "vue";
 import LoadingSpinner from "./LoadingSpinner.vue";
 import ModalPopup from './ModalPopup.vue';
 import Logo from './Logo.vue';
-import cockpit from 'cockpit';
 
 /**
  * Default header for Cockpit (Houston) plugins

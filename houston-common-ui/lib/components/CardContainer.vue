@@ -1,12 +1,12 @@
 <template>
 	<div class="card flex flex-col">
-		<div v-if="$slots.header" class="card-header flex flex-row space-x-2 items-center">
+		<div v-if="$slots.header" class="card-header text-header flex flex-row space-x-2 items-center">
 			<slot name="header"></slot>
 		</div>
 		<div class="card-body flex-grow">
 			<slot></slot>
 		</div>
-		<div v-if="$slots.footer" class="card-body flex flex-row space-x-2 items-center">
+		<div v-if="$slots.footer" class="card-footer flex flex-row space-x-2 items-center">
 			<slot name="footer"></slot>
 		</div>
 	</div>

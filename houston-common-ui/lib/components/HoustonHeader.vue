@@ -82,22 +82,23 @@ export default defineComponent({
 </script>
 
 <template>
-	<div class="px-3 sm:px-5 flex items-center bg-plugin-header font-redhat shadow-lg z-10">
-		<div class="flex flex-row flex-wrap items-baseline basis-32 grow shrink-0 gap-x-4">
+	<div class="px-3 sm:px-5 flex items-center bg-plugin-header font-redhat font-normal shadow-lg z-10">
+		<div class="flex flex-row flex-wrap items-baseline basis-32 grow shrink-0 gap-x-4 content-between">
 			<div class="flex flex-row items-center my-5">
 				<Logo45Drives class="h-6" />
 			</div>
 			<slot name="header-left"></slot>
-			<LoadingSpinner
-				v-if="globalProcessingState"
-				class="size-icon self-center"
-			/>
 		</div>
 		<h1
-			class="text-red-800 dark:text-white text-base sm:text-2xl cursor-pointer grow-0 text-center"
+			class="text-red-800 dark:text-white text-base sm:text-2xl cursor-pointer grow-0 text-center px-2"
 			@click="home"
 		>{{ moduleName }}</h1>
 		<div class="flex basis-32 justify-end items-center grow shrink-0 gap-buttons">
+			<LoadingSpinner
+				v-if="globalProcessingState"
+				class="size-icon self-center grow-0"
+			/>
+			<div class="grow"></div>
 			<slot name="header-right"></slot>
 		</div>
 	</div>

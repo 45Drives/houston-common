@@ -18,13 +18,13 @@ export default defineConfig({
 	base: './',
 	resolve: {
 		alias: {
-			'@': resolve(__dirname, 'lib')
+			'@': new URL('./lib/', import.meta.url).pathname
 		}
 	},
 	build: {
 		// lib property is set in build script
 		lib: {
-			entry: resolve(__dirname, 'lib/index.ts'),
+			entry: new URL('./lib/index.ts', import.meta.url).pathname,
 			name: 'Houston Common Library',
 			// the proper extensions will be added
 			fileName: 'index',

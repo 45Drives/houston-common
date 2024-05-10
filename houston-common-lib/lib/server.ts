@@ -38,7 +38,7 @@ export class Server {
       return (
         await this.execute(new Command(["ip", "route", "get", target]), true)
       ).andThen((proc) => {
-        const match = proc.getStdout().match(/src (ipAddress:[^\t ]+) /);
+        const match = proc.getStdout().match(/src (?<ipAddress>:[^\t ]+) /);
         if (match === null || match.groups === undefined) {
           const e = Error(`Malformed output from ${proc}`);
           console.log(e);

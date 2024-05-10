@@ -1,0 +1,38 @@
+import { ObjectMapper, PropertyMapper } from "@/syntax/transformer";
+import { Ok } from "@thames/monads";
+
+import { test, suite } from "vitest";
+
+const a = {
+  "hello world": "Hello, world!",
+  "a number": "12345",
+  "a boolean": "yes",
+  "another boolean": "no",
+  "yet another boolean": "true",
+  "and another one (boolean, that is)": "false",
+};
+
+const b = {
+  helloWorld: "Hello, world!",
+  aNumber: 12345,
+  aBoolean: true,
+  anotherBoolean: false,
+  yetAnotherBoolean: true,
+  andAnotherOneBooleanThatIs: false,
+};
+
+suite("Transformer", () => {
+  suite("ObjectMapper", () => {
+    // const mapper = ObjectMapper<typeof b, typeof a>([
+    //   PropertyMapper("helloWorld", "hello world", Ok, Ok),
+    //   PropertyMapper(
+    //     "aNumber",
+    //     "a number",
+    //     (v) => Ok(parseInt(v)),
+    //     (v) => Ok(v.toString())
+    //   ),
+    // ]);
+    test("dummy", () => {})
+  });
+
+});

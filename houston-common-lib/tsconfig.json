@@ -33,7 +33,7 @@
 		"declaration": true,
 		"declarationMap": true,
 		"pretty": true,
-		"allowJs": true,
+		"allowJs": false,
 		"checkJs": false,
 		"noUncheckedIndexedAccess": true,
 		"baseUrl": ".",

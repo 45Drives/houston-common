@@ -3,6 +3,13 @@ import {
   MethodFunctor,
   StringToBooleanCaster,
   Unwrapper,
+  StringToIntCaster,
+  IntToStringCaster,
+  KVMapper,
+  KVGrabber,
+  KVRemainderGrabber,
+  IdentityCaster,
+  KVGrabberCollection,
 } from "./utils";
 import { Some, None } from "@thames/monads";
 
@@ -141,6 +148,255 @@ suite("utils", () => {
           .map(StringToBooleanCaster())
           .map(Unwrapper())
       ).toEqual(testPattern);
+    });
+    test("StringToIntCaster", () => {
+      const input = ["0", "1", "10", "100"];
+      const inputHex = ["0x0", "0x1", "0x10", "0x100"];
+      const anyCaster = StringToIntCaster();
+      const decCaster = StringToIntCaster(10);
+      const hexCaster = StringToIntCaster(16);
+      const octCaster = StringToIntCaster(8);
+      expect(input.map(anyCaster)).toEqual([
+        Some(0),
+        Some(1),
+        Some(10),
+        Some(100),
+      ]);
+      expect(input.map(decCaster)).toEqual([
+        Some(0),
+        Some(1),
+        Some(10),
+        Some(100),
+      ]);
+      expect(input.map(hexCaster)).toEqual([
+        Some(0),
+        Some(1),
+        Some(16),
+        Some(256),
+      ]);
+      expect(input.map(octCaster)).toEqual([
+        Some(0),
+        Some(1),
+        Some(8),
+        Some(64),
+      ]);
+      [decCaster, hexCaster, octCaster].forEach((caster) => {
+        const invalidInput = ["hello", "lorem ipsum", ";4lkjdf()"];
+        expect(invalidInput.map(caster)).toEqual(
+          Array(invalidInput.length).fill(None)
+        );
+      });
+      expect(inputHex.map(hexCaster)).toEqual(input.map(hexCaster));
+      expect(inputHex.map(anyCaster)).toEqual(input.map(hexCaster));
+    });
+    test("IntToStringCaster", () => {
+      const input = [0, 1, 10, 100];
+      const defaultCaster = IntToStringCaster();
+      const decCaster = IntToStringCaster(10);
+      const hexCaster = IntToStringCaster(16);
+      const octCaster = IntToStringCaster(8);
+      expect(input.map(decCaster)).toEqual([
+        Some("0"),
+        Some("1"),
+        Some("10"),
+        Some("100"),
+      ]);
+      expect(input.map(hexCaster)).toEqual([
+        Some("0"),
+        Some("1"),
+        Some("a"),
+        Some("64"),
+      ]);
+      expect(input.map(octCaster)).toEqual([
+        Some("0"),
+        Some("1"),
+        Some("12"),
+        Some("144"),
+      ]);
+      expect(input.map(defaultCaster)).toEqual(input.map(decCaster));
+      [defaultCaster, decCaster, hexCaster, octCaster].forEach((caster) => {
+        expect(caster(NaN)).toEqual(None);
+      });
+    });
+    test("KVMapper", () => {
+      const numMapper = KVMapper(["a number"], "aNumber", StringToIntCaster());
+      const boolMapper = KVMapper(
+        ["a boolean"],
+        "aBoolean",
+        StringToBooleanCaster()
+      );
+      expect(numMapper(["a number", "1234"])).toEqual(Some(["aNumber", 1234]));
+      expect(numMapper(["anumber", "1234"])).toEqual(None);
+      expect(numMapper(["a number", "asdv1234"])).toEqual(None);
+      expect(boolMapper(["a boolean", "yes"])).toEqual(
+        Some(["aBoolean", true])
+      );
+      expect(boolMapper(["a boolean", "true"])).toEqual(
+        Some(["aBoolean", true])
+      );
+      expect(boolMapper(["a boolean", "1"])).toEqual(Some(["aBoolean", true]));
+      expect(boolMapper(["a boolean", "no"])).toEqual(
+        Some(["aBoolean", false])
+      );
+      expect(boolMapper(["a boolean", "false"])).toEqual(
+        Some(["aBoolean", false])
+      );
+      expect(boolMapper(["a boolean", "0"])).toEqual(Some(["aBoolean", false]));
+      expect(boolMapper(["aboolean", "0"])).toEqual(None);
+      expect(boolMapper(["a boolean", "lkjsdlfjksdf"])).toEqual(None);
+    });
+  });
+  suite("KVGrabber", () => {
+    type Output = {
+      aNumber: number;
+      aBoolean: boolean;
+      aString: string;
+      adv: Record<string, string>;
+    };
+    test("one prop at a time", () => {
+      const output: Partial<Output> & Pick<Output, "adv"> = {
+        adv: {},
+      };
+      const numGrabber = KVGrabber(
+        output,
+        "aNumber",
+        ["a number"],
+        StringToIntCaster()
+      );
+      const boolGrabber = KVGrabber(
+        output,
+        "aBoolean",
+        ["a boolean"],
+        StringToBooleanCaster()
+      );
+      const stringGrabber = KVGrabber(
+        output,
+        "aString",
+        ["a string"],
+        IdentityCaster<string>()
+      );
+      const advGrabber = KVRemainderGrabber(output, "adv");
+      expect(
+        [numGrabber, boolGrabber, stringGrabber].map((grabber) =>
+          grabber(["lorem ipsum", "whatever"])
+        )
+      ).toEqual([false, false, false]);
+      expect(numGrabber(["a number", "sdlkj"])).toEqual(false);
+      expect(boolGrabber(["a boolean", "okay"])).toEqual(false);
+      expect(numGrabber(["a number", "1234"])).toEqual(true);
+      expect(boolGrabber(["a boolean", "yes"])).toEqual(true);
+      expect(stringGrabber(["a string", "the quick brown fox"])).toEqual(true);
+      expect(output).toEqual({
+        aNumber: 1234,
+        aBoolean: true,
+        aString: "the quick brown fox",
+        adv: {},
+      });
+      expect(advGrabber(["advKey1", "some advanced value"])).toEqual(true);
+      expect(advGrabber(["advKey2", "some other advanced value"])).toEqual(
+        true
+      );
+      expect(output).toEqual({
+        aNumber: 1234,
+        aBoolean: true,
+        aString: "the quick brown fox",
+        adv: {
+          advKey1: "some advanced value",
+          advKey2: "some other advanced value",
+        },
+      });
+    });
+    test("all at once", () => {
+      const input = {
+        "a number": "1234",
+        "a boolean": "yes",
+        "a string": "Hello, world!",
+        advKey1: "some advanced value",
+        advKey2: "some other advanced value",
+      };
+      const expectedOutput: Output = {
+        aNumber: 1234,
+        aBoolean: true,
+        aString: "Hello, world!",
+        adv: {
+          advKey1: "some advanced value",
+          advKey2: "some other advanced value",
+        },
+      };
+      const output: Partial<Output> & Pick<Output, "adv"> = {
+        adv: {},
+      };
+      const grabbers = [
+        KVGrabber(output, "aNumber", ["a number"], StringToIntCaster()),
+        KVGrabber(output, "aBoolean", ["a boolean"], StringToBooleanCaster()),
+        KVGrabber(output, "aString", ["a string"], IdentityCaster<string>()),
+        KVRemainderGrabber(output, "adv"),
+      ];
+      Object.entries(input).forEach(([key, value]) => {
+        expect(grabbers.some((g) => g([key, value]))).toEqual(true);
+      });
+      expect(output).toEqual(expectedOutput);
+    });
+    test("overwrite/ignore duplicate params", () => {
+      const input = {
+        "a number 0": "0",
+        "a number 1": "1",
+        "a number 2": "2",
+      };
+      const overwriteOutput: Partial<{ aNumber: number }> = {};
+      const overwriteGrabber = KVGrabber(
+        overwriteOutput,
+        "aNumber",
+        ["a number 0", "a number 1", "a number 2"],
+        StringToIntCaster(),
+        "overwrite"
+      );
+      const ignoreOutput: Partial<{ aNumber: number }> = {};
+      const ignoreGrabber = KVGrabber(
+        ignoreOutput,
+        "aNumber",
+        ["a number 0", "a number 1", "a number 2"],
+        StringToIntCaster(),
+        "ignore"
+      );
+      Object.entries(input).forEach(([key, value]) => {
+        expect(
+          [overwriteGrabber, ignoreGrabber].every((g) => g([key, value]))
+        ).toEqual(true);
+      });
+      expect(overwriteOutput).toEqual({ aNumber: 2 });
+      expect(ignoreOutput).toEqual({ aNumber: 0 });
+    });
+    test("KVGrabberCollection", () => {
+      const input = {
+        "a number": "1234",
+        "a boolean": "yes",
+        "a string": "Hello, world!",
+        advKey1: "some advanced value",
+        advKey2: "some other advanced value",
+      };
+      const expectedOutput: Output = {
+        aNumber: 1234,
+        aBoolean: true,
+        aString: "Hello, world!",
+        adv: {
+          advKey1: "some advanced value",
+          advKey2: "some other advanced value",
+        },
+      };
+      const output: Partial<Output> & Pick<Output, "adv"> = {
+        adv: {},
+      };
+      const grabber = KVGrabberCollection([
+        KVGrabber(output, "aNumber", ["a number"], StringToIntCaster()),
+        KVGrabber(output, "aBoolean", ["a boolean"], StringToBooleanCaster()),
+        KVGrabber(output, "aString", ["a string"], IdentityCaster<string>()),
+        KVRemainderGrabber(output, "adv"),
+      ]);
+      Object.entries(input).forEach(([key, value]) => {
+        expect(grabber([key, value])).toEqual(true);
+      });
+      expect(output).toEqual(expectedOutput);
     });
   });
 });

@@ -20,3 +20,4 @@ export * from '@/composables/useDynamicFormGenerationPromise';
 
 export * from '@/composables/useDarkModeState';
 export * from '@/composables/useGlobalProcessingState';
+export * from '@/composables/useTempObjectStaging';

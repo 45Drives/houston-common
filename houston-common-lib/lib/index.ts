@@ -19,6 +19,11 @@
  * 
  */
 
+/// <reference path="../typings/cockpit-typings/cockpit.d.ts" />
+/// <reference path="../typings/cockpit-typings/cockpit-extra.d.ts" />
+/// <reference path="../typings/cockpit-typings/cockpit-import-hack.d.ts" />
+
 export * from '@/houston';
 export * from '@/syntax';
 export * from '@/utils';
+export * from '@/errors';

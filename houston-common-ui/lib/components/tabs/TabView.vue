@@ -11,7 +11,9 @@ const entries = props.state.entries;
 </script>
 
 <template>
-    <component :is="entries[currentTabIndex].component" />
+    <KeepAlive>
+        <component :is="entries[currentTabIndex].component" />
+    </KeepAlive>
 </template>
 
 <style scoped>

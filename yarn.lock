@@ -43,6 +43,7 @@ __metadata:
     "@rushstack/eslint-patch": "npm:^1.8.0"
     "@tailwindcss/forms": "npm:^0.5.7"
     "@tsconfig/node20": "npm:^20.1.4"
+    "@types/deep-equal": "npm:^1.0.4"
     "@types/jsdom": "npm:^21.1.6"
     "@types/node": "npm:^20.12.5"
     "@vitejs/plugin-vue": "npm:^5.0.4"
@@ -1285,6 +1286,13 @@ __metadata:
   version: 1.0.38
   resolution: "@types/argparse@npm:1.0.38"
   checksum: 10/26ed7e3f1e3595efdb883a852f5205f971b798e4c28b7e30a32c5298eee596e8b45834ce831f014d250b9730819ab05acff5b31229666d3af4ba465b4697d0eb
+  languageName: node
+  linkType: hard
+
+"@types/deep-equal@npm:^1.0.4":
+  version: 1.0.4
+  resolution: "@types/deep-equal@npm:1.0.4"
+  checksum: 10/db905bcb051bc9cf5dceb231a6b0b64ab2318073939a1769e043454e8c46b1eeaac1376338751d2ee7ca9294398dd62e03d4b120361b56f96f89dc87aec753e4
   languageName: node
   linkType: hard
 

@@ -25,7 +25,9 @@
   "dependencies": {
     "@45drives/houston-common-css": "workspace:^",
     "@45drives/houston-common-lib": "workspace:^",
-    "vue": "^3.4.21"
+    "deep-equal": "^2.2.3",
+    "neverthrow": "^6.2.1",
+    "vue": "^3.4.27"
   },
   "devDependencies": {
     "@fontsource/red-hat-text": "^5.0.18",

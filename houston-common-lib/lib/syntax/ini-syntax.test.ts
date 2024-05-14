@@ -1,4 +1,5 @@
 import { IniConfigData, IniSyntax } from "@/syntax/ini-syntax";
+import { ok } from "neverthrow";
 import { expect, test, suite } from "vitest";
 
 const testData: { raw: string; data: IniConfigData; cleanRaw: string }[] = [
@@ -105,65 +106,26 @@ const testData: { raw: string; data: IniConfigData; cleanRaw: string }[] = [
 `,
   },
   { raw: "", data: {}, cleanRaw: "\n" },
-  {
-    raw: `nm-openvpn:x:968:
-polkitd:x:102:
-rtkit:x:133:
-sddm:x:967:
-tss:x:966:
-usbmux:x:140:
-jboudreau:x:1000:jboudreau
-libvirt:x:965:jboudreau
-cockpit-ws:x:964:
-cockpit-wsinstance:x:963:
-openvpn:x:962:
-nvidia-persistenced:x:143:
-saned:x:961:
-docker:x:960:jboudreau
-autotier:x:1001:jboudreau
-libvirt-qemu:x:1004:jboudreau
-sgx:x:959:
-systemd-oom:x:958:
-libvirtdbus:x:957:jboudreau
-brlapi:x:956:brltty
-brltty:x:955:
-gluster:x:954:
-ceph:x:340:
-i2c:x:953:
-test2:x:1006:
-qemu:x:952:
-rpcuser:x:34:
-wireshark:x:150:
-rabbitmq:x:197:
-dialout:x:1010:
-plugdev:x:1011:jboudreau
-systemd-journal-upload:x:951:
-fwupd:x:950:
-xpra:x:949:
-groups:x:948:
-_talkd:x:947:
-passim:x:946:`,
-    data: {},
-    cleanRaw: "\n",
-  },
 ];
 
 suite("IniSyntax", () => {
   const iniSyntax = IniSyntax({ paramIndent: "\t" });
   for (const { raw, data, cleanRaw } of testData) {
     test("parsing", () => {
-      expect(iniSyntax.apply(raw).unwrap()).toEqual(data);
+      expect(iniSyntax.apply(raw)).toEqual(ok(data));
     });
     test("unparsing", () => {
-      expect(iniSyntax.unapply(data).unwrap()).toEqual(cleanRaw);
+      expect(iniSyntax.unapply(data)).toEqual(ok(cleanRaw));
     });
     test("apply(unapply(data)) == data", () => {
-      expect(iniSyntax.apply(iniSyntax.unapply(data).unwrap()).unwrap()).toEqual(data);
+      expect(
+        ok(data).andThen(iniSyntax.unapply).andThen(iniSyntax.apply)
+      ).toEqual(ok(data));
     });
     test("unapply(apply(raw)) == cleanRaw", () => {
-      expect(iniSyntax.unapply(iniSyntax.apply(raw).unwrap()).unwrap()).toEqual(
-        cleanRaw
-      );
+      expect(
+        ok(raw).andThen(iniSyntax.apply).andThen(iniSyntax.unapply)
+      ).toEqual(ok(cleanRaw));
     });
   }
 });

@@ -1,5 +1,5 @@
-import { Result, /* Ok, Err, Option, Some, None */ } from "@thames/monads";
-import { ParsingError } from "@/syntax/errors";
+import { Result, /* Ok, Err, Option, Some, None */ } from "neverthrow";
+import { ParsingError } from "@/errors";
 // import { Transformer } from "./transformer";
 
 export type PropertyTransformSchema<

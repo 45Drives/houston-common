@@ -1,6 +1,7 @@
 import { Server } from "@/server";
-import { Command, ProcessError, CommandOptions } from "@/process";
-import { Result, Ok, Err } from "@thames/monads";
+import { Command, CommandOptions } from "@/process";
+import { ProcessError } from "@/errors";
+import { ResultAsync, okAsync } from "neverthrow";
 import { User } from "@/user";
 import { Group } from "@/group";
 
@@ -33,116 +34,113 @@ export class Path {
     return this.path.split("/").pop();
   }
 
-  async testOn(
+  testOn(
     server: Server,
     testFlag: string,
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
-    return (
-      await server.execute(
+  ): ResultAsync<boolean, ProcessError> {
+    return server
+      .execute(
         new Command(["test", testFlag, this.path], commandOptions),
         false
       )
-    ).andThen((proc) => Ok(proc.exitStatus === 0));
+      .map((proc) => proc.exitStatus === 0);
   }
 
-  async isBlockOn(
+  isBlockOn(
     server: Server,
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  ): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-b", commandOptions);
   }
 
-  async isCharacterOn(
+  isCharacterOn(
     server: Server,
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  ): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-c", commandOptions);
   }
 
-  async isDirectoryOn(
+  isDirectoryOn(
     server: Server,
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  ): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-d", commandOptions);
   }
 
-  async existsOn(
+  existsOn(
     server: Server,
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  ): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-e", commandOptions);
   }
 
-  async isFileOn(
+  isFileOn(
     server: Server,
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  ): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-f", commandOptions);
   }
 
-  async isSymbolicLinkOn(
+  isSymbolicLinkOn(
     server: Server,
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  ): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-L", commandOptions);
   }
 
-  async isPipeOn(
+  isPipeOn(
     server: Server,
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  ): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-p", commandOptions);
   }
 
-  async isSocketOn(
+  isSocketOn(
     server: Server,
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  ): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-S", commandOptions);
   }
 
-  async createOn(
+  createOn(
     server: Server,
     type: "file",
     parents?: boolean,
     commandOptions?: CommandOptions
-  ): Promise<Result<File, ProcessError>>;
-  async createOn(
+  ): ResultAsync<File, ProcessError>;
+  createOn(
     server: Server,
     type: "directory",
     parents?: boolean,
     commandOptions?: CommandOptions
-  ): Promise<Result<Directory, ProcessError>>;
-  async createOn(
+  ): ResultAsync<Directory, ProcessError>;
+  createOn(
     server: Server,
     type: "file" | "directory",
     parents?: boolean,
     commandOptions?: CommandOptions
-  ): Promise<Result<File, ProcessError> | Result<Directory, ProcessError>> {
-    if (parents) {
-      const makeParentsResult = await server.execute(
-        new Command(["mkdir", "-p", this.parent().path], commandOptions)
+  ): ResultAsync<File, ProcessError> | ResultAsync<Directory, ProcessError> {
+    return (
+      parents
+        ? server
+            .execute(
+              new Command(["mkdir", "-p", this.parent().path], commandOptions)
+            )
+            .map(() => null)
+        : okAsync(null)
+    )
+      .map(
+        () =>
+          new Command(
+            [type === "file" ? "touch" : "mkdir", this.path],
+            commandOptions
+          )
+      )
+      .andThen((cmd) => server.execute(cmd, true))
+      .map(() =>
+        type === "file" ? new File(server, this) : new Directory(server, this)
       );
-      if (makeParentsResult.isErr()) {
-        return Err(makeParentsResult.unwrapErr());
-      }
-    }
-    if (type === "file") {
-      return (
-        await server.execute(
-          new Command(["touch", this.path], commandOptions),
-          true
-        )
-      ).andThen((_) => Ok(new File(server, this)));
-    } /* if (type === "directory") */ else {
-      return (
-        await server.execute(
-          new Command(["mkdir", this.path], commandOptions),
-          true
-        )
-      ).andThen((_) => Ok(new Directory(server, this)));
-    }
   }
 }
 
@@ -232,107 +230,94 @@ export class FileSystemNode extends Path {
     }
   }
 
-  async isBlock(
-    commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  isBlock(commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.isBlockOn(this.server, commandOptions);
   }
 
-  async isCharacter(
+  isCharacter(
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  ): ResultAsync<boolean, ProcessError> {
     return this.isCharacterOn(this.server, commandOptions);
   }
 
-  async isDirectory(
+  isDirectory(
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  ): ResultAsync<boolean, ProcessError> {
     return this.isDirectoryOn(this.server, commandOptions);
   }
 
-  async exists(
-    commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  exists(commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.existsOn(this.server, commandOptions);
   }
 
-  async isFile(
-    commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  isFile(commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.isFileOn(this.server, commandOptions);
   }
 
-  async isSymbolicLink(
+  isSymbolicLink(
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  ): ResultAsync<boolean, ProcessError> {
     return this.isSymbolicLinkOn(this.server, commandOptions);
   }
 
-  async isPipe(
-    commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  isPipe(commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.isPipeOn(this.server, commandOptions);
   }
 
-  async isSocket(
+  isSocket(
     commandOptions?: CommandOptions
-  ): Promise<Result<boolean, ProcessError>> {
+  ): ResultAsync<boolean, ProcessError> {
     return this.isSocketOn(this.server, commandOptions);
   }
 
-  async remove(
-    commandOptions?: CommandOptions
-  ): Promise<Result<null, ProcessError>> {
-    return (
-      await this.server.execute(
-        new Command(["rm", this.path], commandOptions),
-        true
-      )
-    ).andThen(() => Ok(null));
+  remove(commandOptions?: CommandOptions): ResultAsync<null, ProcessError> {
+    return this.server
+      .execute(new Command(["rm", this.path], commandOptions), true)
+      .map(() => null);
   }
 
-  async chmod(
+  chmod(
     mode: Mode,
     commandOptions?: CommandOptions
-  ): Promise<Result<null, ProcessError>> {
-    return (
-      await this.server.execute(
+  ): ResultAsync<null, ProcessError> {
+    return this.server
+      .execute(
         new Command(["chmod", mode.toOctal(), this.path], commandOptions),
         true
       )
-    ).andThen(() => Ok(null));
+      .map(() => null);
   }
 
-  async chown(
+  chown(
     ownership: Ownership,
     commandOptions?: CommandOptions
-  ): Promise<Result<null, ProcessError>> {
-    return (
-      await this.server.execute(
+  ): ResultAsync<null, ProcessError> {
+    return this.server
+      .execute(
         new Command(
           ["chown", ownership.toChownString(), this.path],
           commandOptions
         ),
         true
       )
-    ).andThen(() => Ok(null));
+      .map(() => null);
   }
 }
 
 export class File extends FileSystemNode {
-  async create(
+  create(
     parents?: boolean,
     commandOptions?: CommandOptions
-  ): Promise<Result<File, ProcessError>> {
+  ): ResultAsync<File, ProcessError> {
     return this.createOn(this.server, "file", parents, commandOptions);
   }
 }
 
 export class Directory extends FileSystemNode {
-  async create(
+  create(
     parents?: boolean,
     commandOptions?: CommandOptions
-  ): Promise<Result<Directory, ProcessError>> {
+  ): ResultAsync<Directory, ProcessError> {
     return this.createOn(this.server, "directory", parents, commandOptions);
   }
 }

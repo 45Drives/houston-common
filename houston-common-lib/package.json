@@ -29,7 +29,8 @@
 		"vitest": "^1.6.0"
 	},
 	"dependencies": {
-		"@thames/monads": "^0.6.2",
+		"monet": "^0.9.3",
+		"neverthrow": "^6.2.1",
 		"vite": "^3.1.3"
 	}
 }

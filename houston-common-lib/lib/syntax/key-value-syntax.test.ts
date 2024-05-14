@@ -1,6 +1,6 @@
 import { expect, test, suite } from "vitest";
-
 import { KeyValueSyntax } from "@/syntax/key-value-syntax";
+import { ok } from "neverthrow";
 
 const testData = [
   {
@@ -35,16 +35,20 @@ suite("KeyValueSyntax", () => {
   const kvSyntax = KeyValueSyntax();
   for (const { raw, data, cleanRaw } of testData) {
     test("parsing", () => {
-      expect(kvSyntax.apply(raw).unwrap()).toEqual(data);
+      expect(kvSyntax.apply(raw)).toEqual(ok(data));
     });
     test("unparsing", () => {
-      expect(kvSyntax.unapply(data).unwrap()).toEqual(cleanRaw);
+      expect(kvSyntax.unapply(data)).toEqual(ok(cleanRaw));
     });
     test("apply(unapply(data)) == data", () => {
-      expect(kvSyntax.apply(kvSyntax.unapply(data).unwrap()).unwrap()).toEqual(data);
+      expect(
+        ok(data).andThen(kvSyntax.unapply).andThen(kvSyntax.apply)
+      ).toEqual(ok(data));
     });
     test("unapply(apply(raw)) == cleanRaw", () => {
-      expect(kvSyntax.unapply(kvSyntax.apply(raw).unwrap()).unwrap()).toEqual(cleanRaw);
+      expect(ok(raw).andThen(kvSyntax.apply).andThen(kvSyntax.unapply)).toEqual(
+        ok(cleanRaw)
+      );
     });
   }
 });

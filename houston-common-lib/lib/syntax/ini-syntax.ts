@@ -1,8 +1,8 @@
 import { SyntaxParser } from "./syntax-parser";
-import { Ok, Err } from "@thames/monads";
+import { Result, ok, err } from "neverthrow";
 import { newlineSplitterRegex } from "./regex-snippets";
 import { KeyValueSyntax } from "@/syntax/key-value-syntax";
-import { ParsingError } from "@/syntax/errors";
+import { ParsingError } from "@/errors";
 
 export type IniConfigData = Record<string, Record<string, string>>;
 
@@ -34,8 +34,8 @@ export function IniSyntax({
     apply: (text) => {
       const data: IniConfigData = {};
       let currentSection: string | null = null;
-      for (const line of text.split(newlineSplitterRegex)) {
-        if (commentRegex.test(line)) {
+      for (const [index, line] of text.split(newlineSplitterRegex).entries()) {
+        if (line.trim() === "" || commentRegex.test(line)) {
           continue;
         }
         if (sectionRegex.test(line)) {
@@ -57,30 +57,22 @@ export function IniSyntax({
             const value = match.groups["value"] as string;
             data[currentSection]![key] = value;
           }
+        } else {
+          return err(new ParsingError(`Invalid INI format at line ${index}:\n${line}`));
         }
       }
-      return Ok(data);
+      return ok(data);
     },
     unapply: (data) => {
-      try {
-        return Ok(
-          Object.entries(data)
-            .map(([sectionName, params]) => {
-              return kvSyntax.unapply(params).match({
-                ok: (paramsText) => `[${sectionName}]\n${paramsText}`,
-                err: (e) => {
-                  throw e;
-                },
-              });
-            })
-            .join("\n\n") + (trailingNewline ? "\n" : "")
-        );
-      } catch (e) {
-        if (e instanceof ParsingError) {
-          return Err(e);
-        }
-        throw e;
-      }
+      return Result.combine(
+        Object.entries(data).map(([sectionName, params]) =>
+          kvSyntax
+            .unapply(params)
+            .map((paramsText) => `[${sectionName}]\n${paramsText}`)
+        )
+      ).map(
+        (sections) => sections.join("\n\n") + (trailingNewline ? "\n" : "")
+      );
     },
   };
 }

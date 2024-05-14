@@ -1,8 +1,9 @@
-import { Result, Ok, Err } from "@thames/monads";
-import { Command, Process, ExitedProcess, ProcessError } from "@/process";
+import { ResultAsync, ok, okAsync, err } from "neverthrow";
+import { Command, Process, ExitedProcess } from "@/process";
 import { User } from "@/user";
 import { Group } from "@/group";
 import { Directory, File } from "@/path";
+import { ParsingError, ProcessError } from "@/errors";
 
 export class Server {
   public readonly host?: string;
@@ -15,41 +16,42 @@ export class Server {
     this.host = host;
   }
 
-  async isAccessible(): Promise<Result<true, ProcessError>> {
-    return (await this.execute(new Command(["true"]), true)).andThen(() =>
-      Ok(true)
-    );
+  isAccessible(): ResultAsync<true, ProcessError> {
+    return this.execute(new Command(["true"]), true).map(() => true);
   }
 
-  async getHostname(
-    cache: boolean = true
-  ): Promise<Result<string, ProcessError>> {
+  getHostname(cache: boolean = true): ResultAsync<string, ProcessError> {
     if (this.hostname === undefined || cache === false) {
-      return (await this.execute(new Command(["hostname"]), true)).map(
+      return this.execute(new Command(["hostname"]), true).map(
         (proc) => (this.hostname = proc.getStdout().trim())
       );
     }
-    return Ok(this.hostname);
+    return okAsync(this.hostname);
   }
 
-  async getIpAddress(cache: boolean = true): Promise<Result<string, Error>> {
+  getIpAddress(
+    cache: boolean = true
+  ): ResultAsync<string, ProcessError | ParsingError> {
     if (this.ipAddress === undefined || cache === false) {
       const target = "1.1.1.1";
-      return (
-        await this.execute(new Command(["ip", "route", "get", target]), true)
+      return this.execute(
+        new Command(["ip", "route", "get", target]),
+        true
       ).andThen((proc) => {
-        const match = proc.getStdout().match(/src (?<ipAddress>:[^\t ]+) /);
+        const stdout = proc.getStdout();
+        const match = stdout.match(
+          /\bsrc\s+(?<ipAddress>\d{1,3}(?:\.\d{1,3}){3})\b/
+        );
         if (match === null || match.groups === undefined) {
-          const e = Error(`Malformed output from ${proc}`);
-          console.log(e);
-          console.log(proc.getStdout());
-          return Err(e);
+          return err(
+            new ParsingError(`Malformed output from ${proc}`, { cause: stdout })
+          );
         }
         this.ipAddress = match.groups["ipAddress"] as string;
-        return Ok(this.ipAddress);
+        return ok(this.ipAddress);
       });
     }
-    return Ok(this.ipAddress);
+    return okAsync(this.ipAddress);
   }
 
   spawnProcess(command: Command, defer: boolean = false): Process {
@@ -59,60 +61,56 @@ export class Server {
   execute(
     command: Command,
     failIfNonZero: boolean = true
-  ): Promise<Result<ExitedProcess, ProcessError>> {
+  ): ResultAsync<ExitedProcess, ProcessError> {
     return this.spawnProcess(command).wait(failIfNonZero);
   }
 
-  async getLocalUsers(
-    cache: boolean = true
-  ): Promise<Result<User[], ProcessError>> {
+  getLocalUsers(cache: boolean = true): ResultAsync<User[], ProcessError> {
     if (this.localUsers === undefined || cache === false) {
-      return (
-        await this.execute(new Command(["cat", "/etc/passwd"]), true)
-      ).map((proc) => {
-        this.localUsers = proc
-          .getStdout()
-          .split("\n")
-          .map((line) => {
-            const [login, _, uidStr, gidStr, name, home, shell] =
-              line.split(":");
-            if (
-              login === undefined ||
-              uidStr === undefined ||
-              gidStr === undefined ||
-              name === undefined ||
-              home === undefined ||
-              shell === undefined
-            ) {
-              return null;
-            }
-            const uid = parseInt(uidStr);
-            const gid = parseInt(gidStr);
-            if (isNaN(uid) || isNaN(gid)) {
-              return null;
-            }
-            return User(
-              this,
-              login,
-              uid,
-              gid,
-              name,
-              new Directory(this, home),
-              new File(this, shell)
-            );
-          })
-          .filter((user): user is User => user !== null);
-        return this.localUsers;
-      });
+      return this.execute(new Command(["cat", "/etc/passwd"]), true).map(
+        (proc) => {
+          this.localUsers = proc
+            .getStdout()
+            .split("\n")
+            .map((line) => {
+              const [login, _, uidStr, gidStr, name, home, shell] =
+                line.split(":");
+              if (
+                login === undefined ||
+                uidStr === undefined ||
+                gidStr === undefined ||
+                name === undefined ||
+                home === undefined ||
+                shell === undefined
+              ) {
+                return null;
+              }
+              const uid = parseInt(uidStr);
+              const gid = parseInt(gidStr);
+              if (isNaN(uid) || isNaN(gid)) {
+                return null;
+              }
+              return User(
+                this,
+                login,
+                uid,
+                gid,
+                name,
+                new Directory(this, home),
+                new File(this, shell)
+              );
+            })
+            .filter((user): user is User => user !== null);
+          return this.localUsers;
+        }
+      );
     }
-    return Ok(this.localUsers);
+    return okAsync(this.localUsers);
   }
 
-  async getLocalGroups(
-    cache: boolean = true
-  ): Promise<Result<Group[], ProcessError>> {
+  getLocalGroups(cache: boolean = true): ResultAsync<Group[], ProcessError> {
     if (this.localGroups === undefined || cache === false) {
-      return (await this.execute(new Command(["cat", "/etc/group"]), true)).map(
+      return this.execute(new Command(["cat", "/etc/group"]), true).map(
         (proc) => {
           this.localGroups = proc
             .getStdout()
@@ -137,63 +135,54 @@ export class Server {
         }
       );
     }
-    return Ok(this.localGroups);
+    return okAsync(this.localGroups);
   }
 
-  async getUserGroups(user: User): Promise<Result<Group[], ProcessError>> {
-    const userGroupNamesResult = (
-      await this.execute(new Command(["groups", user.login]), true)
-    ).map((proc) =>
-      proc
-        .getStdout()
-        /* remove "user : " present in some distros */
-        .replace(/^[^:]+:/, "")
-        .trim()
-        .split(" ")
-    );
-    if (userGroupNamesResult.isErr()) {
-      return Err(userGroupNamesResult.unwrapErr());
-    }
-    const userGroupNames = await userGroupNamesResult.unwrap();
-    return (await this.getLocalGroups()).map((localGroups) =>
-      localGroups.filter((group) => group.name in userGroupNames)
-    );
+  getUserGroups(user: User): ResultAsync<Group[], ProcessError> {
+    return this.execute(new Command(["groups", user.login]), true)
+      .map((proc) =>
+        proc
+          .getStdout()
+          /* remove "user : " present in some distros */
+          .replace(/^[^:]+:/, "")
+          .trim()
+          .split(/\s+/)
+      )
+      .andThen((userGroupNames) => {
+        return this.getLocalGroups().map((localGroups) =>
+          localGroups.filter((group) => group.name in userGroupNames)
+        );
+      });
   }
 
-  async getGroupMembers(group: Group): Promise<Result<User[], ProcessError>> {
-    return (await this.getLocalUsers()).map((localUsers) =>
+  getGroupMembers(group: Group): ResultAsync<User[], ProcessError> {
+    return this.getLocalUsers().map((localUsers) =>
       localUsers.filter((user) => user.login in group.members)
     );
   }
 
-  async getUserByLogin(
-    login: string
-  ): Promise<Result<User | null, ProcessError>> {
-    return (await this.getLocalUsers()).map(
+  getUserByLogin(login: string): ResultAsync<User | null, ProcessError> {
+    return this.getLocalUsers().map(
       (localUsers) =>
         localUsers.filter((user) => user.login === login)[0] ?? null
     );
   }
 
-  async getUserByUid(uid: number): Promise<Result<User | null, ProcessError>> {
-    return (await this.getLocalUsers()).map(
+  getUserByUid(uid: number): ResultAsync<User | null, ProcessError> {
+    return this.getLocalUsers().map(
       (localUsers) => localUsers.filter((user) => user.uid === uid)[0] ?? null
     );
   }
 
-  async getGroupByName(
-    groupName: string
-  ): Promise<Result<Group | null, ProcessError>> {
-    return (await this.getLocalGroups()).map(
+  getGroupByName(groupName: string): ResultAsync<Group | null, ProcessError> {
+    return this.getLocalGroups().map(
       (localGroups) =>
         localGroups.filter((group) => group.name === groupName)[0] ?? null
     );
   }
 
-  async getGroupByGid(
-    gid: number
-  ): Promise<Result<Group | null, ProcessError>> {
-    return (await this.getLocalGroups()).map(
+  getGroupByGid(gid: number): ResultAsync<Group | null, ProcessError> {
+    return this.getLocalGroups().map(
       (localGroups) =>
         localGroups.filter((group) => group.gid === gid)[0] ?? null
     );

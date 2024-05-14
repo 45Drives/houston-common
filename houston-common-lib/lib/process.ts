@@ -1,6 +1,7 @@
 import { Server } from "@/server";
 import Cockpit from "cockpit";
-import { Result, Ok, Err } from "@thames/monads";
+import { Result, ResultAsync, ok, err } from "neverthrow";
+import { ProcessError, NonZeroExit } from '@/errors';
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: false });
 const utf8Encoder = new TextEncoder();
@@ -14,15 +15,12 @@ export class Command {
   public readonly argv: string[];
   public readonly spawnOptions: Cockpit.SpawnOptions & { binary: true };
 
-  constructor(
-    argv: string[],
-    opts: CommandOptions = {}
-  ) {
+  constructor(argv: string[], opts: CommandOptions = {}) {
     this.argv = argv;
     this.spawnOptions = {
       ...opts,
       binary: true,
-      err: "message"
+      err: "message",
     };
   }
 
@@ -47,10 +45,6 @@ export class BashCommand extends Command {
     super(["/usr/bin/env", "bash", "-c", script, arg0, ...args], opts);
   }
 }
-
-export class ProcessError extends Error {}
-
-export class NonZeroExit extends ProcessError {}
 
 export class ProcessBase {
   public readonly server: Server;
@@ -148,16 +142,16 @@ export class Process extends ProcessBase {
 
   public wait(
     failIfNonZero: boolean = true
-  ): Promise<Result<ExitedProcess, ProcessError>> {
-    return new Promise((resolve) => {
-      if (this.spawnHandle === undefined) {
-        return resolve(Err(new ProcessError("Process never started!")));
-      }
-      this.spawnHandle
-        .then((stdout, stderr) => {
-          const exitStatus = 0;
-          resolve(
-            Ok(
+  ): ResultAsync<ExitedProcess, ProcessError> {
+    return ResultAsync.fromPromise(
+      new Promise((resolve, reject) => {
+        if (this.spawnHandle === undefined) {
+          return reject(new ProcessError("Process never started!"));
+        }
+        this.spawnHandle
+          .then((stdout, stderr) => {
+            const exitStatus = 0;
+            resolve(
               new ExitedProcess(
                 this.server,
                 this.command,
@@ -165,34 +159,28 @@ export class Process extends ProcessBase {
                 stdout,
                 stderr
               )
-            )
-          );
-        })
-        .catch((ex, stdout) => {
-          if (
-            (ex.problem !== null && ex.problem !== undefined) ||
-            ex.exit_status === null ||
-            ex.exit_status === undefined
-          ) {
-            return resolve(
-              Err(
+            );
+          })
+          .catch((ex, stdout) => {
+            if (
+              (ex.problem !== null && ex.problem !== undefined) ||
+              ex.exit_status === null ||
+              ex.exit_status === undefined
+            ) {
+              return reject(
                 new ProcessError(
                   `${this.getName()}: ${ex.message} (${ex.problem})`
                 )
-              )
-            );
-          }
-          if (failIfNonZero && ex.exit_status !== 0) {
-            return resolve(
-              Err(
+              );
+            }
+            if (failIfNonZero && ex.exit_status !== 0) {
+              return reject(
                 new NonZeroExit(
                   `${this.getName()}: ${ex.message} (${ex.exit_status})`
                 )
-              )
-            );
-          }
-          resolve(
-            Ok(
+              );
+            }
+            resolve(
               new ExitedProcess(
                 this.server,
                 this.command,
@@ -200,10 +188,15 @@ export class Process extends ProcessBase {
                 stdout,
                 ex.message
               )
-            )
-          );
-        });
-    });
+            );
+          });
+      }), (e) => {
+        if (e instanceof ProcessError) {
+          return e;
+        }
+        return new ProcessError("Unknown error", {cause: e});
+      }
+    );
   }
 
   public write(
@@ -211,13 +204,13 @@ export class Process extends ProcessBase {
     stream: boolean = false
   ): Result<null, ProcessError> {
     if (this.spawnHandle === undefined) {
-      return Err(new ProcessError("process not running!"));
+      return err(new ProcessError("process not running!"));
     }
     if (typeof data === "string") {
       data = utf8Encoder.encode(data);
     }
     this.spawnHandle.input(data, stream);
-    return Ok(null);
+    return ok(null);
   }
 
   public terminate(): Process {

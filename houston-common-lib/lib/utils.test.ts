@@ -11,7 +11,7 @@ import {
   IdentityCaster,
   KVGrabberCollection,
 } from "./utils";
-import { Some, None } from "@thames/monads";
+import { Some, None } from "monet";
 
 import { suite, expect, test } from "vitest";
 
@@ -76,7 +76,7 @@ suite("utils", () => {
         Some(false),
         Some(false),
       ]);
-      expect(invalidValues.map(caster)).toEqual([None, None, None]);
+      expect(invalidValues.map(caster)).toEqual([None(), None(), None()]);
       expect(trueValuesUpper.map(caster)).toEqual([
         Some(true),
         Some(true),
@@ -109,9 +109,9 @@ suite("utils", () => {
         Some(false),
         Some(false),
       ]);
-      expect(invalidValues.map(caster)).toEqual([None, None, None]);
-      expect(trueValuesUpper.map(caster)).toEqual([None, None, Some(true)]); // "1" is case insensitive
-      expect(falseValuesUpper.map(caster)).toEqual([None, None, Some(false)]); // "0" is case insensitive
+      expect(invalidValues.map(caster)).toEqual([None(), None(), None()]);
+      expect(trueValuesUpper.map(caster)).toEqual([None(), None(), Some(true)]); // "1" is case insensitive
+      expect(falseValuesUpper.map(caster)).toEqual([None(), None(), Some(false)]); // "0" is case insensitive
     });
     test("Custom truthy/falsy StringToBooleanCaster", () => {
       const caster = StringToBooleanCaster({
@@ -121,10 +121,10 @@ suite("utils", () => {
       expect(["on", "off", "true", "false", "1", "0"].map(caster)).toEqual([
         Some(true),
         Some(false),
-        None,
-        None,
-        None,
-        None,
+        None(),
+        None(),
+        None(),
+        None(),
       ]);
     });
     test("BooleanToStringCaster", () => {
@@ -183,7 +183,7 @@ suite("utils", () => {
       [decCaster, hexCaster, octCaster].forEach((caster) => {
         const invalidInput = ["hello", "lorem ipsum", ";4lkjdf()"];
         expect(invalidInput.map(caster)).toEqual(
-          Array(invalidInput.length).fill(None)
+          Array(invalidInput.length).fill(None())
         );
       });
       expect(inputHex.map(hexCaster)).toEqual(input.map(hexCaster));
@@ -215,7 +215,7 @@ suite("utils", () => {
       ]);
       expect(input.map(defaultCaster)).toEqual(input.map(decCaster));
       [defaultCaster, decCaster, hexCaster, octCaster].forEach((caster) => {
-        expect(caster(NaN)).toEqual(None);
+        expect(caster(NaN)).toEqual(None());
       });
     });
     test("KVMapper", () => {
@@ -226,8 +226,8 @@ suite("utils", () => {
         StringToBooleanCaster()
       );
       expect(numMapper(["a number", "1234"])).toEqual(Some(["aNumber", 1234]));
-      expect(numMapper(["anumber", "1234"])).toEqual(None);
-      expect(numMapper(["a number", "asdv1234"])).toEqual(None);
+      expect(numMapper(["anumber", "1234"])).toEqual(None());
+      expect(numMapper(["a number", "asdv1234"])).toEqual(None());
       expect(boolMapper(["a boolean", "yes"])).toEqual(
         Some(["aBoolean", true])
       );
@@ -242,8 +242,8 @@ suite("utils", () => {
         Some(["aBoolean", false])
       );
       expect(boolMapper(["a boolean", "0"])).toEqual(Some(["aBoolean", false]));
-      expect(boolMapper(["aboolean", "0"])).toEqual(None);
-      expect(boolMapper(["a boolean", "lkjsdlfjksdf"])).toEqual(None);
+      expect(boolMapper(["aboolean", "0"])).toEqual(None());
+      expect(boolMapper(["a boolean", "lkjsdlfjksdf"])).toEqual(None());
     });
   });
   suite("KVGrabber", () => {

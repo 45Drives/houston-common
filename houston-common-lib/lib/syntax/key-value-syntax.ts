@@ -1,5 +1,5 @@
 import { SyntaxParser } from "@/syntax/syntax-parser";
-import { Ok } from "@thames/monads";
+import { ok } from "neverthrow";
 import { newlineSplitterRegex } from "./regex-snippets";
 
 export type KeyValueData = Record<string, string>;
@@ -26,7 +26,7 @@ export function KeyValueSyntax({
   }
   return {
     apply: (text) =>
-      Ok(
+      ok(
         text
           // split lines
           .split(newlineSplitterRegex)
@@ -47,7 +47,7 @@ export function KeyValueSyntax({
           }, {} as KeyValueData)
       ),
     unapply: (data) =>
-      Ok(
+      ok(
         Object.entries(data)
           .map(([key, value]) => `${indent}${key} = ${value}`)
           .join("\n") + (trailingNewline ? "\n" : "")

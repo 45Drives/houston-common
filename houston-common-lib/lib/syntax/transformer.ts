@@ -1,14 +1,15 @@
-import { Result, Option } from "@thames/monads";
-import { ParsingError } from "@/syntax/errors";
+import { Result } from "neverthrow";
+import { Maybe } from "monet";
+import { ParsingError } from "@/errors";
 
 export type MaybeOption<
   UseOption extends boolean,
-  T extends {} | null,
-> = UseOption extends true ? Option<T> : T;
+  T extends {},
+> = UseOption extends true ? Maybe<T> : T;
 
 export type Transformer<
-  TParsed extends {} | null,
-  TUnparsed extends {} | null,
+  TParsed extends {},
+  TUnparsed extends {},
   ReturnsOption extends boolean = false,
 > = {
   apply: (

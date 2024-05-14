@@ -1,4 +1,5 @@
-import { Option, Some, None } from "@thames/monads";
+import { KeyValueData } from "@/syntax";
+import { Maybe, None, Some } from "monet";
 
 export type MethodFunctor<T extends {}, R> = (v: T) => R;
 export function MethodFunctor<
@@ -16,12 +17,11 @@ export function MethodFunctor<
 export const IdentityFunctor = <T>(o: T): T => o;
 
 export function Unwrapper<
-  Container extends { unwrap: () => any },
-  Ret extends ReturnType<Container["unwrap"]>,
+  Container extends { unwrap: () => any } | { some: () => any },
 >(exceptionFactory: (e?: any) => Error = (e) => e) {
-  return (c: Container): Ret => {
+  return (c: Container) => {
     try {
-      return c.unwrap();
+      return "unwrap" in c ? c.unwrap() : c.some();
     } catch (e) {
       throw exceptionFactory(e);
     }
@@ -36,12 +36,10 @@ export function UnwrapperOr<
   return (c: Container): Ret => c.unwrapOr(...args);
 }
 
-export type Caster<In extends {} | null, Out extends {} | null> = (
-  input: In
-) => Option<Out>;
+export type Caster<In extends {}, Out extends {}> = (input: In) => Maybe<Out>;
 
 export const IdentityCaster =
-  <T extends {} | null>(): Caster<T, T> =>
+  <T extends {}>(): Caster<T, T> =>
   (o: T) =>
     Some(o);
 
@@ -60,11 +58,13 @@ export function StringToBooleanCaster(
     ignoreCase ? MethodFunctor(String, "toLowerCase") : IdentityFunctor
   );
   const caster = (text: string) =>
-    truthyWords.includes(text)
-      ? Some(true)
-      : falsyWords.includes(text)
-        ? Some(false)
-        : None;
+    Maybe.fromNull(
+      truthyWords.includes(text)
+        ? true
+        : falsyWords.includes(text)
+          ? false
+          : null
+    );
   if (ignoreCase) {
     return (text: string) => caster(text.toLowerCase());
   }
@@ -84,13 +84,13 @@ export function BooleanToStringCaster<
 export function StringToIntCaster(radix?: number): Caster<string, number> {
   return (str) => {
     const val = parseInt(str, radix);
-    return isNaN(val) ? None : Some(val);
+    return isNaN(val) ? None() : Some(val);
   };
 }
 
 export function IntToStringCaster(radix?: number): Caster<number, string> {
   const functor = MethodFunctor(Number, "toString", radix);
-  return (num) => (isNaN(num) ? None : Some(functor(num)));
+  return (num) => (isNaN(num) ? None() : Some(functor(num)));
 }
 
 export type KVMapper<
@@ -102,9 +102,9 @@ export type KVMapper<
 
 export function KVMapper<
   InKeys extends [string | number | symbol, ...(string | number | symbol)[]],
-  InValue extends {} | null,
+  InValue extends {},
   OutKey extends string | number | symbol,
-  OutValue extends {} | null,
+  OutValue extends {},
 >(
   inKeys: InKeys,
   outKey: OutKey,
@@ -113,7 +113,7 @@ export function KVMapper<
   return ([inKey, inValue]) =>
     inKeys.includes(inKey)
       ? caster(inValue).map((outValue) => [outKey, outValue])
-      : None;
+      : None();
 }
 
 export type KVGrabber<
@@ -123,9 +123,9 @@ export type KVGrabber<
 
 export function KVGrabber<
   InKeys extends [string | number | symbol, ...(string | number | symbol)[]],
-  InValue extends {} | null,
+  InValue extends {},
   TObj extends {
-    [Key in OutKey]: {} | null;
+    [Key in OutKey]: {};
   },
   OutKey extends keyof TObj,
   OutValue extends TObj[OutKey],
@@ -138,15 +138,14 @@ export function KVGrabber<
 ): KVGrabber<InKeys[number], InValue> {
   const mapper = KVMapper(sourceKeys, destinationKey, caster);
   return (kv) =>
-    mapper(kv).match({
-      some: ([key, value]) => {
+    mapper(kv)
+      .map(([key, value]) => {
         if (duplicateBehaviour === "overwrite" || obj[key] === undefined) {
           obj[key] = value;
         }
         return true;
-      },
-      none: false,
-    });
+      })
+      .orSome(false);
 }
 
 export function KVRemainderGrabber<
@@ -161,8 +160,47 @@ export function KVRemainderGrabber<
   };
 }
 
-export function KVGrabberCollection<
-  InKeys extends string | number | symbol,
->(grabbers: KVGrabber<InKeys, any>[]): KVGrabber<InKeys, any> {
+export function KVGrabberCollection<InKeys extends string | number | symbol>(
+  grabbers: KVGrabber<InKeys, any>[]
+): KVGrabber<InKeys, any> {
   return ([key, value]) => grabbers.some((g) => g([key, value]));
+}
+
+export type KeyValueDiff = {
+  added: KeyValueData;
+  removed: KeyValueData;
+  changed: KeyValueData;
+  same: KeyValueData;
+};
+
+export function keyValueDiff(
+  originalObj: KeyValueData,
+  modifiedObj: KeyValueData
+) {
+  const added: KeyValueData = {};
+  const removed: KeyValueData = {};
+  const changed: KeyValueData = {};
+  const same: KeyValueData = {};
+  for (const [key, value] of Object.entries(modifiedObj)) {
+    if (key in originalObj) {
+      if (value !== originalObj[key]) {
+        changed[key] = value;
+      } else {
+        same[key] = value;
+      }
+    } else {
+      added[key] = value;
+    }
+  }
+  for (const [key, value] of Object.entries(originalObj)) {
+    if (!(key in modifiedObj)) {
+      removed[key] = value;
+    }
+  }
+  return {
+    added,
+    removed,
+    changed,
+    same,
+  };
 }

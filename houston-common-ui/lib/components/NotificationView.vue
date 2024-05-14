@@ -115,6 +115,12 @@ export function pushNotification(notif: Notification): Notification {
     return notif;
 }
 
+export function reportError(e: Error) {
+    console.error(e);
+    pushNotification(new Notification(e.name, e.message, "error", "never"));
+    return e;
+};
+
 export default {
     setup() {
         return {

@@ -12,7 +12,7 @@ const props = defineProps<{
 
 const tabState = (props.tabs !== undefined) ? defineHoustonAppTabState(props.tabs) : null;
 
-const { globalProcessingState } = useGlobalProcessingState();
+const globalProcessingState = useGlobalProcessingState();
 </script>
 
 <template>

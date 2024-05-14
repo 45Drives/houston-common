@@ -30,7 +30,7 @@ export default defineComponent({
 		moduleName: String,
 	},
 	setup(props) {
-		const { globalProcessingState } = useGlobalProcessingState();
+		const globalProcessingState = useGlobalProcessingState();
 		function home() {
 			cockpit.location.go('/');
 		}

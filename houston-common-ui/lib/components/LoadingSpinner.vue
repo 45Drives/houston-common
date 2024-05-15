@@ -27,7 +27,7 @@ export default defineComponent({});
 
 <template>
 	<div
-		class="aspect-square animate-spin border-2 border-neutral-300 border-t-neutral-500 dark:border-neutral-500 dark:border-t-neutral-200 rounded-full">
+		class="size-icon aspect-square animate-spin border-2 border-neutral-300 border-t-neutral-500 dark:border-neutral-500 dark:border-t-neutral-200 rounded-full">
 	</div>
 </template>
 

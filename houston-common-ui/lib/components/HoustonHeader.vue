@@ -96,7 +96,7 @@ export default defineComponent({
 		<div class="flex basis-32 justify-end items-center grow shrink-0 gap-buttons">
 			<LoadingSpinner
 				v-if="globalProcessingState"
-				class="size-icon self-center grow-0"
+				class="self-center grow-0"
 			/>
 			<div class="grow"></div>
 			<slot name="header-right"></slot>

@@ -33,7 +33,7 @@ export function KeyValueSyntax({
           .split(newlineSplitterRegex)
           .map(
             (
-              line
+              line, lineIndex
             ): Result<{ key: string; value: string } | null, ParsingError> => {
               if (commentRegex.test(line) || line.trim() === "") {
                 return ok(null);
@@ -41,7 +41,7 @@ export function KeyValueSyntax({
               const [key, value] = line.split(/=(.*)/).map((s) => s.trim());
               if (key === undefined || value === undefined || key === "") {
                 return err(
-                  new ParsingError(`Invalid key = value format:\n${line}`)
+                  new ParsingError(`Invalid key = value format at line ${lineIndex}:\n${line}`)
                 );
               }
               return ok({ key, value });

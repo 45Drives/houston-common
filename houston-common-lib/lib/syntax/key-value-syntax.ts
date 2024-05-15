@@ -1,5 +1,6 @@
 import { SyntaxParser } from "@/syntax/syntax-parser";
-import { ok } from "neverthrow";
+import { ParsingError } from "@/errors";
+import { Result, ok, err } from "neverthrow";
 import { newlineSplitterRegex } from "./regex-snippets";
 
 export type KeyValueData = Record<string, string>;
@@ -26,22 +27,30 @@ export function KeyValueSyntax({
   }
   return {
     apply: (text) =>
-      ok(
+      Result.combine(
         text
           // split lines
           .split(newlineSplitterRegex)
-          // filter comments
-          .filter((line) => !commentRegex.test(line))
-          // keep lines containing '='
-          .filter((line) => line.includes("="))
-          // transform `${key}=${value}` strings to [key, value] tuples
-          .map((line) => line.split(/=(.*)/).map((s) => s.trim()))
-          // keep valid matches
-          .filter((kvpair): kvpair is [string, string] => {
-            const [key, value] = kvpair;
-            return key !== undefined && value !== undefined;
-          })
-          .reduce((data, [key, value]) => {
+          .map(
+            (
+              line
+            ): Result<{ key: string; value: string } | null, ParsingError> => {
+              if (commentRegex.test(line) || line.trim() === "") {
+                return ok(null);
+              }
+              const [key, value] = line.split(/=(.*)/).map((s) => s.trim());
+              if (key === undefined || value === undefined || key === "") {
+                return err(
+                  new ParsingError(`Invalid key = value format:\n${line}`)
+                );
+              }
+              return ok({ key, value });
+            }
+          )
+      ).map((keyValuePairs) =>
+        keyValuePairs
+          .filter((kv): kv is { key: string; value: string } => kv !== null)
+          .reduce((data, { key, value }) => {
             data[key] = value;
             return data;
           }, {} as KeyValueData)

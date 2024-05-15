@@ -51,4 +51,10 @@ suite("KeyValueSyntax", () => {
       );
     });
   }
+  test("catches error", () => {
+    const errorInputs = ["Hello, world!", "=value", "===="];
+    for (const input of errorInputs) {
+      expect(kvSyntax.apply(input).isErr()).toEqual(true);
+    }
+  });
 });

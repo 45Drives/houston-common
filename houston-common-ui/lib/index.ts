@@ -11,6 +11,7 @@ export { default as Logo45Drives } from '@/components/Logo45Drives.vue';
 export { default as HoustonAppContainer } from '@/components/HoustonAppContainer.vue';
 export { default as CardContainer } from '@/components/CardContainer.vue';
 export { default as CenteredCardColumn } from '@/components/CenteredCardColumn.vue';
+export { default as ParsedTextArea } from '@/components/ParsedTextArea.vue';
 
 export * from '@/components/tabs';
 
@@ -21,3 +22,4 @@ export * from '@/composables/useDynamicFormGenerationPromise';
 export * from '@/composables/useDarkModeState';
 export * from '@/composables/useGlobalProcessingState';
 export * from '@/composables/useTempObjectStaging';
+export * from '@/composables/defineActions';

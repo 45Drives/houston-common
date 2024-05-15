@@ -11,9 +11,28 @@ export const globalProcessingWrapPromise = <T>(
   return promise;
 };
 
-export const globalProcessingWrapResult =
-  <TParams extends Array<any>, TOk, TErr>(func: (..._: TParams) => ResultAsync<TOk, TErr>): typeof func =>
-  (...params: TParams) => {
+export function globalProcessingWrapResult<
+  TParams extends Array<any>,
+  TOk,
+  TErr,
+>(
+  func: (..._: TParams) => ResultAsync<TOk, TErr>
+): typeof func;
+export function globalProcessingWrapResult<
+  TParams extends Array<any>,
+  TOk,
+  TErr,
+>(
+  func: (..._: TParams) => Result<TOk, TErr>
+): typeof func;
+export function globalProcessingWrapResult<
+  TParams extends Array<any>,
+  TOk,
+  TErr,
+>(
+  func: (..._: TParams) => ResultAsync<TOk, TErr> | Result<TOk, TErr>
+): typeof func {
+  return (...params: TParams) => {
     globalProcessingState.value++;
     return func(...params)
       .map((v) => {
@@ -25,6 +44,7 @@ export const globalProcessingWrapResult =
         return e;
       });
   };
+}
 
 export function useGlobalProcessingState() {
   return globalProcessingState;

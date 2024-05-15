@@ -27,7 +27,7 @@ export default defineConfig({
     }
   },
   build: {
-    minify: true,
+    minify: false,
     lib: {
       entry: path.resolve(__dirname, 'lib/index.ts'),
       name: 'Houston Common UI',
@@ -38,7 +38,7 @@ export default defineConfig({
     rollupOptions: {
       // make sure to externalize deps that shouldn't be bundled
       // into your library
-      external: ['vue', /^@45drives/],
+      external: ['vue', /^@45drives/, 'houston-common-css', 'houston-common-lib'], 
       output: {
         // Provide global variables to use in the UMD build
         // for externalized deps

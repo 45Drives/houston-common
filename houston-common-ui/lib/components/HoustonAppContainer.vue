@@ -25,7 +25,7 @@ const globalProcessingState = useGlobalProcessingState();
                 v-slot:header-left
                 v-if="tabState"
             >
-                <TabSelector :state="tabState" />
+                <TabSelector v-if="tabState" :state="tabState" />
             </template>
         </HoustonHeader>
         <NotificationView class="overflow-hidden grow basis-0 flex items-stretch">
@@ -45,5 +45,5 @@ const globalProcessingState = useGlobalProcessingState();
 </template>
 
 <style scoped>
-@import "@45drives/houston-common-css/src/index.css";
+@import "houston-common-css/src/index.css";
 </style>

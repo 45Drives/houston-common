@@ -1,5 +1,5 @@
 {
-  "name": "@45drives/houston-common-ui",
+  "name": "houston-common-ui",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -23,9 +23,9 @@
     "format": "prettier --write lib/"
   },
   "dependencies": {
-    "@45drives/houston-common-css": "workspace:^",
-    "@45drives/houston-common-lib": "workspace:^",
     "deep-equal": "^2.2.3",
+    "houston-common-css": "workspace:^",
+    "houston-common-lib": "workspace:^",
     "neverthrow": "^6.2.1",
     "vue": "^3.4.27"
   },

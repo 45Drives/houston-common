@@ -45,5 +45,5 @@ const switchTab = (newIndex: number) => {
 </template>
 
 <style scoped>
-@import "@45drives/houston-common-css/src/index.css";
+@import "houston-common-css/src/index.css";
 </style>

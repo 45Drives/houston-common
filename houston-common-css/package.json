@@ -3,6 +3,9 @@
 	"version": "0.1.12",
 	"description": "Global CSS file for cockpit plugins",
 	"main": "dist/index.css",
+	"exports": {
+		"./src/index.css": "./src/index.css"
+	},
 	"author": "45Drives",
 	"license": "GPLv3",
 	"private": true,

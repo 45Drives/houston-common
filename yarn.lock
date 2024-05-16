@@ -39,6 +39,7 @@ __metadata:
     "@45drives/houston-common-css": "workspace:^"
     "@45drives/houston-common-lib": "workspace:^"
     "@fontsource/red-hat-text": "npm:^5.0.18"
+    "@headlessui/vue": "npm:^1.7.22"
     "@heroicons/vue": "npm:^2.1.3"
     "@rushstack/eslint-patch": "npm:^1.10.2"
     "@tailwindcss/forms": "npm:^0.5.7"
@@ -711,6 +712,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@headlessui/vue@npm:^1.7.22":
+  version: 1.7.22
+  resolution: "@headlessui/vue@npm:1.7.22"
+  dependencies:
+    "@tanstack/vue-virtual": "npm:^3.0.0-beta.60"
+  peerDependencies:
+    vue: ^3.2.0
+  checksum: 10/6b276c15bdbdb41baaf3e6fe76e211f8d5862c904a999ea03e56263bc7a15f058535cda721d5c5f4b5adda2bfb58f005d060aeab5f144de5a1d3ec78d0d174de
+  languageName: node
+  linkType: hard
+
 "@heroicons/vue@npm:^2.1.3":
   version: 2.1.3
   resolution: "@heroicons/vue@npm:2.1.3"
@@ -1153,6 +1165,24 @@ __metadata:
   peerDependencies:
     tailwindcss: ">=3.0.0 || >= 3.0.0-alpha.1"
   checksum: 10/74aea1776f5ce03d21e069f47680e3b472d8237dd5b9330e440e3c4f3a4c3d73f2fa27680998cdbd48176538273c5bc47efbd1c7eb9f71cff29504ab2158ceca
+  languageName: node
+  linkType: hard
+
+"@tanstack/virtual-core@npm:3.5.0":
+  version: 3.5.0
+  resolution: "@tanstack/virtual-core@npm:3.5.0"
+  checksum: 10/76a37734118c59f992bfdd540bb5900aa30d040c723909312c1e7071af1619da6ddedabba1834802fee7e0f6497c38d0fe8bc70ab4950d2d09342558b5c89bb2
+  languageName: node
+  linkType: hard
+
+"@tanstack/vue-virtual@npm:^3.0.0-beta.60":
+  version: 3.5.0
+  resolution: "@tanstack/vue-virtual@npm:3.5.0"
+  dependencies:
+    "@tanstack/virtual-core": "npm:3.5.0"
+  peerDependencies:
+    vue: ^2.7.0 || ^3.0.0
+  checksum: 10/625c71205807ba4564e801815f4fb01837ebe382684615cdc32e731f09346a8a8c8ea6372569c638dc40a3479acafa65d281780be6bd8ec0311376b965e887c2
   languageName: node
   linkType: hard
 

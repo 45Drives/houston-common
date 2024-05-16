@@ -2,10 +2,10 @@
 
 import { ref, watch, defineModel, defineProps } from "vue";
 import { type SyntaxParser, type SyntaxParserType } from "@45drives/houston-common-lib";
-import { reportError } from '@45drives/houston-common-ui';
+import { reportError } from '@/components/NotificationView.vue';
 
 const props = defineProps<{
-    parser: SyntaxParser<any>
+    parser: SyntaxParser<any>;
 }>();
 
 const keyValueData = defineModel<SyntaxParserType<typeof props.parser>>({ required: true });
@@ -22,7 +22,7 @@ const onTextAreaContentChanged = (newContent: string) =>
         .map((newData) => keyValueData.value = newData)
         .mapErr(reportError);
 
-watch(keyValueData, onKeyValueDataChanged, {immediate: true});
+watch(keyValueData, onKeyValueDataChanged, { immediate: true, deep: true });
 
 </script>
 
@@ -36,3 +36,7 @@ watch(keyValueData, onKeyValueDataChanged, {immediate: true});
         @change="onTextAreaContentChanged(textAreaContent)"
     ></textarea>
 </template>
+
+<style scoped>
+@import "@45drives/houston-common-css/src/index.css";
+</style>

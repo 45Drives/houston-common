@@ -12,6 +12,11 @@ export { default as HoustonAppContainer } from '@/components/HoustonAppContainer
 export { default as CardContainer } from '@/components/CardContainer.vue';
 export { default as CenteredCardColumn } from '@/components/CenteredCardColumn.vue';
 export { default as ParsedTextArea } from '@/components/ParsedTextArea.vue';
+export { default as InputFeedback } from '@/components/InputFeedback.vue';
+export { default as InputField } from '@/components/InputField.vue';
+export { default as ToggleSwitch } from '@/components/ToggleSwitch.vue';
+export { default as ToggleSwitchGroup } from '@/components/ToggleSwitchGroup.vue';
+export { default as ToolTip } from '@/components/ToolTip.vue';
 
 export * from '@/components/tabs';
 

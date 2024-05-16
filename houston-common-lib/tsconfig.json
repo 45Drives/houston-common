@@ -17,7 +17,7 @@
 		"noUnusedParameters": true,
 		"noImplicitReturns": true,
 		"skipLibCheck": true,
-		"rootDir": "./lib",
+		"rootDir": ".",
 		"outDir": "dist",
 		"alwaysStrict": true,
 		"strictFunctionTypes": true,
@@ -40,6 +40,9 @@
 		"paths": {
 			"@/*": [
 				"./lib/*"
+			],
+			"../typings/*": [
+				"./typings/*"
 			]
 		}
 	},

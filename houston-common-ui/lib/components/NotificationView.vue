@@ -128,7 +128,7 @@ export function pushNotification(notif: Notification): Notification {
  */
 export function reportError<TErr extends Error>(e: TErr) {
     console.error(e);
-    pushNotification(new Notification(_(e.name), e.message, "error", "never"));
+    pushNotification(new Notification(_(e.name), e.message, "error", 20_000));
     return e;
 };
 

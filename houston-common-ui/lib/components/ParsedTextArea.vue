@@ -1,12 +1,17 @@
 <script setup lang="ts">
 
-import { ref, watch, defineModel, defineProps } from "vue";
-import { type SyntaxParser, type SyntaxParserType } from "@45drives/houston-common-lib";
+import { ref, watch, defineModel, defineProps, withDefaults } from "vue";
+import { type SyntaxParser, type SyntaxParserType, newlineSplitterRegex } from "@45drives/houston-common-lib";
 import { reportError } from '@/components/NotificationView.vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     parser: SyntaxParser<any>;
-}>();
+    minRows?: number;
+    maxRows?: number;
+}>(), {
+    minRows: 4,
+    maxRows: Infinity,
+});
 
 const keyValueData = defineModel<SyntaxParserType<typeof props.parser>>({ required: true });
 
@@ -29,7 +34,7 @@ watch(keyValueData, onKeyValueDataChanged, { immediate: true, deep: true });
 <template>
     <textarea
         name="global-advanced-settings"
-        rows="4"
+        :rows="Math.min(Math.max(textAreaContent.split(newlineSplitterRegex).length, minRows), maxRows)"
         v-model="textAreaContent"
         class="w-full input-textlike"
         placeholder="key = value"

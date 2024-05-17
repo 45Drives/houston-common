@@ -1,8 +1,8 @@
 export * from './index';
 
-import type Cockpit from "cockpit";
+import type cockpit from "cockpit";
 
-export { Cockpit };
+export { cockpit };
 
-export * from "neverthrow";
-export * from "monet";
+export * as neverthrow from "neverthrow";
+export * as monet from "monet";

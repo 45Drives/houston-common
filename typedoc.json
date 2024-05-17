@@ -30,6 +30,12 @@
     "sourceLinkExternal": true,
     "hideParameterTypesInTitle": false,
     "sidebarLinks": {
-        "Cockpit API": "https://cockpit-project.org/guide/latest/api-base1.html"
+        "Official Cockpit API Documentation": "https://cockpit-project.org/guide/latest/api-base1.html"
+    },
+    "visibilityFilters": {
+        "protected": false,
+        "private": false,
+        "inherited": true,
+        "external": true
     }
 }

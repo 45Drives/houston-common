@@ -2,7 +2,7 @@
 	"$schema": "https://typedoc.org/schema.json",
 	"name": "Houston Common Library",
 	"entryPointStrategy": "packages",
-	"entryPoints": ["houston-common-*"],
+	"entryPoints": ["houston-common-lib", "houston-common-ui"],
 	"out": "docs",
     "includeVersion": false,
 	"readme": "none",
@@ -19,5 +19,17 @@
         "style": {
             "backgroundColor": "white"
         }
+    },
+    "compilerOptions": {
+        "skipLibCheck": false,
+		"strictNullChecks": false,
+		"allowJs": true,
+		"checkJs": false,
+		"noUncheckedIndexedAccess": false,
+    },
+    "sourceLinkExternal": true,
+    "hideParameterTypesInTitle": false,
+    "sidebarLinks": {
+        "Cockpit API": "https://cockpit-project.org/guide/latest/api-base1.html"
     }
 }

@@ -1,7 +1,7 @@
 import { Server } from "@/server";
-import Cockpit from "cockpit";
+import type Cockpit from "cockpit";
 import { Result, ResultAsync, ok, err } from "neverthrow";
-import { ProcessError, NonZeroExit } from '@/errors';
+import { ProcessError, NonZeroExit } from "@/errors";
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: false });
 const utf8Encoder = new TextEncoder();
@@ -190,11 +190,12 @@ export class Process extends ProcessBase {
               )
             );
           });
-      }), (e) => {
+      }),
+      (e) => {
         if (e instanceof ProcessError) {
           return e;
         }
-        return new ProcessError("Unknown error", {cause: e});
+        return new ProcessError("Unknown error", { cause: e });
       }
     );
   }

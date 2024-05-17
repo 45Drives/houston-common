@@ -28,19 +28,22 @@ const globalProcessingState = useGlobalProcessingState();
                 <TabSelector v-if="tabState" :state="tabState" />
             </template>
         </HoustonHeader>
-        <NotificationView class="overflow-hidden grow basis-0 flex items-stretch">
-            <div
-                class="bg-well overflow-y-auto grow"
-                style="scrollbar-gutter: stable both-edges;"
-            >
-                <slot>
-                    <TabView
-                        v-if="tabState"
-                        :state="tabState"
-                    />
-                </slot>
-            </div>
-        </NotificationView>
+        <Teleport to="body">
+            <NotificationView class="overflow-hidden grow basis-0 flex items-stretch">
+               
+            </NotificationView>
+        </Teleport>
+        <div
+            class="bg-well overflow-y-auto grow"
+            style="scrollbar-gutter: stable both-edges;"
+        >
+            <slot>
+                <TabView
+                    v-if="tabState"
+                    :state="tabState"
+                />
+            </slot>
+        </div>
     </div>
 </template>
 

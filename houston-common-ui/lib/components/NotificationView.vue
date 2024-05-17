@@ -21,6 +21,8 @@ import { ref, reactive } from 'vue';
 import { InformationCircleIcon, ExclamationCircleIcon, MinusCircleIcon, CheckCircleIcon } from '@heroicons/vue/24/outline';
 import { XMarkIcon } from '@heroicons/vue/20/solid';
 
+const _ = cockpit.gettext;
+
 /** Notification passed to showNotification
  * 
  * @typedef {Object} Notification
@@ -126,18 +128,19 @@ export function pushNotification(notif: Notification): Notification {
  */
 export function reportError<TErr extends Error>(e: TErr) {
     console.error(e);
-    pushNotification(new Notification(e.name, e.message, "error", "never"));
+    pushNotification(new Notification(_(e.name), e.message, "error", "never"));
     return e;
 };
 
 export function reportSuccess(message: string = "") {
-    pushNotification(new Notification("Success", message, "success"));
+    pushNotification(new Notification(_("Success"), message, "success"));
 }
 
 export default {
     setup() {
         return {
-            notificationList
+            notificationList,
+            _: cockpit.gettext,
         };
     },
     components: {
@@ -231,7 +234,7 @@ export default {
                                         @click="notification.remove()"
                                         type="button"
                                         class="rounded-md text-sm font-medium text-secondary"
-                                    >Dismiss</button>
+                                    >{{ _("Dismiss") }}</button>
                                 </div>
                             </div>
                             <div class="ml-4 flex-shrink-0 flex">

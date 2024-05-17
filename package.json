@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "private": true,
     "scripts": {
-        "docs:common": "yarn build:css && yarn build:ui && yarn typedoc",
+        "docs:common": "yarn build:common && yarn typedoc",
         "docs": "yarn docs:common",
         "build:common": "yarn build:css && yarn build:lib && yarn build:ui",
         "build": "yarn build:common"

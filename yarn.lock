@@ -80,6 +80,7 @@ __metadata:
   dependencies:
     typedoc: "npm:^0.25.13"
     typedoc-plugin-mdn-links: "npm:^3.1.25"
+    typedoc-plugin-missing-exports: "npm:^2.2.0"
     typedoc-plugin-vue: "npm:^1.1.0"
     typedoc-umlclass: "npm:^0.9.0"
     typescript: "npm:^5.4.5"
@@ -6034,6 +6035,15 @@ __metadata:
   peerDependencies:
     typedoc: ">= 0.23.14 || 0.24.x || 0.25.x"
   checksum: 10/b61dbd10b9e42d5f05003d34b34cb2d08b11a6c7c68780677c2c030e359462d3d2900219f27f241d1a40df11b868fdc0dada1090288d869b22be6bd9a3b61c11
+  languageName: node
+  linkType: hard
+
+"typedoc-plugin-missing-exports@npm:^2.2.0":
+  version: 2.2.0
+  resolution: "typedoc-plugin-missing-exports@npm:2.2.0"
+  peerDependencies:
+    typedoc: 0.24.x || 0.25.x
+  checksum: 10/db691b3494c8e112d7ea8621fcf79f1988ef8f0c9fc43eb5fc308fda0caa1b1e007c3d51db83236247cf9b52cdfec1186a7eb25ec3416fa03ef65f68b4e88e4e
   languageName: node
   linkType: hard
 

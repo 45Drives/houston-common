@@ -5,7 +5,8 @@
     "plugin": [
         "typedoc-umlclass",
         "typedoc-plugin-mdn-links",
-        "typedoc-plugin-vue"
+        "typedoc-plugin-vue",
+        "typedoc-plugin-missing-exports"
     ],
     "umlClassDiagram": {
         "type": "detailed",
@@ -15,5 +16,7 @@
         "style": {
             "backgroundColor": "white"
         }
-    }
+    },
+    "cacheBust": true,
+    "placeInternalsInOwningModule": true,
 }

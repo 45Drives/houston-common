@@ -1,7 +1,7 @@
 {
 	"$schema": "https://typedoc.org/schema.json",
 	"name": "Houston Common Library",
-	"entryPointStrategy": "packages",
+    "entryPointStrategy": "packages",
 	"entryPoints": ["houston-common-lib", "houston-common-ui"],
 	"out": "docs",
     "includeVersion": false,
@@ -9,7 +9,8 @@
     "plugin": [
         "typedoc-umlclass",
         "typedoc-plugin-mdn-links",
-        "typedoc-plugin-vue"
+        "typedoc-plugin-vue",
+        "typedoc-plugin-missing-exports"
     ],
     "umlClassDiagram": {
         "type": "detailed",
@@ -37,5 +38,6 @@
         "private": false,
         "inherited": true,
         "external": true
-    }
+    },
+    "placeInternalsInOwningModule": true,
 }

@@ -115,6 +115,15 @@ export function pushNotification(notif: Notification): Notification {
     return notif;
 }
 
+/**
+ * Push a notification reporting the given error. To be used with {@link Result.mapErr}.
+ * @param e Error to report
+ * 
+ * @example
+ * ```ts
+ * server.execute(new Command(["false"])).mapError(reportError);
+ * ```
+ */
 export function reportError<TErr extends Error>(e: TErr) {
     console.error(e);
     pushNotification(new Notification(e.name, e.message, "error", "never"));

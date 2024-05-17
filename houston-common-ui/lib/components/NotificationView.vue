@@ -130,6 +130,10 @@ export function reportError<TErr extends Error>(e: TErr) {
     return e;
 };
 
+export function reportSuccess(message: string = "") {
+    pushNotification(new Notification("Success", message, "success"));
+}
+
 export default {
     setup() {
         return {

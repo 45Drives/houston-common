@@ -9,7 +9,7 @@
         "typedoc-plugin-missing-exports"
     ],
     "umlClassDiagram": {
-        "type": "detailed",
+        "type": "none",
         "location": "local",
         "format": "png",
         "legend": "only-included",
@@ -17,6 +17,8 @@
             "backgroundColor": "white"
         }
     },
-    "cacheBust": true,
+    "compilerOptions": {
+        "skipLibCheck": true,
+    },
     "placeInternalsInOwningModule": true,
 }

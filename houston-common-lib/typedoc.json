@@ -4,7 +4,8 @@
     "entryPoints": ["lib/typedoc.index.ts"],
     "plugin": [
         "typedoc-umlclass",
-        "typedoc-plugin-mdn-links"
+        "typedoc-plugin-mdn-links",
+        "typedoc-plugin-missing-exports"
     ],
     "umlClassDiagram": {
         "type": "detailed",
@@ -14,5 +15,6 @@
         "style": {
             "backgroundColor": "white"
         }
-    }
+    },
+    "placeInternalsInOwningModule": true,
 }

@@ -17,6 +17,7 @@ export { default as InputField } from '@/components/InputField.vue';
 export { default as ToggleSwitch } from '@/components/ToggleSwitch.vue';
 export { default as ToggleSwitchGroup } from '@/components/ToggleSwitchGroup.vue';
 export { default as ToolTip } from '@/components/ToolTip.vue';
+export { default as Disclosure } from '@/components/Disclosure.vue';
 
 export * from '@/components/tabs';
 
@@ -27,4 +28,4 @@ export * from '@/composables/useDynamicFormGenerationPromise';
 export * from '@/composables/useDarkModeState';
 export * from '@/composables/useGlobalProcessingState';
 export * from '@/composables/useTempObjectStaging';
-export * from '@/composables/defineActions';
+export * from '@/composables/wrapActions';

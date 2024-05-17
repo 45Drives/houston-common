@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { defineProps, defineModel, defineEmits, ref } from "vue";
 import InputFeedback from "./InputFeedback.vue";
-import ToolTip from '@/components/ToolTip.vue';
+import ToolTip from './ToolTip.vue';
+import InputLabelWrapper from './InputLabelWrapper.vue';
 
 const props = defineProps<{
   placeholder?: string;
   validator?: (value: string) => { type: "error" | "warning", message: string; } | undefined;
+  disabled?: boolean;
 }>();
 
 const model = defineModel<string>({ default: "" });
@@ -17,39 +19,28 @@ const emit = defineEmits<{
 
 const feedback = ref<{ type: "error" | "warning", message: string; } | undefined>(undefined);
 
-const showToolTip = ref(false);
-
 </script>
 
 <template>
-  <div>
-    <div
-      v-if="$slots.default || $slots.tooltip"
-      class="flex items-start"
+  <InputLabelWrapper>
+    <template
+      v-slot:label
+      v-if="$slots.default"
     >
-      <label
-        v-if="$slots.default"
-        class="text-label"
-        :class="{ 'underline decoration-dotted': $slots.tooltip }"
-        @mouseenter="showToolTip = true"
-        @mouseleave="showToolTip = false"
-        @click="showToolTip = !showToolTip"
-      >
-        <slot />
-      </label>
-      <ToolTip
-        v-if="$slots.tooltip"
-        v-model="showToolTip"
-        :class="{ 'pl-1': $slots.default }"
-      >
-        <slot name="tooltip" />
-      </ToolTip>
-    </div>
+      <slot />
+    </template>
+    <template
+      v-slot:tooltip
+      v-if="$slots.tooltip"
+    >
+      <slot name="tooltip" />
+    </template>
     <input
       type="text"
       name="label"
       class="w-full input-textlike"
       :placeholder="placeholder"
+      :disabled="disabled"
       v-model="model"
       @input="emit('input', model)"
       @change="{ emit('change', model); feedback = validator?.(model); }"
@@ -59,7 +50,7 @@ const showToolTip = ref(false);
       :type="feedback.type"
       :message="feedback.message"
     />
-  </div>
+  </InputLabelWrapper>
 </template>
 
 <style scoped>

@@ -18,6 +18,11 @@ export { default as ToggleSwitch } from '@/components/ToggleSwitch.vue';
 export { default as ToggleSwitchGroup } from '@/components/ToggleSwitchGroup.vue';
 export { default as ToolTip } from '@/components/ToolTip.vue';
 export { default as Disclosure } from '@/components/Disclosure.vue';
+export { default as SelectMenu } from '@/components/SelectMenu.vue';
+export * from '@/components/SelectMenu.vue';
+export { default as InputLabelWrapper } from '@/components/InputLabelWrapper.vue';
+
+
 
 export * from '@/components/tabs';
 

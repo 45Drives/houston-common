@@ -60,5 +60,8 @@ onUnmounted(() => {
             </div>
         </div>
     </div>
-
 </template>
+
+<style scoped>
+@import "@45drives/houston-common-css/src/index.css";
+</style>

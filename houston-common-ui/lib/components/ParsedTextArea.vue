@@ -8,6 +8,7 @@ const props = withDefaults(defineProps<{
     parser: SyntaxParser<any>;
     minRows?: number;
     maxRows?: number;
+    disabled?: boolean;
 }>(), {
     minRows: 4,
     maxRows: Infinity,
@@ -35,6 +36,7 @@ watch(keyValueData, onKeyValueDataChanged, { immediate: true, deep: true });
     <textarea
         name="global-advanced-settings"
         :rows="Math.min(Math.max(textAreaContent.split(newlineSplitterRegex).length, minRows), maxRows)"
+        :disabled="disabled"
         v-model="textAreaContent"
         class="w-full input-textlike"
         placeholder="key = value"

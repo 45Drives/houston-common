@@ -113,7 +113,7 @@ export function pushNotification(notif: Notification): Notification {
         notif.stopRemoveTimeout();
         notificationList.value = notificationList.value.filter(n => n.key !== notif.key);
     };
-    notificationList.value = [...notificationList.value, notif];
+    notificationList.value = [notif, ...notificationList.value];
     return notif;
 }
 
@@ -130,7 +130,7 @@ export function reportError<TErr extends Error>(e: TErr) {
     console.error(e);
     pushNotification(new Notification(_(e.name), e.message, "error", 20_000));
     return e;
-};
+}
 
 export function reportSuccess(message: string = "") {
     pushNotification(new Notification(_("Success"), message, "success"));

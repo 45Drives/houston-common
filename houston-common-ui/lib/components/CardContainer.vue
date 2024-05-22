@@ -1,12 +1,20 @@
+<script setup lang="ts">
+import { defineProps } from "vue";
+
+defineProps<{
+	noBodyPaddingOnMobile?: boolean;
+}>();
+</script>
+
 <template>
-	<div class="card flex flex-col">
-		<div v-if="$slots.header" class="card-header text-header flex flex-row space-x-2 items-center">
+	<div class="bg-default md:shadow-lg shadow-md divide-y divide-default flex flex-col">
+		<div v-if="$slots.header" class="px-4 py-2 sm:px-6 sm:py-5 text-header flex flex-row space-x-2 items-center">
 			<slot name="header"></slot>
 		</div>
-		<div class="card-body flex-grow">
+		<div class="flex-grow sm:px-6 sm:py-5" :class="{'px-4 py-5': !noBodyPaddingOnMobile}">
 			<slot></slot>
 		</div>
-		<div v-if="$slots.footer" class="card-footer flex flex-row space-x-2 items-center">
+		<div v-if="$slots.footer" class="px-4 py-2 sm:px-6 sm:py-5 flex flex-row space-x-2 items-center">
 			<slot name="footer"></slot>
 		</div>
 	</div>

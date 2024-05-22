@@ -17,6 +17,7 @@
 	"types": "dist/lib/index.d.ts",
 	"scripts": {
 		"build:lib": "tsc --noEmit && vite build",
+		"build": "tsc --noEmit && vite build",
 		"test:lib": "vitest run",
 		"test:watch": "vitest",
 		"docs": "typedoc --out ../docs"

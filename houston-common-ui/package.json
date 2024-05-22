@@ -15,6 +15,7 @@
   "scripts": {
     "dev": "vite",
     "build:ui": "run-p type-check \"build-only {@}\" --",
+    "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "test:unit": "vitest",
     "build-only": "vite build",

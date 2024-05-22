@@ -16,7 +16,10 @@ export function wrapAction<TParams extends Array<any>, TOk, TErr extends Error>(
 ) {
   const wrappedAction = (...params: TParams) =>
     globalProcessingWrapResult(action)(...params).mapErr((e) => { e.message = `Error in ${action.name}: ${e.message}`; return reportError(e) });
-  wrappedAction.name = `${action.name} (wrapped)`;
+  Object.defineProperty(wrappedAction, 'name', {
+    value: `${action.name} (wrapped)`,
+    writable: false,
+  });
   return wrappedAction;
 }
 

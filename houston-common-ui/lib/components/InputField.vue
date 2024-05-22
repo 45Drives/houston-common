@@ -1,12 +1,17 @@
+<script lang="ts">
+import { type Feedback } from '@/components/InputFeedback.vue';
+export type InputValidator = (value: string) => Feedback | undefined | PromiseLike<Feedback | undefined>;
+</script>
+
 <script setup lang="ts">
-import { defineProps, defineModel, defineEmits, ref } from "vue";
-import InputFeedback from "./InputFeedback.vue";
-import ToolTip from './ToolTip.vue';
+import { defineProps, defineModel, defineEmits, computed, defineExpose, ref, watchEffect } from "vue";
+import { ExclamationCircleIcon, ExclamationTriangleIcon } from "@heroicons/vue/20/solid";
 import InputLabelWrapper from './InputLabelWrapper.vue';
+import InputFeedback from '@/components/InputFeedback.vue';
 
 const props = defineProps<{
   placeholder?: string;
-  validator?: (value: string) => { type: "error" | "warning", message: string; } | undefined;
+  validator?: InputValidator;
   disabled?: boolean;
 }>();
 
@@ -17,7 +22,16 @@ const emit = defineEmits<{
   (e: 'change', value: string): void,
 }>();
 
-const feedback = ref<{ type: "error" | "warning", message: string; } | undefined>(undefined);
+const feedback = ref<Feedback>();
+const updateFeedback = async () =>
+  feedback.value = await props.validator?.(model.value);
+watchEffect(updateFeedback);
+
+const valid = computed<boolean>(() => !(feedback.value?.type === "error"));
+
+defineExpose({
+  valid,
+});
 
 </script>
 
@@ -43,13 +57,16 @@ const feedback = ref<{ type: "error" | "warning", message: string; } | undefined
       :disabled="disabled"
       v-model="model"
       @input="emit('input', model)"
-      @change="{ emit('change', model); feedback = validator?.(model); }"
+      @change="emit('change', model)"
     />
     <InputFeedback
       v-if="feedback"
       :type="feedback.type"
-      :message="feedback.message"
-    />
+      :actions="feedback.actions"
+      @feedbackAction="updateFeedback"
+    >
+      {{ feedback.message }}
+    </InputFeedback>
   </InputLabelWrapper>
 </template>
 

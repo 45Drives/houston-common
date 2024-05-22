@@ -18,7 +18,7 @@ const globalProcessingState = useGlobalProcessingState();
 <template>
     <div
         class="text-default flex flex-col h-full"
-        :class="{ 'cursor-wait': globalProcessingState }"
+        :class="{ '!cursor-wait': globalProcessingState }"
     >
         <HoustonHeader :moduleName="moduleName">
             <template

@@ -12,7 +12,7 @@ export class Path {
     if (path instanceof Path) {
       this.path = path.path;
     } else if (typeof path === "string") {
-      this.path = path.replace(/\/+/g, "/").replace(/\/$/, "");
+      this.path = path.replace(/\/+/g, "/");
     } else {
       throw TypeError(`typeof path = ${typeof path} != Path|string`);
     }
@@ -310,6 +310,27 @@ export class File extends FileSystemNode {
     commandOptions?: CommandOptions
   ): ResultAsync<File, ProcessError> {
     return this.createOn(this.server, "file", parents, commandOptions);
+  }
+
+  read(
+    binary?: false,
+    commandOptions?: CommandOptions
+  ): ResultAsync<string, ProcessError>;
+  read(
+    binary: true,
+    commandOptions?: CommandOptions
+  ): ResultAsync<Uint8Array, ProcessError>;
+  read(
+    binary: boolean = false,
+    commandOptions?: CommandOptions
+  ): ResultAsync<string, ProcessError> | ResultAsync<Uint8Array, ProcessError> {
+    const procResult = this.server.execute(
+      new Command(["cat", this.path], commandOptions)
+    );
+    if (binary) {
+      return procResult.map((p) => p.getStdout(true));
+    }
+    return procResult.map((p) => p.getStdout(false));
   }
 }
 

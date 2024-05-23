@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, ref, type Ref } from "vue";
+import { ref, type Ref } from "vue";
 
 const darkModeState = ref(false);
 

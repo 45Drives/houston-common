@@ -17,7 +17,7 @@ If not, see <https://www.gnu.org/licenses/>.
 -->
 
 <script lang="ts">
-import { ref, watch, inject, defineComponent, type Ref, type WatchSource } from "vue";
+import { defineComponent } from "vue";
 import LoadingSpinner from "@/components/LoadingSpinner.vue";
 import { useGlobalProcessingState } from '@/composables/useGlobalProcessingState';
 import Logo45Drives from '@/components/Logo45Drives.vue';

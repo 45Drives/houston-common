@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import { Result, ResultAsync } from "neverthrow";
+import { ResultAsync } from "neverthrow";
 
 const globalProcessingState = ref(0);
 

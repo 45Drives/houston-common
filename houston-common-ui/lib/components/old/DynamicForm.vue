@@ -1,11 +1,15 @@
 <!-- TODO: optional hint popup -->
 
 <template>
-	<DynamicFormRenderer :inputs="inputs_" :uid="uid_" :requiredLabelAsterisk="requiredLabelAsterisk" />
+	<DynamicFormRenderer
+		:inputs="inputs_"
+		:uid="uid_"
+		:requiredLabelAsterisk="requiredLabelAsterisk"
+	/>
 </template>
 
 <script lang="ts" setup>
-import { ref, watch } from 'vue';
+import { watch } from 'vue';
 import DynamicFormRenderer from './DynamicFormRenderer.vue';
 import { useDynamicFormGeneration, type DynamicFormInputsSchema } from '../../composables/useDynamicFormGeneration';
 
@@ -50,7 +54,7 @@ const {
 	setDefaults,
 	resetValidation,
 	focusFirstInput,
-} = useDynamicFormGeneration({uid: props.uid ?? "df", requiredLabelAsterisk: props.requiredLabelAsterisk});
+} = useDynamicFormGeneration({ uid: props.uid ?? "df", requiredLabelAsterisk: props.requiredLabelAsterisk });
 
 watch(() => props.inputs, (inputs) => {
 	if (!inputs)

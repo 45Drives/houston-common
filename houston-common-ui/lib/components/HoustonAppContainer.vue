@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineProps, type Component, type PropType } from "vue";
+import { defineProps } from "vue";
 import HoustonHeader from "@/components/HoustonHeader.vue";
 import { defineHoustonAppTabState, type HoustonAppTabEntrySpec, TabSelector, TabView } from '@/components/tabs';
 import NotificationView from "@/components/NotificationView.vue";
@@ -25,12 +25,15 @@ const globalProcessingState = useGlobalProcessingState();
                 v-slot:header-left
                 v-if="tabState"
             >
-                <TabSelector v-if="tabState" :state="tabState" />
+                <TabSelector
+                    v-if="tabState"
+                    :state="tabState"
+                />
             </template>
         </HoustonHeader>
         <Teleport to="body">
             <NotificationView class="overflow-hidden grow basis-0 flex items-stretch">
-               
+
             </NotificationView>
         </Teleport>
         <div

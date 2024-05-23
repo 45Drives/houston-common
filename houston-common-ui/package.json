@@ -24,11 +24,11 @@
     "format": "prettier --write lib/"
   },
   "dependencies": {
-    "houston-common-css": "workspace:^",
-    "houston-common-lib": "workspace:^",
     "@headlessui/vue": "^1.7.22",
     "@heroicons/vue": "^2.1.3",
     "deep-equal": "^2.2.3",
+    "houston-common-css": "workspace:^",
+    "houston-common-lib": "workspace:^",
     "neverthrow": "^6.2.1",
     "vue": "^3.4.27"
   },

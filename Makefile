@@ -12,8 +12,8 @@ default: $(TARGETS)
 .SECONDEXPANSION:
 $(TARGETS): %/dist/index.js: $$(shell find '$$*' -type d \( -name node_modules -o -path '$$*/dist' -o -path '*node_modules*'  \) -prune -o -type f -not \( -name .gitignore \) -print)
 	@echo -e $(call cyantext,Building $*)
-	yarn --cwd $* install --verbose
-	yarn --cwd $* run build --verbose
+	yarn --cwd $* install
+	yarn --cwd $* run build
 	@echo -e $(call greentext,Done building $*)
 	@echo
 

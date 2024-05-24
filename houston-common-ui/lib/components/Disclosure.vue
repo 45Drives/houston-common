@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineModel, onMounted, ref, computed, onUnmounted, defineProps, watch } from "vue";
+import { defineModel, onMounted, ref, computed, onUnmounted, defineProps, watchEffect } from "vue";
 import { ChevronUpIcon } from '@heroicons/vue/20/solid';
 
 defineProps<{
@@ -32,9 +32,9 @@ const transitionDuration = 200;
 const visible = ref(false);
 const visibleTimeout = ref<number>();
 
-watch(show, (showValue) => {
+watchEffect(() => {
     window.clearTimeout(visibleTimeout.value);
-    if (showValue) {
+    if (show.value) {
         // revealing contained element
         visible.value = true;
     } else {
@@ -44,7 +44,7 @@ watch(show, (showValue) => {
             visibleTimeout.value = undefined;
         }, transitionDuration);
     }
-}, { immediate: true });
+});
 
 onMounted(() => {
     if (internalWrapperElement.value !== null) {

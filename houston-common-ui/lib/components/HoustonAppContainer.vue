@@ -1,5 +1,35 @@
+<script lang="ts">
+import { provide, inject, type InjectionKey, ref, type Ref } from "vue";
+import { ModalConfirm, type ConfirmOptions } from '@/components/modals';
+import { okAsync, errAsync, ResultAsync } from 'neverthrow';
+import { type Action } from "@/composables/wrapActions";
+
+export type GlobalModalConfirmFunctions = {
+    confirm: (options: ConfirmOptions) => ResultAsync<boolean, Error>;
+    confirmBeforeAction: (
+        options: ConfirmOptions,
+        action: Action<any, any, any>
+    ) => typeof action;
+};
+
+const globalModalConfirmFuncs = ref<GlobalModalConfirmFunctions>();
+
+const getGlobalModalConfirmFuncs = () => {
+    if (globalModalConfirmFuncs.value === undefined) {
+        throw new Error("Global ModalConfirm methods not provided!");
+    }
+    return globalModalConfirmFuncs.value;
+};
+
+export const confirm = (...args: Parameters<GlobalModalConfirmFunctions["confirm"]>): ReturnType<GlobalModalConfirmFunctions["confirm"]> =>
+    getGlobalModalConfirmFuncs().confirm(...args);
+export const confirmBeforeAction = (...args: Parameters<GlobalModalConfirmFunctions["confirmBeforeAction"]>): ReturnType<GlobalModalConfirmFunctions["confirmBeforeAction"]> =>
+    getGlobalModalConfirmFuncs().confirmBeforeAction(...args);
+
+</script>
+
 <script setup lang="ts">
-import { defineProps, type Component, type PropType } from "vue";
+import { defineComponent, defineProps, onMounted, watchEffect, type Component, type PropType } from "vue";
 import HoustonHeader from "@/components/HoustonHeader.vue";
 import { defineHoustonAppTabState, type HoustonAppTabEntrySpec, TabSelector, TabView } from '@/components/tabs';
 import NotificationView from "@/components/NotificationView.vue";
@@ -13,6 +43,15 @@ const props = defineProps<{
 const tabState = (props.tabs !== undefined) ? defineHoustonAppTabState(props.tabs) : null;
 
 const globalProcessingState = useGlobalProcessingState();
+
+const globalModalConfirm = ref<InstanceType<typeof ModalConfirm> | null>(null);
+
+watchEffect(() => {
+    if (globalModalConfirm.value !== null) {
+        globalModalConfirmFuncs.value = globalModalConfirm.value;
+    }
+});
+
 </script>
 
 <template>
@@ -28,7 +67,7 @@ const globalProcessingState = useGlobalProcessingState();
                 <TabSelector :state="tabState" />
             </template>
         </HoustonHeader>
-        <NotificationView class="overflow-hidden grow basis-0 flex items-stretch">
+        <div class="overflow-hidden grow basis-0 flex items-stretch">
             <div
                 class="bg-well overflow-y-auto grow"
                 style="scrollbar-gutter: stable both-edges;"
@@ -40,7 +79,9 @@ const globalProcessingState = useGlobalProcessingState();
                     />
                 </slot>
             </div>
-        </NotificationView>
+        </div>
+        <NotificationView />
+        <ModalConfirm ref="globalModalConfirm" />
     </div>
 </template>
 

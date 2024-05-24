@@ -18,16 +18,13 @@ const setDarkMode = (style?: "auto" | "dark" | "light") => {
   ) {
     darkModeState.value = true;
     document.documentElement.classList.add("dark");
-    console.log("setting dark mode");
   } else {
     darkModeState.value = false;
     document.documentElement.classList.remove("dark");
-    console.log("unsetting dark mode");
   }
 };
 
 window.addEventListener("storage", event => {
-  console.log("storage event listener:", event);
   if (event.key === "shell:style" && isCockpitStyleValue(event.newValue)) {
       setDarkMode(event.newValue);
   }
@@ -36,7 +33,6 @@ window.addEventListener("storage", event => {
 // When changing the theme from the shell switcher the localstorage change will not fire for the same page (aka shell)
 // so we need to listen for the event on the window object.
 window.addEventListener("cockpit-style", (event)  => {
-  console.log("cockpit-style event listener:", event);
   const styleEvent = event as (Event & {detail?: {style?: string}});
   const style = styleEvent.detail?.style;
   if (style === undefined || !isCockpitStyleValue(style)) {

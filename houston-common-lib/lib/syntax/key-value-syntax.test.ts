@@ -57,4 +57,37 @@ suite("KeyValueSyntax", () => {
       expect(kvSyntax.apply(input).isErr()).toEqual(true);
     }
   });
+  suite("duplicateKeys:", () => {
+    const input = `key = value1
+key = value2
+key = value3
+`;
+    test("overwrite", () => {
+      const kvSyntax = KeyValueSyntax({ duplicateKey: "overwrite" });
+      const applyResult = kvSyntax.apply(input);
+      expect(applyResult).toEqual(ok({ key: "value3" }));
+      expect(applyResult.andThen(kvSyntax.unapply)).toEqual(
+        ok("key = value3\n")
+      );
+    });
+    test("ignore", () => {
+      const kvSyntax = KeyValueSyntax({ duplicateKey: "ignore" });
+      const applyResult = kvSyntax.apply(input);
+      expect(applyResult).toEqual(ok({ key: "value1" }));
+      expect(applyResult.andThen(kvSyntax.unapply)).toEqual(
+        ok("key = value1\n")
+      );
+    });
+    test("append", () => {
+      const kvSyntax = KeyValueSyntax({ duplicateKey: "append" });
+      const applyResult = kvSyntax.apply(input);
+      expect(applyResult).toEqual(ok({ key: ["value1", "value2", "value3"] }));
+      expect(applyResult.andThen(kvSyntax.unapply)).toEqual(ok(input));
+    });
+    test("error", () => {
+      const kvSyntax = KeyValueSyntax({ duplicateKey: "error" });
+      const applyResult = kvSyntax.apply(input);
+      expect(applyResult.isErr()).toEqual(true);
+    });
+  });
 });

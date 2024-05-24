@@ -1,10 +1,13 @@
 import { SyntaxParser } from "./syntax-parser";
 import { Result, ok, err } from "neverthrow";
 import { newlineSplitterRegex } from "./regex-snippets";
-import { KeyValueSyntax } from "@/syntax/key-value-syntax";
+import { KeyValueData, KeyValueSyntax } from "@/syntax/key-value-syntax";
 import { ParsingError } from "@/errors";
 
-export type IniConfigData = Record<string, Record<string, string>>;
+export type IniConfigData<TValue extends string | string[] = string> = Record<
+  string,
+  Record<string, TValue>
+>;
 
 export type IniSyntaxOptions = {
   paramIndent?: number | string;
@@ -16,23 +19,42 @@ export type IniSyntaxOptions = {
    * default: true
    */
   trailingNewline?: boolean;
+  /**
+   * default: "overwrite"
+   */
+  duplicateKey?: "overwrite" | "ignore" | "error" | "append";
 };
 
-export function IniSyntax({
-  paramIndent = "",
-  commentRegex = /^\s*[#;].*$/,
-  trailingNewline = true,
-}: IniSyntaxOptions = {}): SyntaxParser<IniConfigData> {
+export function IniSyntax(
+  options?: IniSyntaxOptions & {
+    duplicateKey?: "overwrite" | "ignore" | "error";
+  }
+): SyntaxParser<IniConfigData<string>>;
+export function IniSyntax(
+  options: IniSyntaxOptions & {
+    duplicateKey: "append";
+  }
+): SyntaxParser<IniConfigData<string | string[]>>;
+
+export function IniSyntax(
+  opts: IniSyntaxOptions = {}
+):
+  | SyntaxParser<IniConfigData<string>>
+  | SyntaxParser<IniConfigData<string | string[]>> {
+  const {
+    paramIndent = "",
+    commentRegex = /^\s*[#;].*$/,
+    trailingNewline = true,
+    duplicateKey = "overwrite",
+  } = opts;
   const sectionRegex = /^\s*\[\s*(?<name>[^\]]*?)\s*\]\s*$/;
   const paramRegex = /^\s*(?<key>[^=]+?)\s*=\s*(?<value>.*?)\s*$/;
-  const kvSyntax = KeyValueSyntax({
-    indent: paramIndent,
-    commentRegex,
-    trailingNewline: false,
-  });
   return {
     apply: (text) => {
-      const data: IniConfigData = {};
+      const data =
+        duplicateKey === "append"
+          ? ({} as IniConfigData<string | string[]>)
+          : ({} as IniConfigData<string>);
       let currentSection: string | null = null;
       for (const [index, line] of text.split(newlineSplitterRegex).entries()) {
         if (line.trim() === "" || commentRegex.test(line)) {
@@ -42,9 +64,6 @@ export function IniSyntax({
           const match = line.match(sectionRegex);
           if (match !== null && match.groups !== undefined) {
             currentSection = match.groups["name"] as string;
-            if (data[currentSection] === undefined) {
-              data[currentSection] = {};
-            }
           }
         } else if (paramRegex.test(line)) {
           const match = line.match(paramRegex);
@@ -55,19 +74,59 @@ export function IniSyntax({
           ) {
             const key = match.groups["key"] as string;
             const value = match.groups["value"] as string;
-            data[currentSection]![key] = value;
+            if (data[currentSection] === undefined) {
+              data[currentSection] = {};
+            }
+            const currentKeyValues = data[currentSection]!;
+            const currentValue = currentKeyValues[key];
+            if (duplicateKey === "append") {
+              if (currentValue === undefined) {
+                currentKeyValues[key] = value;
+              } else if (typeof currentValue === "string") {
+                currentKeyValues[key] = [currentValue, value];
+              } else if (Array.isArray(currentValue)) {
+                currentKeyValues[key] = [...currentValue, value];
+              }
+            } else if (
+              currentValue === undefined ||
+              duplicateKey === "overwrite"
+            ) {
+              currentKeyValues[key] = value;
+            } else if (duplicateKey === "error") {
+              return err(
+                new ParsingError(
+                  `Duplicate key '${key}' at line ${index}:\n${line}`
+                )
+              );
+            } // else ignore
           }
         } else {
-          return err(new ParsingError(`Invalid INI format at line ${index}:\n${line}`));
+          return err(
+            new ParsingError(`Invalid INI format at line ${index}:\n${line}`)
+          );
         }
       }
       return ok(data);
     },
-    unapply: (data) => {
+    unapply: (
+      data: IniConfigData<string> | IniConfigData<string | string[]>
+    ) => {
       return Result.combine(
-        Object.entries(data).map(([sectionName, params]) =>
-          kvSyntax
-            .unapply(params)
+        Object.entries(data
+        ).map(([sectionName, params]) =>
+          (duplicateKey === "append"
+          ? KeyValueSyntax({
+              indent: paramIndent,
+              commentRegex,
+              trailingNewline: false,
+              duplicateKey: "append",
+            }).unapply(params)
+          : KeyValueSyntax({
+              indent: paramIndent,
+              commentRegex,
+              trailingNewline: false,
+              duplicateKey: duplicateKey,
+            }).unapply(params as KeyValueData<string>))
             .map((paramsText) => `[${sectionName}]\n${paramsText}`)
         )
       ).map(

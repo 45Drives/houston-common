@@ -154,107 +154,112 @@ export default {
 </script>
 
 <template>
-    <div :class="$slots.default ? 'relative' : 'fixed z-20'">
-        <slot></slot>
-        <div
-            aria-live="assertive"
-            class="inset-0 flex items-end px-4 py-6 pointer-events-none sm:p-6 sm:items-start z-20 overflow-y-auto"
-            :class="$slots.default ? 'absolute' : 'fixed h-screen'"
-        >
-            <transition-group
-                tag="div"
-                class="w-full flex flex-col-reverse items-center sm:items-end sm:flex-col space-y-content"
-                enter-active-class="transition-all transform ease-out duration-300"
-                enter-from-class="translate-y-8 opacity-0 scale-95 sm:translate-y-0 sm:translate-x-8"
-                enter-to-class="translate-y-0 opacity-100 scale-100 sm:translate-x-0"
-                leave-active-class="transition-all transform ease-in duration-100"
-                leave-from-class="opacity-100 scale-100 sm:translate-x-0"
-                leave-to-class="opacity-0 scale-95 sm:translate-x-8"
+    <Teleport
+        to="body"
+        :disabled="$slots.default !== undefined"
+    >
+        <div :class="$slots.default ? 'relative' : 'fixed z-20'">
+            <slot></slot>
+            <div
+                aria-live="assertive"
+                class="inset-0 flex items-end px-4 py-6 pointer-events-none sm:p-6 sm:items-start z-20 overflow-y-auto"
+                :class="$slots.default ? 'absolute' : 'fixed h-screen'"
             >
-                <div
-                    v-for="notification in notificationList"
-                    :key="notification.key"
-                    class="max-w-sm w-full shadow-lg pointer-events-auto overflow-hidden bg-default text-default"
-                    @mouseenter="notification.stopRemoveTimeout()"
-                    @mouseleave="notification.startRemoveTimeout()"
+                <transition-group
+                    tag="div"
+                    class="w-full flex flex-col-reverse items-center sm:items-end sm:flex-col space-y-content"
+                    enter-active-class="transition-all transform ease-out duration-300"
+                    enter-from-class="translate-y-8 opacity-0 scale-95 sm:translate-y-0 sm:translate-x-8"
+                    enter-to-class="translate-y-0 opacity-100 scale-100 sm:translate-x-0"
+                    leave-active-class="transition-all transform ease-in duration-100"
+                    leave-from-class="opacity-100 scale-100 sm:translate-x-0"
+                    leave-to-class="opacity-0 scale-95 sm:translate-x-8"
                 >
-                    <div class="p-4">
-                        <div class="flex items-start">
-                            <div
-                                class="flex-shrink-0"
-                                aria-hidden="true"
-                            >
-                                <ExclamationCircleIcon
-                                    v-if="notification.level === 'error'"
-                                    class="icon-error size-icon-lg"
-                                    aria-hidden="true"
-                                />
-                                <ExclamationCircleIcon
-                                    v-else-if="notification.level === 'warning'"
-                                    class="icon-warning size-icon-lg"
-                                    aria-hidden="true"
-                                />
-                                <CheckCircleIcon
-                                    v-else-if="notification.level === 'success'"
-                                    class="icon-success size-icon-lg"
-                                    aria-hidden="true"
-                                />
-                                <MinusCircleIcon
-                                    v-else-if="notification.level === 'denied'"
-                                    class="icon-error size-icon-lg"
-                                    aria-hidden="true"
-                                />
-                                <InformationCircleIcon
-                                    v-else
-                                    class="icon-info size-icon-lg"
-                                />
-                            </div>
-                            <div class="ml-3 w-0 flex-1 pt-0.5">
-                                <p class="text-sm font-medium">{{ notification.title }}</p>
-                                <p
-                                    class="mt-1 text-sm text-muted whitespace-pre-wrap"
-                                    v-html="notification.body"
-                                >
-                                </p>
+                    <div
+                        v-for="notification in notificationList"
+                        :key="notification.key"
+                        class="max-w-sm w-full shadow-lg pointer-events-auto overflow-hidden bg-default text-default"
+                        @mouseenter="notification.stopRemoveTimeout()"
+                        @mouseleave="notification.startRemoveTimeout()"
+                    >
+                        <div class="p-4">
+                            <div class="flex items-start">
                                 <div
-                                    v-if="notification.actions?.length"
-                                    class="mt-3 flex space-x-7"
+                                    class="flex-shrink-0"
+                                    aria-hidden="true"
                                 >
-                                    <button
-                                        v-for="action in notification.actions"
-                                        :key="action.key"
-                                        @click="action.callback()"
-                                        class="rounded-md text-sm font-medium"
-                                        :class="action.processing ? 'text-muted cursor-wait' : 'text-primary'"
-                                        :disabled="action.processing"
-                                    >
-                                        {{ action.label }}
-                                    </button>
-                                    <button
-                                        @click="notification.remove()"
-                                        type="button"
-                                        class="rounded-md text-sm font-medium text-secondary"
-                                    >{{ _("Dismiss") }}</button>
-                                </div>
-                            </div>
-                            <div class="ml-4 flex-shrink-0 flex">
-                                <button
-                                    @click="notification.remove()"
-                                    class="icon-default"
-                                >
-                                    <span class="sr-only">Close</span>
-                                    <XMarkIcon
-                                        class="size-icon"
+                                    <ExclamationCircleIcon
+                                        v-if="notification.level === 'error'"
+                                        class="icon-error size-icon-lg"
                                         aria-hidden="true"
                                     />
-                                </button>
+                                    <ExclamationCircleIcon
+                                        v-else-if="notification.level === 'warning'"
+                                        class="icon-warning size-icon-lg"
+                                        aria-hidden="true"
+                                    />
+                                    <CheckCircleIcon
+                                        v-else-if="notification.level === 'success'"
+                                        class="icon-success size-icon-lg"
+                                        aria-hidden="true"
+                                    />
+                                    <MinusCircleIcon
+                                        v-else-if="notification.level === 'denied'"
+                                        class="icon-error size-icon-lg"
+                                        aria-hidden="true"
+                                    />
+                                    <InformationCircleIcon
+                                        v-else
+                                        class="icon-info size-icon-lg"
+                                    />
+                                </div>
+                                <div class="ml-3 w-0 flex-1 pt-0.5">
+                                    <p class="text-sm font-medium">{{ notification.title }}</p>
+                                    <p
+                                        class="mt-1 text-sm text-muted whitespace-pre-wrap"
+                                        v-html="notification.body"
+                                    >
+                                    </p>
+                                    <div
+                                        v-if="notification.actions?.length"
+                                        class="mt-3 flex space-x-7"
+                                    >
+                                        <button
+                                            v-for="action in notification.actions"
+                                            :key="action.key"
+                                            @click="action.callback()"
+                                            class="rounded-md text-sm font-medium"
+                                            :class="action.processing ? 'text-muted cursor-wait' : 'text-primary'"
+                                            :disabled="action.processing"
+                                        >
+                                            {{ action.label }}
+                                        </button>
+                                        <button
+                                            @click="notification.remove()"
+                                            type="button"
+                                            class="rounded-md text-sm font-medium text-secondary"
+                                        >{{ _("Dismiss") }}</button>
+                                    </div>
+                                </div>
+                                <div class="ml-4 flex-shrink-0 flex">
+                                    <button
+                                        @click="notification.remove()"
+                                        class="icon-default"
+                                    >
+                                        <span class="sr-only">Close</span>
+                                        <XMarkIcon
+                                            class="size-icon"
+                                            aria-hidden="true"
+                                        />
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </transition-group>
+                </transition-group>
+            </div>
         </div>
-    </div>
+    </Teleport>
 </template>
 
 <style scoped>

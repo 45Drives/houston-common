@@ -4,10 +4,9 @@ import { newlineSplitterRegex } from "./regex-snippets";
 import { KeyValueData, KeyValueSyntax } from "@/syntax/key-value-syntax";
 import { ParsingError } from "@/errors";
 
-export type IniConfigData<TValue extends string | string[] = string> = Record<
-  string,
-  Record<string, TValue>
->;
+export type IniConfigData<
+  TValue extends string | [string, ...string[]] = string,
+> = Record<string, Record<string, TValue>>;
 
 export type IniSyntaxOptions = {
   paramIndent?: number | string;
@@ -34,13 +33,13 @@ export function IniSyntax(
   options: IniSyntaxOptions & {
     duplicateKey: "append";
   }
-): SyntaxParser<IniConfigData<string | string[]>>;
+): SyntaxParser<IniConfigData<string | [string, ...string[]]>>;
 
 export function IniSyntax(
   opts: IniSyntaxOptions = {}
 ):
   | SyntaxParser<IniConfigData<string>>
-  | SyntaxParser<IniConfigData<string | string[]>> {
+  | SyntaxParser<IniConfigData<string | [string, ...string[]]>> {
   const {
     paramIndent = "",
     commentRegex = /^\s*[#;].*$/,
@@ -53,7 +52,7 @@ export function IniSyntax(
     apply: (text) => {
       const data =
         duplicateKey === "append"
-          ? ({} as IniConfigData<string | string[]>)
+          ? ({} as IniConfigData<string | [string, ...string[]]>)
           : ({} as IniConfigData<string>);
       let currentSection: string | null = null;
       for (const [index, line] of text.split(newlineSplitterRegex).entries()) {
@@ -109,25 +108,26 @@ export function IniSyntax(
       return ok(data);
     },
     unapply: (
-      data: IniConfigData<string> | IniConfigData<string | string[]>
+      data:
+        | IniConfigData<string>
+        | IniConfigData<string | [string, ...string[]]>
     ) => {
       return Result.combine(
-        Object.entries(data
-        ).map(([sectionName, params]) =>
+        Object.entries(data).map(([sectionName, params]) =>
           (duplicateKey === "append"
-          ? KeyValueSyntax({
-              indent: paramIndent,
-              commentRegex,
-              trailingNewline: false,
-              duplicateKey: "append",
-            }).unapply(params)
-          : KeyValueSyntax({
-              indent: paramIndent,
-              commentRegex,
-              trailingNewline: false,
-              duplicateKey: duplicateKey,
-            }).unapply(params as KeyValueData<string>))
-            .map((paramsText) => `[${sectionName}]\n${paramsText}`)
+            ? KeyValueSyntax({
+                indent: paramIndent,
+                commentRegex,
+                trailingNewline: false,
+                duplicateKey: "append",
+              }).unapply(params)
+            : KeyValueSyntax({
+                indent: paramIndent,
+                commentRegex,
+                trailingNewline: false,
+                duplicateKey: duplicateKey,
+              }).unapply(params as KeyValueData<string>)
+          ).map((paramsText) => `[${sectionName}]\n${paramsText}`)
         )
       ).map(
         (sections) => sections.join("\n\n") + (trailingNewline ? "\n" : "")

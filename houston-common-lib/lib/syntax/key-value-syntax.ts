@@ -3,10 +3,9 @@ import { ParsingError } from "@/errors";
 import { Result, ok, err } from "neverthrow";
 import { newlineSplitterRegex } from "./regex-snippets";
 
-export type KeyValueData<TValue extends string | string[] = string> = Record<
-  string,
-  TValue
->;
+export type KeyValueData<
+  TValue extends string | [string, ...string[]] = string,
+> = Record<string, TValue>;
 
 export type KeyValueSyntaxOptions = {
   indent?: number | string;
@@ -33,13 +32,13 @@ export function KeyValueSyntax(
   options: KeyValueSyntaxOptions & {
     duplicateKey: "append";
   }
-): SyntaxParser<KeyValueData<string | string[]>>;
+): SyntaxParser<KeyValueData<string | [string, ...string[]]>>;
 
 export function KeyValueSyntax(
   opts: KeyValueSyntaxOptions = {}
 ):
   | SyntaxParser<KeyValueData<string>>
-  | SyntaxParser<KeyValueData<string | string[]>> {
+  | SyntaxParser<KeyValueData<string | [string, ...string[]]>> {
   let {
     indent = "",
     commentRegex = /^\s*[#;]/,
@@ -77,7 +76,7 @@ export function KeyValueSyntax(
       ).andThen((keyValuePairs) => {
         const data =
           opts.duplicateKey === "append"
-            ? ({} as KeyValueData<string | string[]>)
+            ? ({} as KeyValueData<string | [string, ...string[]]>)
             : ({} as KeyValueData<string>);
         for (const [index, { key, value }] of keyValuePairs
           .filter((kv): kv is { key: string; value: string } => kv !== null)
@@ -104,7 +103,9 @@ export function KeyValueSyntax(
         }
         return ok(data);
       }),
-    unapply: (data: KeyValueData<string> | KeyValueData<string | string[]>) =>
+    unapply: (
+      data: KeyValueData<string> | KeyValueData<string | [string, ...string[]]>
+    ) =>
       ok(
         Object.entries(data)
           .map(([key, values]) =>

@@ -1,9 +1,11 @@
 import { Server } from "@/server";
-import { Command, CommandOptions } from "@/process";
-import { ProcessError } from "@/errors";
-import { ResultAsync, okAsync } from "neverthrow";
+import { BashCommand, Command, CommandOptions } from "@/process";
+import { ParsingError, ProcessError } from "@/errors";
+import { ResultAsync, okAsync, errAsync, safeTry, ok } from "neverthrow";
 import { User } from "@/user";
 import { Group } from "@/group";
+import { FilesystemMount, parseFileSystemType } from "@/filesystem";
+import { newlineSplitterRegex } from "@/syntax";
 
 export class Path {
   public readonly path: string;
@@ -12,7 +14,12 @@ export class Path {
     if (path instanceof Path) {
       this.path = path.path;
     } else if (typeof path === "string") {
+      // remove repeated separators
       this.path = path.replace(/\/+/g, "/");
+      if (this.path.length > 1) {
+        // remove possible trailing separator
+        this.path = this.path.replace(/\/$/, "");
+      }
     } else {
       throw TypeError(`typeof path = ${typeof path} != Path|string`);
     }
@@ -27,7 +34,15 @@ export class Path {
   }
 
   parent(): Path {
-    return new Path(this.path.substring(0, this.path.lastIndexOf("/")));
+    const lastSeparatorIndex = this.path.lastIndexOf("/");
+    if (lastSeparatorIndex === -1) {
+      return new Path(this.path + "/..");
+    }
+    if (lastSeparatorIndex === 0) {
+      // root of absolute path
+      return new Path("/");
+    }
+    return new Path(this.path.substring(0, lastSeparatorIndex));
   }
 
   basename(): string | undefined {
@@ -121,7 +136,7 @@ export class Path {
     parents?: boolean,
     commandOptions?: CommandOptions
   ): ResultAsync<File, ProcessError> | ResultAsync<Directory, ProcessError> {
-    return (
+    const createResult = (
       parents
         ? server
             .execute(
@@ -137,10 +152,87 @@ export class Path {
             commandOptions
           )
       )
-      .andThen((cmd) => server.execute(cmd, true))
-      .map(() =>
-        type === "file" ? new File(server, this) : new Directory(server, this)
+      .andThen((cmd) => server.execute(cmd, true));
+    return type === "file"
+      ? createResult.map(() => new File(server, this))
+      : createResult.map(() => new Directory(server, this));
+  }
+
+  getFilesystemMountOn(
+    server: Server,
+    commandOptions?: CommandOptions
+  ): ResultAsync<FilesystemMount, ProcessError> {
+    return server
+      .execute(
+        new Command(
+          ["df", "--output=source,target,fstype", this.path],
+          commandOptions
+        )
+      )
+      .map((proc) => proc.getStdout().trim().split(newlineSplitterRegex)[1])
+      .andThen((tokens) => {
+        const [source, mountpoint, realType] = tokens?.split(/\s+/g) ?? [];
+        if (
+          source === undefined ||
+          mountpoint === undefined ||
+          realType === undefined
+        ) {
+          return errAsync(
+            new ParsingError(`Failed to parse filesystem mount:\n${tokens}`)
+          );
+        }
+        return okAsync({
+          filesystem: {
+            source,
+            type: parseFileSystemType(realType),
+          },
+          mountpoint,
+        });
+      });
+  }
+
+  resolveOn(
+    server: Server,
+    mustExist: boolean = false,
+    commandOptions?: CommandOptions
+  ): ResultAsync<Path, ProcessError> {
+    return server
+      .execute(
+        new Command(
+          [
+            "realpath",
+            mustExist ? "--canonicalize-existing" : "--canonicalize-missing",
+            this.path,
+          ],
+          commandOptions
+        )
+      )
+      .map((proc) => new Path(proc.getStdout().trim()));
+  }
+
+  findLongestExistingStemOn(
+    server: Server,
+    commandOptions?: CommandOptions
+  ): ResultAsync<Path, ProcessError> {
+    if (!this.isAbsolute()) {
+      return errAsync(
+        new ProcessError(
+          `Path.findLongestExistingStemOn: Path not absolute: ${this.path}`
+        )
       );
+    }
+    let path: Path = this;
+    return new ResultAsync(
+      safeTry<Path, ProcessError>(async function* () {
+        while (path.path !== "/") {
+          if (yield* path.existsOn(server, commandOptions).safeUnwrap()) {
+            return ok(path);
+          }
+          path = path.parent();
+        }
+        return ok(path);
+      })
+    );
   }
 }
 
@@ -230,6 +322,10 @@ export class FileSystemNode extends Path {
     }
   }
 
+  parent(): FileSystemNode {
+    return new FileSystemNode(this.server, super.parent());
+  }
+
   isBlock(commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.isBlockOn(this.server, commandOptions);
   }
@@ -268,6 +364,29 @@ export class FileSystemNode extends Path {
     commandOptions?: CommandOptions
   ): ResultAsync<boolean, ProcessError> {
     return this.isSocketOn(this.server, commandOptions);
+  }
+
+  getFilesystemMount(
+    commandOptions?: CommandOptions
+  ): ResultAsync<FilesystemMount, ProcessError> {
+    return this.getFilesystemMountOn(this.server, commandOptions);
+  }
+
+  resolve(
+    mustExist: boolean = false,
+    commandOptions?: CommandOptions
+  ): ResultAsync<FileSystemNode, ProcessError> {
+    return this.resolveOn(this.server, mustExist, commandOptions).map(
+      (path) => new FileSystemNode(this.server, path)
+    );
+  }
+
+  findLongestExistingStem(
+    commandOptions?: CommandOptions
+  ): ResultAsync<FileSystemNode, ProcessError> {
+    return this.findLongestExistingStemOn(this.server, commandOptions).map(
+      (path) => new FileSystemNode(this.server, path)
+    );
   }
 
   remove(commandOptions?: CommandOptions): ResultAsync<null, ProcessError> {
@@ -332,6 +451,25 @@ export class File extends FileSystemNode {
     }
     return procResult.map((p) => p.getStdout(false));
   }
+
+  write(
+    content: string | Uint8Array,
+    append: boolean = false,
+    commandOptions?: CommandOptions
+  ): ResultAsync<null, ProcessError> {
+    const proc = this.server.spawnProcess(
+      new Command(
+        [
+          "dd",
+          `of=${this.path}`,
+          ...(append ? ["oflag=append", "conv=notrunc"] : []),
+        ],
+        commandOptions
+      )
+    );
+    proc.write(content, false);
+    return proc.wait(true).map(() => null);
+  }
 }
 
 export class Directory extends FileSystemNode {
@@ -340,5 +478,43 @@ export class Directory extends FileSystemNode {
     commandOptions?: CommandOptions
   ): ResultAsync<Directory, ProcessError> {
     return this.createOn(this.server, "directory", parents, commandOptions);
+  }
+
+  getChildren(
+    opts: {
+      /**
+       * Glob expression. Default: "*"
+       */
+      nameFilter?: string;
+      /**
+       * Glob expression. Default: "*"
+       */
+      pathFilter?: string;
+      /**
+       * Limit number of returned entries. "none" for no limit.
+       * Default: 50
+       */
+      limit?: number | "none";
+    },
+    commandOptions?: CommandOptions
+  ): ResultAsync<FileSystemNode[], ProcessError> {
+    opts.limit ??= 50;
+    return this.server
+      .execute(
+        new BashCommand(
+          'find -H "$1" -mindepth 1 -maxdepth 1 -name "$2" -path "$3" -print0'
+          + opts.limit === "none" ? "" : ` | head -z -n ${opts.limit.toString()}`,
+          [this.path, opts.nameFilter ?? "*", opts.pathFilter ?? "*"],
+          commandOptions
+        )
+      )
+      .map((proc) =>
+        proc
+          .getStdout()
+          .trim()
+          .split("\0")
+          .slice(0, -1)
+          .map((pathString) => new FileSystemNode(this.server, pathString))
+      );
   }
 }

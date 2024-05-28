@@ -7,6 +7,7 @@ export * from "@/process";
 export * from "@/path";
 export * from "@/user";
 export * from "@/group";
+export * from "@/filesystem";
 
 export function getServer(
   host: string = "localhost"

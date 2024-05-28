@@ -4,15 +4,17 @@ export type InputValidator = (value: string) => Feedback | undefined | PromiseLi
 </script>
 
 <script setup lang="ts">
-import { defineProps, defineModel, defineEmits, computed, defineExpose, ref, watchEffect } from "vue";
+import { defineProps, defineModel, defineEmits, computed, defineExpose, ref, watchEffect, onMounted } from "vue";
 import { ExclamationCircleIcon, ExclamationTriangleIcon } from "@heroicons/vue/20/solid";
 import InputLabelWrapper from './InputLabelWrapper.vue';
 import InputFeedback from '@/components/InputFeedback.vue';
+import { v4 as uuidv4 } from "uuid";
 
 const props = defineProps<{
   placeholder?: string;
   validator?: InputValidator;
   disabled?: boolean;
+  suggestions?: string[];
 }>();
 
 const model = defineModel<string>({ default: "" });
@@ -26,6 +28,9 @@ const feedback = ref<Feedback>();
 const updateFeedback = async () =>
   feedback.value = await props.validator?.(model.value);
 watchEffect(updateFeedback);
+
+const suggestionListId = ref<string>();
+onMounted(() => suggestionListId.value = uuidv4());
 
 const valid = computed<boolean>(() => !(feedback.value?.type === "error"));
 
@@ -58,7 +63,18 @@ defineExpose({
       v-model="model"
       @input="emit('input', model)"
       @change="emit('change', model)"
+      :list="suggestionListId"
+      autocomplete="off"
     />
+    <datalist
+      v-if="suggestions"
+      :id="suggestionListId"
+    >
+      <option
+        v-for="suggestion in suggestions"
+        :value="suggestion"
+      ></option>
+    </datalist>
     <InputFeedback
       v-if="feedback"
       :type="feedback.type"

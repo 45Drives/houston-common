@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { ToolTip } from "@45drives/houston-common-ui";
+import ToolTip from '@/components/ToolTip.vue';
 
 const showToolTip = ref(false);
 

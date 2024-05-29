@@ -2,6 +2,7 @@
 export type SelectMenuOption<T> = {
   label: string;
   value: T;
+  hoverText?: string;
 };
 </script>
 
@@ -68,13 +69,18 @@ const { inputBuffer, onInput } = useTempInputBuffer(1000);
 const optionRefs = ref<HTMLButtonElement[]>([]);
 
 watchEffect(() => {
-  const searchText = inputBuffer.value;
+  const searchText = inputBuffer.value?.toLowerCase();
   if (searchText === undefined) {
     return;
   }
-  const focusIndex = props.options.findIndex((o) =>
-    o.label.startsWith(searchText)
+  let focusIndex = props.options.findIndex((o) =>
+    o.label.toLowerCase().startsWith(searchText)
   );
+  if (focusIndex === -1) {
+    focusIndex = props.options.findIndex((o) =>
+      o.label.toLowerCase().includes(searchText)
+    );
+  }
   if (focusIndex === -1) {
     return;
   }
@@ -130,6 +136,7 @@ watchEffect(() => {
             :class="{ 'font-bold': index === currentSelectionIndex }"
             class="px-3 text-left hover:bg-accent whitespace-nowrap"
             ref="optionRefs"
+            :title="option.hoverText ?? option.label"
           >
             {{ option.label }}
           </button>

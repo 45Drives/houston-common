@@ -67,7 +67,7 @@ export class Server {
 
   getLocalUsers(cache: boolean = true): ResultAsync<LocalUser[], ProcessError> {
     if (this.localUsers === undefined || cache === false) {
-      return this.execute(new Command(["cat", "/etc/passwd"]), true).map(
+      return this.execute(new Command(["getent", "-s", "files", "passwd"]), true).map(
         (proc) => {
           this.localUsers = proc
             .getStdout()
@@ -112,7 +112,7 @@ export class Server {
     cache: boolean = true
   ): ResultAsync<LocalGroup[], ProcessError> {
     if (this.localGroups === undefined || cache === false) {
-      return this.execute(new Command(["cat", "/etc/group"]), true).map(
+      return this.execute(new Command(["getent", "-s", "files", "group"]), true).map(
         (proc) => {
           this.localGroups = proc
             .getStdout()

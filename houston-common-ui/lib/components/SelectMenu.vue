@@ -6,7 +6,14 @@ export type SelectMenuOption<T> = {
 </script>
 
 <script setup lang="ts">
-import { defineProps, defineModel, defineEmits, ref, computed } from "vue";
+import {
+  defineProps,
+  defineModel,
+  defineEmits,
+  ref,
+  computed,
+  watchEffect,
+} from "vue";
 import Disclosure from "@/components/Disclosure.vue";
 import { ChevronDownIcon } from "@heroicons/vue/20/solid";
 
@@ -19,8 +26,9 @@ const props = withDefaults(
     options: SelectMenuOption<OptionType>[];
     disabled?: boolean;
     placeholder?: string;
+    onKeyboardInput?: "focus" | "scroll";
   }>(),
-  { placeholder: "" }
+  { placeholder: "", onKeyboardInput: "focus" }
 );
 
 const emit = defineEmits<{
@@ -36,6 +44,49 @@ const currentSelectionIndex = computed<number | undefined>(() => {
 });
 
 const showOptions = ref(false);
+
+const useTempInputBuffer = (timeoutMilliseconds: number) => {
+  const inputBuffer = ref<string>();
+
+  let timeout: number | undefined = undefined;
+
+  const onInput = (e: KeyboardEvent) => {
+    if (e.key) {
+      clearTimeout(timeout);
+      inputBuffer.value = (inputBuffer.value ?? "") + e.key;
+    }
+    timeout = window.setTimeout(() => {
+      inputBuffer.value = undefined;
+    }, timeoutMilliseconds);
+  };
+
+  return { inputBuffer, onInput };
+};
+
+const { inputBuffer, onInput } = useTempInputBuffer(1000);
+
+const optionRefs = ref<HTMLButtonElement[]>([]);
+
+watchEffect(() => {
+  const searchText = inputBuffer.value;
+  if (searchText === undefined) {
+    return;
+  }
+  const focusIndex = props.options.findIndex((o) =>
+    o.label.startsWith(searchText)
+  );
+  if (focusIndex === -1) {
+    return;
+  }
+  if (props.onKeyboardInput === "focus") {
+    optionRefs.value[focusIndex]?.focus({ preventScroll: false });
+  } else {
+    optionRefs.value[focusIndex]?.scrollIntoView({
+      block: "nearest",
+      inline: "start",
+    });
+  }
+});
 </script>
 
 <template>
@@ -43,6 +94,7 @@ const showOptions = ref(false);
     class="inline-block w-full"
     @focusin="showOptions = true"
     @focusout="showOptions = false"
+    @keypress="onInput"
   >
     <div
       class="inline-flex flex-row justify-between gap-2 border input-textlike min-w-16 w-full sm:w-auto px-3 py-2 text-left"
@@ -77,6 +129,7 @@ const showOptions = ref(false);
             "
             :class="{ 'font-bold': index === currentSelectionIndex }"
             class="px-3 text-left hover:bg-accent whitespace-nowrap"
+            ref="optionRefs"
           >
             {{ option.label }}
           </button>

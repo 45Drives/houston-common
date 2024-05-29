@@ -1,11 +1,81 @@
 import { Server } from "@/server";
 import { BashCommand, Command, CommandOptions } from "@/process";
 import { ParsingError, ProcessError } from "@/errors";
-import { ResultAsync, okAsync, errAsync, safeTry, ok } from "neverthrow";
+import { ResultAsync, okAsync, errAsync, safeTry, ok, err } from "neverthrow";
 import { User } from "@/user";
 import { Group } from "@/group";
 import { FilesystemMount, parseFileSystemType } from "@/filesystem";
 import { newlineSplitterRegex } from "@/syntax";
+
+export class ModeOctet {
+  r: boolean;
+  w: boolean;
+  x: boolean;
+
+  constructor(octet: number) {
+    this.r = (octet & 0b100) !== 0;
+    this.w = (octet & 0b010) !== 0;
+    this.x = (octet & 0b001) !== 0;
+  }
+
+  toNumber(): number {
+    return (this.r ? 0b100 : 0) | (this.w ? 0b010 : 0) | (this.x ? 0b001 : 0);
+  }
+  toString(): string {
+    return `${this.r ? "r" : "-"}${this.w ? "w" : "-"}${this.x ? "x" : "-"}`;
+  }
+  toOctal(): string {
+    return this.toNumber().toString(8);
+  }
+}
+
+export class Mode {
+  owner: ModeOctet;
+  group: ModeOctet;
+  other: ModeOctet;
+  constructor(mode: number) {
+    this.owner = new ModeOctet((mode >> 6) & 0b111);
+    this.group = new ModeOctet((mode >> 3) & 0b111);
+    this.other = new ModeOctet((mode >> 0) & 0b111);
+  }
+
+  toNumber(): number {
+    return (
+      (this.owner.toNumber() << 6) |
+      (this.group.toNumber() << 3) |
+      this.other.toNumber()
+    );
+  }
+  toString(): string {
+    return `${this.owner.toString()}${this.group.toString()}${this.other.toString()} (0${this.toOctal()})`;
+  }
+  toOctal(): string {
+    return this.toNumber().toString(8);
+  }
+}
+
+export class Ownership {
+  public user?: User;
+  public group?: Group;
+
+  constructor(user: User);
+  constructor(group: Group);
+  constructor(user: User, group: Group);
+  constructor(userOrGroup: User | Group, group?: Group) {
+    if ("uid" in userOrGroup) {
+      this.user = userOrGroup;
+      this.group = group;
+    } else {
+      this.group = userOrGroup;
+    }
+  }
+
+  toChownString(): string {
+    return `${this.user ? this.user.login ?? this.user.uid.toString() : ""}:${
+      this.group ? this.group.name ?? this.group.gid.toString() : ""
+    }`;
+  }
+}
 
 export class Path {
   public readonly path: string;
@@ -234,73 +304,84 @@ export class Path {
       })
     );
   }
-}
 
-export class ModeOctet {
-  r: boolean;
-  w: boolean;
-  x: boolean;
-
-  constructor(octet: number) {
-    this.r = (octet & 0b100) !== 0;
-    this.w = (octet & 0b010) !== 0;
-    this.x = (octet & 0b001) !== 0;
-  }
-
-  toNumber(): number {
-    return (this.r ? 0b100 : 0) | (this.w ? 0b010 : 0) | (this.x ? 0b001 : 0);
-  }
-  toString(): string {
-    return `${this.r ? "r" : "-"}${this.w ? "w" : "-"}${this.x ? "x" : "-"}`;
-  }
-  toOctal(): string {
-    return this.toNumber().toString(8);
-  }
-}
-
-export class Mode {
-  owner: ModeOctet;
-  group: ModeOctet;
-  other: ModeOctet;
-  constructor(mode: number) {
-    this.owner = new ModeOctet((mode >> 6) & 0b111);
-    this.group = new ModeOctet((mode >> 3) & 0b111);
-    this.other = new ModeOctet((mode >> 0) & 0b111);
+  getModeOn(
+    server: Server,
+    commandOptions?: CommandOptions
+  ): ResultAsync<Mode, ProcessError | ParsingError> {
+    return server
+      .execute(
+        new Command(
+          ["stat", "--printf", "%#a", "--", this.path],
+          commandOptions
+        )
+      )
+      .map((proc) => parseInt(proc.getStdout().trim(), 8))
+      .andThen((mode) =>
+        isNaN(mode) ? err(new ParsingError("Failed to parse mode")) : ok(mode)
+      )
+      .map((mode) => new Mode(mode));
   }
 
-  toNumber(): number {
-    return (
-      (this.owner.toNumber() << 6) |
-      (this.group.toNumber() << 3) |
-      this.other.toNumber()
-    );
-  }
-  toString(): string {
-    return `${this.owner.toString()}${this.group.toString()}${this.other.toString()} (0${this.toOctal()})`;
-  }
-  toOctal(): string {
-    return this.toNumber().toString(8);
-  }
-}
-
-export class Ownership {
-  public user?: User;
-  public group?: Group;
-
-  constructor(user: User);
-  constructor(group: Group);
-  constructor(user: User, group: Group);
-  constructor(userOrGroup: User | Group, group?: Group) {
-    if ("uid" in userOrGroup) {
-      this.user = userOrGroup;
-      this.group = group;
-    } else {
-      this.group = userOrGroup;
-    }
+  setModeOn(
+    server: Server,
+    mode: Mode | number,
+    commandOptions?: CommandOptions
+  ): ResultAsync<this, ProcessError> {
+    mode = typeof mode === "number" ? new Mode(mode) : mode;
+    return server
+      .execute(
+        new Command(["chmod", "--", mode.toOctal(), this.path], commandOptions)
+      )
+      .map(() => this);
   }
 
-  toChownString(): string {
-    return `${this.user?.login ?? ""}:${this.group?.name ?? ""}`;
+  getOwnershipOn(
+    server: Server,
+    commandOptions?: CommandOptions
+  ): ResultAsync<Ownership, ProcessError | ParsingError> {
+    return server
+      .execute(
+        new Command(
+          ["stat", "--printf", "%u:%g", "--", this.path],
+          commandOptions
+        )
+      )
+      .andThen((proc) => {
+        const ownershipString = proc.getStdout().trim();
+        const [uid, gid] = ownershipString.split(":").map((s) => parseInt(s));
+        if (
+          uid === undefined ||
+          gid === undefined ||
+          isNaN(uid) ||
+          isNaN(gid)
+        ) {
+          return err(
+            new ParsingError(
+              `Failed to parse ownership from ${ownershipString}`
+            )
+          );
+        }
+        return ResultAsync.combine([
+          server.getUserByUid(uid),
+          server.getGroupByGid(gid),
+        ]).map(([user, group]) => new Ownership(user, group));
+      });
+  }
+
+  setOwnershipOn(
+    server: Server,
+    ownership: Ownership,
+    commandOptions?: CommandOptions
+  ): ResultAsync<this, ProcessError> {
+    return server
+      .execute(
+        new Command(
+          ["chown", "--", ownership.toChownString(), this.path],
+          commandOptions
+        )
+      )
+      .map(() => this);
   }
 }
 
@@ -395,31 +476,30 @@ export class FileSystemNode extends Path {
       .map(() => null);
   }
 
-  chmod(
-    mode: Mode,
+  getMode(
     commandOptions?: CommandOptions
-  ): ResultAsync<null, ProcessError> {
-    return this.server
-      .execute(
-        new Command(["chmod", mode.toOctal(), this.path], commandOptions),
-        true
-      )
-      .map(() => null);
+  ): ResultAsync<Mode, ProcessError | ParsingError> {
+    return this.getModeOn(this.server, commandOptions);
   }
 
-  chown(
-    ownership: Ownership,
+  setMode(
+    mode: Mode | number,
     commandOptions?: CommandOptions
-  ): ResultAsync<null, ProcessError> {
-    return this.server
-      .execute(
-        new Command(
-          ["chown", ownership.toChownString(), this.path],
-          commandOptions
-        ),
-        true
-      )
-      .map(() => null);
+  ): ResultAsync<this, ProcessError> {
+    return this.setModeOn(this.server, mode, commandOptions);
+  }
+
+  getOwnership(
+    commandOptions?: CommandOptions | undefined
+  ): ResultAsync<Ownership, ProcessError | ParsingError> {
+    return this.getOwnershipOn(this.server, commandOptions);
+  }
+
+  setOwnership(
+    ownership: Ownership,
+    commandOptions?: CommandOptions | undefined
+  ): ResultAsync<this, ProcessError> {
+    return this.setOwnershipOn(this.server, ownership, commandOptions);
   }
 }
 
@@ -502,8 +582,10 @@ export class Directory extends FileSystemNode {
     return this.server
       .execute(
         new BashCommand(
-          'find -H "$1" -mindepth 1 -maxdepth 1 -name "$2" -path "$3" -print0'
-          + opts.limit === "none" ? "" : ` | head -z -n ${opts.limit.toString()}`,
+          'find -H "$1" -mindepth 1 -maxdepth 1 -name "$2" -path "$3" -print0' +
+            (opts.limit === "none"
+              ? ""
+              : ` | head -z -n ${opts.limit.toString()}`),
           [this.path, opts.nameFilter ?? "*", opts.pathFilter ?? "*"],
           commandOptions
         )

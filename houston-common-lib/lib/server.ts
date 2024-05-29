@@ -1,16 +1,16 @@
-import { ResultAsync, ok, okAsync, err } from "neverthrow";
+import { ResultAsync, ok, okAsync, err, errAsync } from "neverthrow";
 import { Command, Process, ExitedProcess } from "@/process";
-import { User } from "@/user";
-import { Group } from "@/group";
+import { User, LocalUser, isLocalUser } from "@/user";
+import { Group, LocalGroup, isLocalGroup } from "@/group";
 import { Directory, File } from "@/path";
-import { ParsingError, ProcessError } from "@/errors";
+import { ParsingError, ProcessError, ValueError } from "@/errors";
 
 export class Server {
   public readonly host?: string;
   private hostname?: string;
   private ipAddress?: string;
-  private localUsers?: User[];
-  private localGroups?: Group[];
+  private localUsers?: LocalUser[];
+  private localGroups?: LocalGroup[];
 
   constructor(host?: string) {
     this.host = host;
@@ -65,7 +65,7 @@ export class Server {
     return this.spawnProcess(command).wait(failIfNonZero);
   }
 
-  getLocalUsers(cache: boolean = true): ResultAsync<User[], ProcessError> {
+  getLocalUsers(cache: boolean = true): ResultAsync<LocalUser[], ProcessError> {
     if (this.localUsers === undefined || cache === false) {
       return this.execute(new Command(["cat", "/etc/passwd"]), true).map(
         (proc) => {
@@ -100,7 +100,7 @@ export class Server {
                 new File(this, shell)
               );
             })
-            .filter((user): user is User => user !== null);
+            .filter((user): user is LocalUser => user !== null);
           return this.localUsers;
         }
       );
@@ -108,7 +108,9 @@ export class Server {
     return okAsync(this.localUsers);
   }
 
-  getLocalGroups(cache: boolean = true): ResultAsync<Group[], ProcessError> {
+  getLocalGroups(
+    cache: boolean = true
+  ): ResultAsync<LocalGroup[], ProcessError> {
     if (this.localGroups === undefined || cache === false) {
       return this.execute(new Command(["cat", "/etc/group"]), true).map(
         (proc) => {
@@ -130,7 +132,7 @@ export class Server {
               }
               return Group(this, name, gid, membersStr.split(","));
             })
-            .filter((group): group is Group => group instanceof Group);
+            .filter((group): group is LocalGroup => group !== null);
           return this.localGroups;
         }
       );
@@ -138,7 +140,14 @@ export class Server {
     return okAsync(this.localGroups);
   }
 
-  getUserGroups(user: User): ResultAsync<Group[], ProcessError> {
+  getUserGroups(
+    user: User
+  ): ResultAsync<LocalGroup[], ProcessError | ValueError> {
+    if (!isLocalUser(user)) {
+      return errAsync(
+        new ValueError(`Can't get groups from non-local user ${user.uid}`)
+      );
+    }
     return this.execute(new Command(["groups", user.login]), true)
       .map((proc) =>
         proc
@@ -155,37 +164,71 @@ export class Server {
       });
   }
 
-  getGroupMembers(group: Group): ResultAsync<User[], ProcessError> {
+  getGroupMembers(
+    group: Group
+  ): ResultAsync<LocalUser[], ProcessError | ValueError> {
+    if (!isLocalGroup(group)) {
+      return errAsync(
+        new ValueError(`Can't get members of non-local group ${group.gid}`)
+      );
+    }
     return this.getLocalUsers().map((localUsers) =>
       localUsers.filter((user) => user.login in group.members)
     );
   }
 
-  getUserByLogin(login: string): ResultAsync<User | null, ProcessError> {
-    return this.getLocalUsers().map(
-      (localUsers) =>
-        localUsers.filter((user) => user.login === login)[0] ?? null
-    );
+  getUserByLogin(login: string): ResultAsync<LocalUser, ProcessError | ValueError> {
+    return this.getLocalUsers()
+      .map((localUsers) => localUsers.filter((user) => user.login === login))
+      .andThen((userMatches) =>
+        userMatches.length === 0
+          ? err(new ValueError(`User not found: ${login}`))
+          : ok(userMatches[0]!)
+      );
   }
 
-  getUserByUid(uid: number): ResultAsync<User | null, ProcessError> {
-    return this.getLocalUsers().map(
-      (localUsers) => localUsers.filter((user) => user.uid === uid)[0] ?? null
-    );
+  getUserByUid(uid: number): ResultAsync<User, ProcessError> {
+    return this.getLocalUsers()
+      .map((localUsers) => localUsers.filter((user) => user.uid === uid))
+      .andThen((userMatches) =>
+        userMatches.length === 0
+          ? ok(
+              User(
+                this,
+                undefined,
+                uid,
+                undefined,
+                undefined,
+                undefined,
+                undefined
+              )
+            )
+          : ok(userMatches[0]!)
+      );
   }
 
-  getGroupByName(groupName: string): ResultAsync<Group | null, ProcessError> {
-    return this.getLocalGroups().map(
-      (localGroups) =>
-        localGroups.filter((group) => group.name === groupName)[0] ?? null
-    );
+  getGroupByName(
+    groupName: string
+  ): ResultAsync<LocalGroup, ProcessError | ValueError> {
+    return this.getLocalGroups()
+      .map((localGroups) =>
+        localGroups.filter((group) => group.name === groupName)
+      )
+      .andThen((groupMatches) =>
+        groupMatches.length === 0
+          ? err(new ValueError(`Group not found: ${groupName}`))
+          : ok(groupMatches[0]!)
+      );
   }
 
-  getGroupByGid(gid: number): ResultAsync<Group | null, ProcessError> {
-    return this.getLocalGroups().map(
-      (localGroups) =>
-        localGroups.filter((group) => group.gid === gid)[0] ?? null
-    );
+  getGroupByGid(gid: number): ResultAsync<Group, ProcessError> {
+    return this.getLocalGroups()
+      .map((localGroups) => localGroups.filter((group) => group.gid === gid))
+      .andThen((groupMatches) =>
+        groupMatches.length === 0
+          ? ok(Group(this, undefined, gid, undefined))
+          : ok(groupMatches[0]!)
+      );
   }
 
   toString(): string {

@@ -18,3 +18,10 @@ export class NonZeroExit extends ProcessError {
     this.name = "ProcessError (exited non-zero)";
   }
 }
+
+export class ValueError extends Error {
+  constructor(...args: ConstructorParameters<typeof Error>) {
+    super(...args);
+    this.name = "ValueError";
+  }
+}

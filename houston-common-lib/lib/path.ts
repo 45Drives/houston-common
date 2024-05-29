@@ -5,7 +5,7 @@ import { ResultAsync, okAsync, errAsync, safeTry, ok, err } from "neverthrow";
 import { User } from "@/user";
 import { Group } from "@/group";
 import { FilesystemMount, parseFileSystemType } from "@/filesystem";
-import { newlineSplitterRegex } from "@/syntax";
+import { RegexSnippets } from "@/syntax";
 
 export class ModeOctet {
   r: boolean;
@@ -239,7 +239,7 @@ export class Path {
           commandOptions
         )
       )
-      .map((proc) => proc.getStdout().trim().split(newlineSplitterRegex)[1])
+      .map((proc) => proc.getStdout().trim().split(RegexSnippets.newlineSplitter)[1])
       .andThen((tokens) => {
         const [source, mountpoint, realType] = tokens?.split(/\s+/g) ?? [];
         if (

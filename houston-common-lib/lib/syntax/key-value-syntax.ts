@@ -1,7 +1,7 @@
 import { SyntaxParser } from "@/syntax/syntax-parser";
 import { ParsingError } from "@/errors";
 import { Result, ok, err } from "neverthrow";
-import { newlineSplitterRegex } from "./regex-snippets";
+import { RegexSnippets } from "./regex-snippets";
 
 export type KeyValueData<
   TValue extends string | [string, ...string[]] = string,
@@ -53,7 +53,7 @@ export function KeyValueSyntax(
       Result.combine(
         text
           // split lines
-          .split(newlineSplitterRegex)
+          .split(RegexSnippets.newlineSplitter)
           .map(
             (
               line,

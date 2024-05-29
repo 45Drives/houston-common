@@ -1,6 +1,6 @@
 import { SyntaxParser } from "./syntax-parser";
 import { Result, ok, err } from "neverthrow";
-import { newlineSplitterRegex } from "./regex-snippets";
+import { RegexSnippets } from "./regex-snippets";
 import { KeyValueData, KeyValueSyntax } from "@/syntax/key-value-syntax";
 import { ParsingError } from "@/errors";
 
@@ -55,7 +55,7 @@ export function IniSyntax(
           ? ({} as IniConfigData<string | [string, ...string[]]>)
           : ({} as IniConfigData<string>);
       let currentSection: string | null = null;
-      for (const [index, line] of text.split(newlineSplitterRegex).entries()) {
+      for (const [index, line] of text.split(RegexSnippets.newlineSplitter).entries()) {
         if (line.trim() === "" || commentRegex.test(line)) {
           continue;
         }

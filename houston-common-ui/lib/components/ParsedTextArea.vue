@@ -1,7 +1,7 @@
 <script setup lang="ts">
 
 import { ref, watch, defineModel, defineProps, withDefaults } from "vue";
-import { type SyntaxParser, type SyntaxParserType, newlineSplitterRegex } from "@45drives/houston-common-lib";
+import { type SyntaxParser, type SyntaxParserType, RegexSnippets } from "@45drives/houston-common-lib";
 import { reportError } from '@/components/NotificationView.vue';
 
 const props = withDefaults(defineProps<{
@@ -35,7 +35,7 @@ watch(keyValueData, onKeyValueDataChanged, { immediate: true, deep: true });
 <template>
     <textarea
         name="global-advanced-settings"
-        :rows="Math.min(Math.max(textAreaContent.split(newlineSplitterRegex).length, minRows), maxRows)"
+        :rows="Math.min(Math.max(textAreaContent.split(RegexSnippets.newlineSplitter).length, minRows), maxRows)"
         :disabled="disabled"
         v-model="textAreaContent"
         class="w-full input-textlike"

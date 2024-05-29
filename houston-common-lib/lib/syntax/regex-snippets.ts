@@ -1,1 +1,4 @@
-export const newlineSplitterRegex = /(?<!\\)[\r\n]+/;
+export namespace RegexSnippets {
+    export const newlineSplitter = /(?<!\\)[\r\n]+/;
+
+}

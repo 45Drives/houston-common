@@ -16,6 +16,7 @@ export { default as ToggleSwitch } from "./ToggleSwitch.vue";
 export { default as ToggleSwitchGroup } from "./ToggleSwitchGroup.vue";
 export { default as ToolTip } from "./ToolTip.vue";
 export { default as Disclosure } from "./Disclosure.vue";
+export { default as DisclosureController } from "./DisclosureController.vue";
 export { default as SelectMenu } from "./SelectMenu.vue";
 export * from "./SelectMenu.vue";
 export { default as InputLabelWrapper } from "./InputLabelWrapper.vue";

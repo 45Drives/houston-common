@@ -39,7 +39,6 @@ const elementHeight = computed<number>(() => {
 
 const observer = new ResizeObserver((entries) => {
   entries.forEach((entry) => {
-    console.log("updating internal height:", entry.contentRect.height);
     internalHeight.value = entry.contentRect.height;
   });
 });
@@ -109,7 +108,7 @@ onUnmounted(() => {
       ]"
     >
       <div ref="internalWrapperElement">
-        <slot :visible="visible" />
+        <slot :visible="visible" :show="show" />
       </div>
     </div>
   </div>

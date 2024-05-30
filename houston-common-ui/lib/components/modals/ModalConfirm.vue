@@ -38,7 +38,6 @@ class Confirmation {
 }
 
 const confirmationStack = ref<Confirmation[]>([]);
-// watchEffect(() => console.log(confirmationStack.value));
 
 const pushConfirmation = (c: Confirmation) => {
     confirmationStack.value = [c, ...confirmationStack.value];

@@ -16,6 +16,7 @@ export const parseFileSystemType = (type: string): FilesystemType => {
 export type Filesystem = {
   source: string;
   type: FilesystemType;
+  realType: string;
 };
 
 export type FilesystemMount = {

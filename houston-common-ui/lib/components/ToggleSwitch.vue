@@ -8,6 +8,7 @@ const props = defineProps<{
    * Place switch label to the right
    */
   labelRight?: boolean;
+  disabled?: boolean;
 }>();
 
 const model = defineModel<boolean>({ default: false });
@@ -54,6 +55,7 @@ const showToolTip = ref(false);
     </span>
     <Switch
       v-model="model"
+      :disabled="disabled"
       :class="[model ? 'bg-45d' : 'bg-well', 'inline-flex shrink-0 h-6 w-11 p-[2px] rounded-full cursor-pointer shadow-inner transition-colors ease-in-out duration-200']"
     >
       <span

@@ -77,6 +77,8 @@ export class Ownership {
   }
 }
 
+export type ExtendedAttributes = Record<string, string>;
+
 export class Path {
   public readonly path: string;
 
@@ -239,7 +241,10 @@ export class Path {
           commandOptions
         )
       )
-      .map((proc) => proc.getStdout().trim().split(RegexSnippets.newlineSplitter)[1])
+      .map(
+        (proc) =>
+          proc.getStdout().trim().split(RegexSnippets.newlineSplitter)[1]
+      )
       .andThen((tokens) => {
         const [source, mountpoint, realType] = tokens?.split(/\s+/g) ?? [];
         if (
@@ -255,6 +260,7 @@ export class Path {
           filesystem: {
             source,
             type: parseFileSystemType(realType),
+            realType,
           },
           mountpoint,
         });
@@ -383,6 +389,26 @@ export class Path {
       )
       .map(() => this);
   }
+  // TODO
+  // getExtendedAttributesOn(
+  //   server: Server
+  // ): ResultAsync<ExtendedAttributes, ProcessError> {}
+
+  // setExtendedAttributesOn(
+  //   server: Server,
+  //   attributes: ExtendedAttributes
+  // ): ResultAsync<Path, ProcessError> {}
+
+  // getExtendedAttributeOn(
+  //   server: Server,
+  //   attributeName: string
+  // ): ResultAsync<string | null, ProcessError> {}
+
+  // setExtendedAttributeOn(
+  //   server: Server,
+  //   attributeName: string,
+  //   attributeValue: string
+  // ): ResultAsync<Path, ProcessError> {}
 }
 
 export class FileSystemNode extends Path {
@@ -470,12 +496,6 @@ export class FileSystemNode extends Path {
     );
   }
 
-  remove(commandOptions?: CommandOptions): ResultAsync<null, ProcessError> {
-    return this.server
-      .execute(new Command(["rm", this.path], commandOptions), true)
-      .map(() => null);
-  }
-
   getMode(
     commandOptions?: CommandOptions
   ): ResultAsync<Mode, ProcessError | ParsingError> {
@@ -501,6 +521,39 @@ export class FileSystemNode extends Path {
   ): ResultAsync<this, ProcessError> {
     return this.setOwnershipOn(this.server, ownership, commandOptions);
   }
+
+  assertExists(
+    expected: boolean = true,
+    commandOptions?: CommandOptions | undefined
+  ): ResultAsync<this, ProcessError> {
+    return this.exists(commandOptions).andThen((exists) =>
+      exists === expected
+        ? ok(this)
+        : err(
+            new ProcessError(`assertExists(${expected}) failed: ${this.path}`)
+          )
+    );
+  }
+
+  assertIsFile(
+    commandOptions?: CommandOptions | undefined
+  ): ResultAsync<File, ProcessError> {
+    return this.isFile(commandOptions).andThen((isFile) =>
+      isFile
+        ? ok(new File(this))
+        : err(new ProcessError(`assertIsFile failed: ${this.path}`))
+    );
+  }
+
+  assertIsDirectory(
+    commandOptions?: CommandOptions | undefined
+  ): ResultAsync<Directory, ProcessError> {
+    return this.isDirectory(commandOptions).andThen((isDirectory) =>
+      isDirectory
+        ? ok(new Directory(this))
+        : err(new ProcessError(`assertIsDirectory failed: ${this.path}`))
+    );
+  }
 }
 
 export class File extends FileSystemNode {
@@ -509,6 +562,12 @@ export class File extends FileSystemNode {
     commandOptions?: CommandOptions
   ): ResultAsync<File, ProcessError> {
     return this.createOn(this.server, "file", parents, commandOptions);
+  }
+
+  remove(commandOptions?: CommandOptions): ResultAsync<null, ProcessError> {
+    return this.server
+      .execute(new Command(["rm", this.path], commandOptions), true)
+      .map(() => null);
   }
 
   read(
@@ -558,6 +617,12 @@ export class Directory extends FileSystemNode {
     commandOptions?: CommandOptions
   ): ResultAsync<Directory, ProcessError> {
     return this.createOn(this.server, "directory", parents, commandOptions);
+  }
+
+  remove(commandOptions?: CommandOptions): ResultAsync<null, ProcessError> {
+    return this.server
+      .execute(new Command(["rmdir", this.path], commandOptions), true)
+      .map(() => null);
   }
 
   getChildren(

@@ -1,39 +1,11 @@
-<script lang="ts">
-import { provide, inject, type InjectionKey, ref, type Ref } from "vue";
-import { ModalConfirm, type ConfirmOptions } from '@/components/modals';
-import { okAsync, errAsync, ResultAsync } from 'neverthrow';
-import { type Action } from "@/composables/wrapActions";
-
-export type GlobalModalConfirmFunctions = {
-    confirm: (options: ConfirmOptions) => ResultAsync<boolean, Error>;
-    confirmBeforeAction: (
-        options: ConfirmOptions,
-        action: Action<any, any, any>
-    ) => typeof action;
-};
-
-const globalModalConfirmFuncs = ref<GlobalModalConfirmFunctions>();
-
-const getGlobalModalConfirmFuncs = () => {
-    if (globalModalConfirmFuncs.value === undefined) {
-        throw new Error("Global ModalConfirm methods not provided!");
-    }
-    return globalModalConfirmFuncs.value;
-};
-
-export const confirm = (...args: Parameters<GlobalModalConfirmFunctions["confirm"]>): ReturnType<GlobalModalConfirmFunctions["confirm"]> =>
-    getGlobalModalConfirmFuncs().confirm(...args);
-export const confirmBeforeAction = (...args: Parameters<GlobalModalConfirmFunctions["confirmBeforeAction"]>): ReturnType<GlobalModalConfirmFunctions["confirmBeforeAction"]> =>
-    getGlobalModalConfirmFuncs().confirmBeforeAction(...args);
-
-</script>
-
 <script setup lang="ts">
-import { defineComponent, defineProps, onMounted, watchEffect, type Component, type PropType } from "vue";
+import { ref, defineProps, watchEffect } from "vue";
 import HoustonHeader from "@/components/HoustonHeader.vue";
 import { defineHoustonAppTabState, type HoustonAppTabEntrySpec, TabSelector, TabView } from '@/components/tabs';
 import NotificationView from "@/components/NotificationView.vue";
 import { useGlobalProcessingState } from '@/composables/useGlobalProcessingState';
+import { ModalConfirm } from '@/components/modals';
+import { _internal } from '@/composables/globalModalConfirm';
 
 const props = defineProps<{
     moduleName: string,
@@ -48,7 +20,7 @@ const globalModalConfirm = ref<InstanceType<typeof ModalConfirm> | null>(null);
 
 watchEffect(() => {
     if (globalModalConfirm.value !== null) {
-        globalModalConfirmFuncs.value = globalModalConfirm.value;
+        _internal.provideGlobalModalFuncs(globalModalConfirm.value);
     }
 });
 

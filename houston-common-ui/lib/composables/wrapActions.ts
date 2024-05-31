@@ -1,10 +1,36 @@
 import { ResultAsync } from "neverthrow";
 import { globalProcessingWrapResult } from "@/composables/useGlobalProcessingState";
 import { reportError } from "@/components/NotificationView.vue";
+import { ref, reactive, type Ref, watchEffect } from "vue";
 
 export type Action<TParams extends Array<any>, TOk, TErr extends Error> = (
   ..._: TParams
 ) => ResultAsync<TOk, TErr>;
+
+export type WrappedAction<
+  TParams extends Array<any>,
+  TOk,
+  TErr extends Error,
+> = Action<TParams, TOk, TErr> & {
+  /**
+   * Tracks whether the action is executing
+   */
+  processing: Ref<boolean>;
+};
+
+export type WrappedActions<
+  Actions extends {
+    [action: string]: Action<any, any, any>;
+  },
+> = {
+  [Prop in keyof Actions]: Actions[Prop] extends Action<
+    infer TParams,
+    infer TOk,
+    infer TErr
+  >
+    ? WrappedAction<TParams, TOk, TErr>
+    : never;
+};
 
 /**
  * Make an action affect global processing state (loading spinners) and report errors as notifications
@@ -13,10 +39,22 @@ export type Action<TParams extends Array<any>, TOk, TErr extends Error> = (
  */
 export function wrapAction<TParams extends Array<any>, TOk, TErr extends Error>(
   action: Action<TParams, TOk, TErr>
-) {
-  const wrappedAction = (...params: TParams) =>
-    globalProcessingWrapResult(action)(...params).mapErr((e) => { e.message = `Error in ${action.name}: ${e.message}`; return reportError(e) });
-  Object.defineProperty(wrappedAction, 'name', {
+): WrappedAction<TParams, TOk, TErr> {
+  const wrappedAction = (...params: TParams) => {
+    wrappedAction.processing.value = true;
+    return globalProcessingWrapResult(action)(...params)
+      .map((r: TOk) => {
+        wrappedAction.processing.value = false;
+        return r;
+      })
+      .mapErr((e) => {
+        wrappedAction.processing.value = false;
+        e.message = `Error in ${action.name}: ${e.message}`;
+        return reportError(e);
+      });
+  };
+  wrappedAction.processing = ref(false);
+  Object.defineProperty(wrappedAction, "name", {
     value: `${action.name} (wrapped)`,
     writable: false,
   });
@@ -36,12 +74,12 @@ export function wrapAction<TParams extends Array<any>, TOk, TErr extends Error>(
  * import { getServer } from "@45drives/houston-common-lib";
  * import { wrapActions } from "@45drives/houston-common-ui";
  * import { ref, onMounted } from "vue";
- * 
+ *
  * const settings = ref<Settings>();
- * 
+ *
  * const loadSettings = () =>
  *    getServer().andThen(loadSettingsFromServer).map(s => settings.value = s);
- * 
+ *
  * const updateSettings = (settings) =>
  *    getServer()
  *      .andThen(server => updateSettingsOnServer(server, settings))
@@ -57,7 +95,7 @@ export function wrapAction<TParams extends Array<any>, TOk, TErr extends Error>(
  * // call actions.loadSettings() and actions.updateSettings(settings) when you want user feedback
  * // plain non-wrapped loadSettings() and updateSettings(settings) still available to call from other actions
  * </script>
- * 
+ *
  * <template>
  *  <button @click="actions.updateSettings(settings)">Apply</button>
  * </template>
@@ -75,4 +113,4 @@ export const wrapActions = <
       funcName,
       wrapAction(func),
     ])
-  ) as Actions;
+  ) as WrappedActions<Actions>;

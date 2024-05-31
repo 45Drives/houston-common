@@ -25,3 +25,20 @@ export class ValueError extends Error {
     this.name = "ValueError";
   }
 }
+
+/**
+ * Error that isn't reported in UI
+ */
+export class SilentError extends Error {
+  constructor(...args: ConstructorParameters<typeof Error>) {
+    super(...args);
+    this.name = "SilentError";
+  }
+}
+
+export class CancelledByUser extends SilentError {
+  constructor(...args: ConstructorParameters<typeof Error>) {
+    super(...args);
+    this.name = "CancelledByUser";
+  }
+}

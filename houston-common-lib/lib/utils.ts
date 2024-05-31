@@ -1,6 +1,15 @@
 import { KeyValueData } from "@/syntax";
 import { Maybe, None, Some } from "monet";
 
+export type ValueElseUndefiend<T> = T extends
+  | string
+  | number
+  | boolean
+  | symbol
+  | object
+  ? T
+  : undefined;
+
 export type MethodFunctor<T extends {}, R> = (v: T) => R;
 export function MethodFunctor<
   T extends { [P in TMethod]: (..._: any[]) => any },

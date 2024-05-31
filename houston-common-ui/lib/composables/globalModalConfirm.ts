@@ -2,6 +2,7 @@ import { type ConfirmOptions } from "@/components/modals";
 import { ResultAsync } from "neverthrow";
 import { type Action } from "@/composables/wrapActions";
 import { ref } from "vue";
+import { type ValueElseUndefiend } from "@45drives/houston-common-lib";
 
 export type GlobalModalConfirmFunctions = {
   confirm: (options: ConfirmOptions) => ResultAsync<boolean, never>;
@@ -9,10 +10,10 @@ export type GlobalModalConfirmFunctions = {
     options: ConfirmOptions,
     action: Action<any, any, any>
   ) => typeof action;
-  assertConfirm: (
+  assertConfirm: <T>(
     options: ConfirmOptions,
-    resultIfConfirmed?: unknown
-  ) => ResultAsync<typeof resultIfConfirmed, Error>;
+    resultIfConfirmed?: T
+  ) => ResultAsync<ValueElseUndefiend<T>, Error>;
 };
 
 const globalModalConfirmFuncs = ref<GlobalModalConfirmFunctions>();

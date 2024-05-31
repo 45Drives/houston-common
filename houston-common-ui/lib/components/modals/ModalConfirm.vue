@@ -20,6 +20,7 @@ import { type Action } from "@/composables/wrapActions";
 import CardContainer from "@/components/CardContainer.vue";
 import Modal from "./Modal.vue";
 import { ExclamationCircleIcon } from "@heroicons/vue/20/solid";
+import { CancelledByUser, type ValueElseUndefiend } from "@45drives/houston-common-lib";
 
 const _ = cockpit.gettext;
 
@@ -109,15 +110,6 @@ const confirmBeforeAction = (
   };
 };
 
-type ValueElseUndefiend<T> = T extends
-  | string
-  | number
-  | boolean
-  | symbol
-  | object
-  ? T
-  : undefined;
-
 const assertConfirm = <T,>(
   options: ConfirmOptions,
   resultIfConfirmed?: T
@@ -125,7 +117,7 @@ const assertConfirm = <T,>(
   return confirm(options).andThen((confirmed) =>
     confirmed
       ? okAsync(resultIfConfirmed as any)
-      : errAsync(new Error("Cancelled by user."))
+      : errAsync(new CancelledByUser(options.header))
   );
 };
 

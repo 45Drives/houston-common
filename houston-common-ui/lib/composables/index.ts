@@ -7,3 +7,4 @@ export {
   confirmBeforeAction,
   assertConfirm,
 } from "./globalModalConfirm";
+export * from "./computedResult";

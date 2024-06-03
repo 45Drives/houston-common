@@ -1,10 +1,3 @@
-<script lang="ts">
-import { type Feedback } from "@/components/InputFeedback.vue";
-export type InputValidator = (
-  value: string
-) => Feedback | undefined | PromiseLike<Feedback | undefined>;
-</script>
-
 <script setup lang="ts">
 import {
   defineProps,
@@ -18,20 +11,50 @@ import {
 } from "vue";
 import InputFeedback from "@/components/InputFeedback.vue";
 import { v4 as uuidv4 } from "uuid";
+import { type Feedback } from "@/components/InputFeedback.vue";
 
-const props = defineProps<{
-  placeholder?: string;
-  validator?: InputValidator;
-  disabled?: boolean;
-  suggestions?: string[];
-}>();
+export type InputValidator = (
+  value: string
+) => Feedback | undefined | PromiseLike<Feedback | undefined>;
 
-const model = defineModel<string>({ default: "" });
+const [model, modifiers] = defineModel<string>({ default: "" });
+
+const props = withDefaults(
+  defineProps<{
+    type?: HTMLInputElement["type"];
+    placeholder?: string;
+    validator?: InputValidator;
+    disabled?: boolean;
+    suggestions?: string[];
+  }>(),
+  {
+    type: "text",
+  }
+);
 
 const emit = defineEmits<{
   (e: "input", value: string): void;
   (e: "change", value: string): void;
 }>();
+
+const onInput = ({ target }: Event) => {
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  if (modifiers.lazy) {
+    return;
+  }
+  model.value = target.value;
+  emit("input", model.value);
+};
+
+const onChange = ({ target }: Event) => {
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  model.value = target.value;
+  emit("change", model.value);
+};
 
 const feedback = ref<Feedback>();
 const updateFeedback = async () =>
@@ -50,14 +73,14 @@ defineExpose({
 
 <template>
   <input
-    type="text"
+    :type="type"
     name="label"
     class="w-full input-textlike"
     :placeholder="placeholder"
     :disabled="disabled"
-    v-model="model"
-    @input="emit('input', model)"
-    @change="emit('change', model)"
+    :value="model"
+    @input="onInput"
+    @change="onChange"
     :list="suggestionListId"
     autocomplete="off"
   />

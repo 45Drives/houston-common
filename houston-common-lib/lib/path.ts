@@ -5,7 +5,8 @@ import { ResultAsync, okAsync, errAsync, safeTry, ok, err } from "neverthrow";
 import { User } from "@/user";
 import { Group } from "@/group";
 import { FilesystemMount, parseFileSystemType } from "@/filesystem";
-import { RegexSnippets } from "@/syntax";
+import { KeyValueData, KeyValueSyntax, RegexSnippets } from "@/syntax";
+import { Maybe, None, Some } from "monet";
 
 export class ModeOctet {
   r: boolean;
@@ -77,7 +78,7 @@ export class Ownership {
   }
 }
 
-export type ExtendedAttributes = Record<string, string>;
+export type ExtendedAttributes = KeyValueData;
 
 export class Path {
   public readonly path: string;
@@ -389,26 +390,100 @@ export class Path {
       )
       .map(() => this);
   }
-  // TODO
-  // getExtendedAttributesOn(
-  //   server: Server
-  // ): ResultAsync<ExtendedAttributes, ProcessError> {}
 
-  // setExtendedAttributesOn(
-  //   server: Server,
-  //   attributes: ExtendedAttributes
-  // ): ResultAsync<Path, ProcessError> {}
+  getExtendedAttributesOn(
+    server: Server,
+    commandOptions?: CommandOptions
+  ): ResultAsync<ExtendedAttributes, ProcessError> {
+    const kvParser = KeyValueSyntax({ duplicateKey: "error" });
+    return server
+      .execute(
+        new Command(
+          ["getfattr", "--dump", "--match=-", "--", this.path],
+          commandOptions
+        )
+      )
+      .map((proc) => proc.getStdout())
+      .andThen(kvParser.apply);
+  }
 
-  // getExtendedAttributeOn(
-  //   server: Server,
-  //   attributeName: string
-  // ): ResultAsync<string | null, ProcessError> {}
+  setExtendedAttributesOn(
+    server: Server,
+    attributes: ExtendedAttributes,
+    commandOptions?: CommandOptions
+  ): ResultAsync<this, ProcessError> {
+    return ResultAsync.combine(
+      Object.entries(attributes).map(([key, value]) =>
+        this.setExtendedAttributeOn(server, key, value, commandOptions)
+      )
+    ).map(() => this);
+  }
 
-  // setExtendedAttributeOn(
-  //   server: Server,
-  //   attributeName: string,
-  //   attributeValue: string
-  // ): ResultAsync<Path, ProcessError> {}
+  getExtendedAttributeOn(
+    server: Server,
+    attributeName: string,
+    commandOptions?: CommandOptions
+  ): ResultAsync<Maybe<string>, ProcessError> {
+    return server
+      .execute(
+        new Command(
+          [
+            "getfattr",
+            `--name=${attributeName}`,
+            "--only-values",
+            "--absolute-names",
+            "--",
+            this.path,
+          ],
+          commandOptions
+        ),
+        false
+      )
+      .andThen((proc) =>
+        proc.exitStatus === 0
+          ? ok(Some(proc.getStdout().trim()))
+          : proc.getStderr().trim().endsWith("No such attribute")
+            ? ok(None<string>())
+            : err(new ProcessError(proc.getStderr().trim()))
+      );
+  }
+
+  setExtendedAttributeOn(
+    server: Server,
+    attributeName: string,
+    attributeValue: string,
+    commandOptions?: CommandOptions
+  ): ResultAsync<this, ProcessError> {
+    return server
+      .execute(
+        new Command(
+          [
+            "setfattr",
+            `--name=${attributeName}`,
+            `--value=${attributeValue}`,
+            "--",
+            this.path,
+          ],
+          commandOptions
+        )
+      )
+      .map(() => this);
+  }
+
+  removeExtendedAttributeOn(
+    server: Server,
+    attributeName: string,
+    commandOptions?: CommandOptions
+  ): ResultAsync<this, ProcessError> {
+    return server
+      .execute(
+        new Command(
+          ["setfattr", `--remove=${attributeName}`, "--", this.path],
+          commandOptions
+        )
+      )
+      .map(() => this);
+  }
 }
 
 export class FileSystemNode extends Path {
@@ -552,6 +627,58 @@ export class FileSystemNode extends Path {
       isDirectory
         ? ok(new Directory(this))
         : err(new ProcessError(`assertIsDirectory failed: ${this.path}`))
+    );
+  }
+
+  getExtendedAttributes(
+    commandOptions?: CommandOptions
+  ): ResultAsync<ExtendedAttributes, ProcessError> {
+    return this.getExtendedAttributesOn(this.server, commandOptions);
+  }
+
+  setExtendedAttributes(
+    attributes: ExtendedAttributes,
+    commandOptions?: CommandOptions
+  ): ResultAsync<this, ProcessError> {
+    return this.setExtendedAttributesOn(
+      this.server,
+      attributes,
+      commandOptions
+    );
+  }
+
+  getExtendedAttribute(
+    attributeName: string,
+    commandOptions?: CommandOptions
+  ): ResultAsync<Maybe<string>, ProcessError> {
+    return this.getExtendedAttributeOn(
+      this.server,
+      attributeName,
+      commandOptions
+    );
+  }
+
+  setExtendedAttribute(
+    attributeName: string,
+    attributeValue: string,
+    commandOptions?: CommandOptions
+  ): ResultAsync<this, ProcessError> {
+    return this.setExtendedAttributeOn(
+      this.server,
+      attributeName,
+      attributeValue,
+      commandOptions
+    );
+  }
+
+  removeExtendedAttribute(
+    attributeName: string,
+    commandOptions?: CommandOptions
+  ): ResultAsync<this, ProcessError> {
+    return this.removeExtendedAttributeOn(
+      this.server,
+      attributeName,
+      commandOptions
     );
   }
 }

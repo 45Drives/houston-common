@@ -27,3 +27,4 @@ export * from '@/houston';
 export * from '@/syntax';
 export * from '@/utils';
 export * from '@/errors';
+export * from '@/download';

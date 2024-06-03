@@ -4,6 +4,7 @@ import { User, LocalUser, isLocalUser } from "@/user";
 import { Group, LocalGroup, isLocalGroup } from "@/group";
 import { Directory, File } from "@/path";
 import { ParsingError, ProcessError, ValueError } from "@/errors";
+import { Download } from "@/download";
 
 export class Server {
   public readonly host?: string;
@@ -65,45 +66,68 @@ export class Server {
     return this.spawnProcess(command).wait(failIfNonZero);
   }
 
+  downloadCommandOutput(command: Command, filename: string): void {
+    const query = window.btoa(
+      JSON.stringify({
+        ...command.spawnOptions,
+        host: this.host,
+        payload: "stream",
+        binary: "raw",
+        spawn: command.argv,
+        external: {
+          "content-disposition":
+            'attachment; filename="' + encodeURIComponent(filename) + '"',
+          "content-type": "application/x-xz, application/octet-stream",
+        },
+      })
+    );
+    const prefix = new URL(
+      cockpit.transport.uri("channel/" + cockpit.transport.csrf_token)
+    ).pathname;
+    const url = prefix + "?" + query;
+    Download.url(url, filename);
+  }
+
   getLocalUsers(cache: boolean = true): ResultAsync<LocalUser[], ProcessError> {
     if (this.localUsers === undefined || cache === false) {
-      return this.execute(new Command(["getent", "-s", "files", "passwd"]), true).map(
-        (proc) => {
-          this.localUsers = proc
-            .getStdout()
-            .split("\n")
-            .map((line) => {
-              const [login, _, uidStr, gidStr, name, home, shell] =
-                line.split(":");
-              if (
-                login === undefined ||
-                uidStr === undefined ||
-                gidStr === undefined ||
-                name === undefined ||
-                home === undefined ||
-                shell === undefined
-              ) {
-                return null;
-              }
-              const uid = parseInt(uidStr);
-              const gid = parseInt(gidStr);
-              if (isNaN(uid) || isNaN(gid)) {
-                return null;
-              }
-              return User(
-                this,
-                login,
-                uid,
-                gid,
-                name,
-                new Directory(this, home),
-                new File(this, shell)
-              );
-            })
-            .filter((user): user is LocalUser => user !== null);
-          return this.localUsers;
-        }
-      );
+      return this.execute(
+        new Command(["getent", "-s", "files", "passwd"]),
+        true
+      ).map((proc) => {
+        this.localUsers = proc
+          .getStdout()
+          .split("\n")
+          .map((line) => {
+            const [login, _, uidStr, gidStr, name, home, shell] =
+              line.split(":");
+            if (
+              login === undefined ||
+              uidStr === undefined ||
+              gidStr === undefined ||
+              name === undefined ||
+              home === undefined ||
+              shell === undefined
+            ) {
+              return null;
+            }
+            const uid = parseInt(uidStr);
+            const gid = parseInt(gidStr);
+            if (isNaN(uid) || isNaN(gid)) {
+              return null;
+            }
+            return User(
+              this,
+              login,
+              uid,
+              gid,
+              name,
+              new Directory(this, home),
+              new File(this, shell)
+            );
+          })
+          .filter((user): user is LocalUser => user !== null);
+        return this.localUsers;
+      });
     }
     return okAsync(this.localUsers);
   }
@@ -112,30 +136,31 @@ export class Server {
     cache: boolean = true
   ): ResultAsync<LocalGroup[], ProcessError> {
     if (this.localGroups === undefined || cache === false) {
-      return this.execute(new Command(["getent", "-s", "files", "group"]), true).map(
-        (proc) => {
-          this.localGroups = proc
-            .getStdout()
-            .split("\n")
-            .map((line) => {
-              const [name, _, gidStr, membersStr] = line.split(":");
-              if (
-                name === undefined ||
-                gidStr === undefined ||
-                membersStr === undefined
-              ) {
-                return null;
-              }
-              const gid = parseInt(gidStr);
-              if (isNaN(gid)) {
-                return null;
-              }
-              return Group(this, name, gid, membersStr.split(","));
-            })
-            .filter((group): group is LocalGroup => group !== null);
-          return this.localGroups;
-        }
-      );
+      return this.execute(
+        new Command(["getent", "-s", "files", "group"]),
+        true
+      ).map((proc) => {
+        this.localGroups = proc
+          .getStdout()
+          .split("\n")
+          .map((line) => {
+            const [name, _, gidStr, membersStr] = line.split(":");
+            if (
+              name === undefined ||
+              gidStr === undefined ||
+              membersStr === undefined
+            ) {
+              return null;
+            }
+            const gid = parseInt(gidStr);
+            if (isNaN(gid)) {
+              return null;
+            }
+            return Group(this, name, gid, membersStr.split(","));
+          })
+          .filter((group): group is LocalGroup => group !== null);
+        return this.localGroups;
+      });
     }
     return okAsync(this.localGroups);
   }
@@ -177,7 +202,9 @@ export class Server {
     );
   }
 
-  getUserByLogin(login: string): ResultAsync<LocalUser, ProcessError | ValueError> {
+  getUserByLogin(
+    login: string
+  ): ResultAsync<LocalUser, ProcessError | ValueError> {
     return this.getLocalUsers()
       .map((localUsers) => localUsers.filter((user) => user.login === login))
       .andThen((userMatches) =>

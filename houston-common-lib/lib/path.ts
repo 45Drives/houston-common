@@ -580,8 +580,20 @@ export class FileSystemNode extends Path {
   setMode(
     mode: Mode | number,
     commandOptions?: CommandOptions
+  ): ResultAsync<this, ProcessError>;
+  setMode(
+    reference: FileSystemNode,
+    commandOptions?: CommandOptions
+  ): ResultAsync<this, ProcessError>;
+  setMode(
+    mode: Mode | number | FileSystemNode,
+    commandOptions?: CommandOptions
   ): ResultAsync<this, ProcessError> {
-    return this.setModeOn(this.server, mode, commandOptions);
+    return (
+      mode instanceof FileSystemNode
+        ? mode.getMode(commandOptions)
+        : okAsync<Mode | number, ProcessError>(mode)
+    ).andThen((mode) => this.setModeOn(this.server, mode, commandOptions));
   }
 
   getOwnership(
@@ -593,8 +605,22 @@ export class FileSystemNode extends Path {
   setOwnership(
     ownership: Ownership,
     commandOptions?: CommandOptions | undefined
+  ): ResultAsync<this, ProcessError>;
+  setOwnership(
+    reference: FileSystemNode,
+    commandOptions?: CommandOptions | undefined
+  ): ResultAsync<this, ProcessError>;
+  setOwnership(
+    ownership: Ownership | FileSystemNode,
+    commandOptions?: CommandOptions | undefined
   ): ResultAsync<this, ProcessError> {
-    return this.setOwnershipOn(this.server, ownership, commandOptions);
+    return (
+      ownership instanceof FileSystemNode
+        ? ownership.getOwnership(commandOptions)
+        : okAsync(ownership)
+    ).andThen((ownership) =>
+      this.setOwnershipOn(this.server, ownership, commandOptions)
+    );
   }
 
   assertExists(
@@ -681,6 +707,38 @@ export class FileSystemNode extends Path {
       commandOptions
     );
   }
+
+  move(
+    newPath: string,
+    commandOptions: CommandOptions & {
+      existing?: "fail" | "clobber" | "backup";
+    } = {}
+  ): ResultAsync<FileSystemNode, ProcessError> {
+    const { existing, ...options }: typeof commandOptions = {
+      existing: "fail",
+      ...commandOptions,
+    };
+    const existingFlagsLUT: Record<typeof existing, string[]> = {
+      fail: ["--no-clobber"],
+      clobber: ["--force"],
+      backup: ["--backup=numbered"],
+    };
+    return this.server
+      .execute(
+        new Command(
+          [
+            "mv",
+            ...existingFlagsLUT[existing],
+            "--no-target-directory",
+            "--",
+            this.path,
+            newPath,
+          ],
+          options
+        )
+      )
+      .map(() => new FileSystemNode(this.server, newPath));
+  }
 }
 
 export class File extends FileSystemNode {
@@ -691,26 +749,24 @@ export class File extends FileSystemNode {
     return this.createOn(this.server, "file", parents, commandOptions);
   }
 
-  remove(commandOptions?: CommandOptions): ResultAsync<null, ProcessError> {
+  remove(commandOptions?: CommandOptions): ResultAsync<this, ProcessError> {
     return this.server
       .execute(new Command(["rm", this.path], commandOptions), true)
-      .map(() => null);
+      .map(() => this);
   }
 
   read(
-    binary?: false,
-    commandOptions?: CommandOptions
+    commandOptions?: CommandOptions & { binary?: false }
   ): ResultAsync<string, ProcessError>;
   read(
-    binary: true,
-    commandOptions?: CommandOptions
+    commandOptions: CommandOptions & { binary: true }
   ): ResultAsync<Uint8Array, ProcessError>;
   read(
-    binary: boolean = false,
-    commandOptions?: CommandOptions
+    commandOptions: CommandOptions & { binary?: boolean } = {}
   ): ResultAsync<string, ProcessError> | ResultAsync<Uint8Array, ProcessError> {
+    const { binary, ...options } = commandOptions;
     const procResult = this.server.execute(
-      new Command(["cat", this.path], commandOptions)
+      new Command(["cat", this.path], options)
     );
     if (binary) {
       return procResult.map((p) => p.getStdout(true));
@@ -720,9 +776,9 @@ export class File extends FileSystemNode {
 
   write(
     content: string | Uint8Array,
-    append: boolean = false,
-    commandOptions?: CommandOptions
-  ): ResultAsync<null, ProcessError> {
+    commandOptions: CommandOptions & { append?: boolean } = {}
+  ): ResultAsync<this, ProcessError> {
+    const { append, ...options } = commandOptions;
     const proc = this.server.spawnProcess(
       new Command(
         [
@@ -730,11 +786,85 @@ export class File extends FileSystemNode {
           `of=${this.path}`,
           ...(append ? ["oflag=append", "conv=notrunc"] : []),
         ],
-        commandOptions
+        options
       )
     );
     proc.write(content, false);
-    return proc.wait(true).map(() => null);
+    return proc.wait(true).map(() => this);
+  }
+
+  move(
+    ...args: Parameters<FileSystemNode["move"]>
+  ): ResultAsync<File, ProcessError> {
+    return super.move(...args).map((node) => new File(node));
+  }
+
+  replace(
+    newContent: string | Uint8Array,
+    commandOptions?: CommandOptions & { backup?: boolean }
+  ): ResultAsync<this, ProcessError>;
+  replace(
+    replacer: (oldContent: string) => string,
+    commandOptions?: CommandOptions & { binary?: false; backup?: boolean }
+  ): ResultAsync<this, ProcessError>;
+  replace(
+    replacer: (oldContent: Uint8Array) => Uint8Array,
+    commandOptions: CommandOptions & { binary: true; backup?: boolean }
+  ): ResultAsync<this, ProcessError>;
+  replace(
+    newContentOrReplacer:
+      | string
+      | Uint8Array
+      | ((oldContent: string) => string)
+      | ((oldContent: Uint8Array) => Uint8Array),
+    commandOptions: CommandOptions & { binary?: boolean; backup?: boolean } = {}
+  ): ResultAsync<this, ProcessError> {
+    const { binary, backup, ...options } = commandOptions;
+    return File.makeTemp(this.server, this.parent().path, options)
+      .andThen((tempFile) => {
+        if (typeof newContentOrReplacer === "function") {
+          if (binary) {
+            return this.read({ ...options, binary: true })
+              .map(
+                newContentOrReplacer as (oldContent: Uint8Array) => Uint8Array
+              )
+              .andThen((newContent) => tempFile.write(newContent, options));
+          }
+          return this.read({ ...options, binary: false })
+            .map(newContentOrReplacer as (oldContent: string) => string)
+            .andThen((newContent) => tempFile.write(newContent, options));
+        }
+        return okAsync(newContentOrReplacer).andThen((newContent) =>
+          tempFile.write(newContent, options)
+        );
+      })
+      .andThen((tempFile) => tempFile.setOwnership(this, options))
+      .andThen((tempFile) => tempFile.setMode(this, options))
+      .andThen((tempFile) =>
+        tempFile.move(this.path, {
+          ...options,
+          existing: backup ? "backup" : "clobber",
+        })
+      )
+      .map(() => this);
+  }
+
+  static makeTemp(
+    server: Server,
+    directory?: string,
+    commandOptions?: CommandOptions
+  ): ResultAsync<File, ProcessError> {
+    return server
+      .execute(
+        new Command(
+          [
+            "mktemp",
+            ...(directory === undefined ? [] : [`--tmpdir=${directory}`]),
+          ],
+          commandOptions
+        )
+      )
+      .map((proc) => new File(server, proc.getStdout().trim()));
   }
 }
 
@@ -746,10 +876,10 @@ export class Directory extends FileSystemNode {
     return this.createOn(this.server, "directory", parents, commandOptions);
   }
 
-  remove(commandOptions?: CommandOptions): ResultAsync<null, ProcessError> {
+  remove(commandOptions?: CommandOptions): ResultAsync<this, ProcessError> {
     return this.server
       .execute(new Command(["rmdir", this.path], commandOptions), true)
-      .map(() => null);
+      .map(() => this);
   }
 
   getChildren(
@@ -790,5 +920,11 @@ export class Directory extends FileSystemNode {
           .slice(0, -1)
           .map((pathString) => new FileSystemNode(this.server, pathString))
       );
+  }
+
+  move(
+    ...args: Parameters<FileSystemNode["move"]>
+  ): ResultAsync<Directory, ProcessError> {
+    return super.move(...args).map((node) => new Directory(node));
   }
 }

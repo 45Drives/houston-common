@@ -16,6 +16,7 @@ declare module "cockpit" {
       };
       version: number;
     };
+    uri: (suffix?: string) => string;
   }
 
   export const transport: Transport;

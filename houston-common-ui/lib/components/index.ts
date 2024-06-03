@@ -23,6 +23,7 @@ export { default as InputLabelWrapper } from "./InputLabelWrapper.vue";
 export { default as UserSelector } from "./UserSelector.vue";
 export { default as GroupSelector } from "./GroupSelector.vue";
 export { default as ModeAndPermissionsEditor } from "./ModeAndPermissionsEditor.vue";
+export { default as FileUploadButton } from "./FileUploadButton.vue";
 
 export * from "./tabs";
 export * from "./modals";

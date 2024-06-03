@@ -6,6 +6,16 @@ import { watchEffect, ref, type Ref } from "vue";
  * returning computed ref and a manual update trigger function.
  * @param getter function that returns a result of T
  * @returns [reference: ComputedRef\<T | undefined\>, triggerUpdate: () => void]
+ * 
+ * @example
+ * const path = ref("/tmp");
+ * 
+ * const listDirectory = () =>
+ *  server.execute(new Command(["ls", path.value])).map((proc) => proc.getStdout().trim().split(RegexSnippets.newlineSplitter))
+ * 
+ * const [dirContents, refetchDirContents] = computedResult(listDirectory);
+ * // dirContents automatically refreshes whenever path changes, or when refetchDirContents() is called
+ * // dirContents.value is undefined until listDirectory() finishes
  */
 export function computedResult<T>(
   getter: () => Result<T, any> | ResultAsync<T, any>
@@ -16,6 +26,16 @@ export function computedResult<T>(
  * @param getter function that returns a result of T
  * @param defaultValue the default value before the Result is determined
  * @returns [reference: ComputedRef\<T\>, triggerUpdate: () => void]
+ * 
+ * @example
+ * const path = ref("/tmp");
+ * 
+ * const listDirectory = () =>
+ *  server.execute(new Command(["ls", path.value])).map((proc) => proc.getStdout().trim().split(RegexSnippets.newlineSplitter))
+ * 
+ * const [dirContents, refetchDirContents] = computedResult(listDirectory, []);
+ * // dirContents automatically refreshes whenever path changes, or when refetchDirContents() is called
+ * // dirContents.value defaults to [] until listDirectory() finishes
  */
 export function computedResult<T>(
   getter: () => Result<T, any> | ResultAsync<T, any>,

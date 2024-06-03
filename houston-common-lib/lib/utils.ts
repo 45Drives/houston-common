@@ -1,5 +1,6 @@
 import { KeyValueData } from "@/syntax";
 import { Maybe, None, Some } from "monet";
+import { Result } from "neverthrow";
 
 export type ValueElseUndefiend<T> = T extends
   | string
@@ -213,3 +214,9 @@ export function keyValueDiff(
     same,
   };
 }
+
+export const safeJsonParse = <T = any>(...args: Parameters<typeof JSON.parse>) =>
+  Result.fromThrowable(
+    (...args: Parameters<typeof JSON.parse>) => JSON.parse(...args) as Partial<T>,
+    (e) => (e instanceof SyntaxError ? e : new SyntaxError(`${e}`))
+  )(...args);

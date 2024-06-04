@@ -783,6 +783,7 @@ export class File extends FileSystemNode {
       new Command(
         [
           "dd",
+          "status=none",
           `of=${this.path}`,
           ...(append ? ["oflag=append", "conv=notrunc"] : []),
         ],

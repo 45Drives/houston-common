@@ -150,7 +150,10 @@ export function pushNotification(notif: Notification): Notification {
  * server.execute(new Command(["false"])).mapError(reportError);
  * ```
  */
-export function reportError<TErr extends Error>(e: TErr) {
+export function reportError<TErr extends Error | Error[]>(e: TErr): TErr {
+  if (Array.isArray(e)) {
+    return e.map((e) => reportError(e)) as TErr;
+  }
   console.error(e);
   if (!(e instanceof SilentError)) {
     pushNotification(new Notification(_(e.name), e.message, "error", 20_000));

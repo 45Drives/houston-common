@@ -21,6 +21,8 @@ const props = withDefaults(
   defineProps<{
     path: string;
     server?: ResultAsync<Server, ProcessError>;
+    includeSystemUsers?: boolean;
+    includeSystemGroups?: boolean;
   }>(),
   { server: () => getServer() }
 );
@@ -118,13 +120,21 @@ defineExpose({
         <template #label>
           {{ _("Owner") }}
         </template>
-        <UserSelector v-model="ownership.user" :server="server" />
+        <UserSelector
+          v-model="ownership.user"
+          :server="server"
+          :includeSystemUsers="includeSystemUsers"
+        />
       </InputLabelWrapper>
       <InputLabelWrapper>
         <template #label>
           {{ _("Group") }}
         </template>
-        <GroupSelector v-model="ownership.group" :server="server" />
+        <GroupSelector
+          v-model="ownership.group"
+          :server="server"
+          :includeSystemGroups="includeSystemGroups"
+        />
       </InputLabelWrapper>
     </template>
   </div>

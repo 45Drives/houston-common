@@ -2,6 +2,7 @@ import { Server } from "@/server";
 import type Cockpit from "cockpit";
 import { Result, ResultAsync, ok, err } from "neverthrow";
 import { ProcessError, NonZeroExit } from "@/errors";
+import { Maybe } from "monet";
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: false });
 const utf8Encoder = new TextEncoder();
@@ -53,6 +54,16 @@ export class ProcessBase {
   constructor(server: Server, command: Command) {
     this.server = server;
     this.command = command;
+  }
+
+  public prefixMessage(message: string): string {
+    const arg0Prefix = `${this.getName()}: `;
+    message = message.startsWith(arg0Prefix)
+      ? message.replace(arg0Prefix, "")
+      : message;
+    return Maybe.fromUndefined(this.server.host)
+      .fold("")((host) => `${host}: `)
+      .concat(arg0Prefix, message);
   }
 
   public getName(): string {
@@ -146,7 +157,9 @@ export class Process extends ProcessBase {
     return ResultAsync.fromPromise(
       new Promise((resolve, reject) => {
         if (this.spawnHandle === undefined) {
-          return reject(new ProcessError("Process never started!"));
+          return reject(
+            new ProcessError(this.prefixMessage("Process never started!"))
+          );
         }
         this.spawnHandle
           .then((stdout, stderr) => {
@@ -169,14 +182,14 @@ export class Process extends ProcessBase {
             ) {
               return reject(
                 new ProcessError(
-                  `${this.getName()}: ${ex.message} (${ex.problem})`
+                  this.prefixMessage(`${ex.message} (${ex.problem})`)
                 )
               );
             }
             if (failIfNonZero && ex.exit_status !== 0) {
               return reject(
                 new NonZeroExit(
-                  `${this.getName()}: ${ex.message} (${ex.exit_status})`
+                  this.prefixMessage(`${ex.message} (${ex.exit_status})`)
                 )
               );
             }
@@ -195,7 +208,9 @@ export class Process extends ProcessBase {
         if (e instanceof ProcessError) {
           return e;
         }
-        return new ProcessError("Unknown error", { cause: e });
+        return new ProcessError(this.prefixMessage("Unknown error"), {
+          cause: e,
+        });
       }
     );
   }
@@ -205,7 +220,7 @@ export class Process extends ProcessBase {
     stream: boolean = false
   ): Result<null, ProcessError> {
     if (this.spawnHandle === undefined) {
-      return err(new ProcessError("process not running!"));
+      return err(new ProcessError(this.prefixMessage("process not running!")));
     }
     if (typeof data === "string") {
       data = utf8Encoder.encode(data);

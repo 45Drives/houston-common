@@ -62,7 +62,9 @@ export function KeyValueSyntax(
               if (commentRegex.test(line) || line.trim() === "") {
                 return ok(null);
               }
-              const [key, value] = line.split(/=(.*)/).map((s) => s.trim());
+              const [key, value] = line
+                .split(RegexSnippets.keyValueSplitter)
+                .map((s) => s.trim());
               if (key === undefined || value === undefined || key === "") {
                 return err(
                   new ParsingError(

@@ -18,3 +18,8 @@ $(TARGETS): %/dist/index.js: $$(shell find '$$*' -type d \( -name node_modules -
 	@echo
 
 houston-common-ui/dist/index.js: houston-common-lib/dist/index.js
+
+test: FORCE
+	yarn --cwd houston-common-lib run test
+
+FORCE:

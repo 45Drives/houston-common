@@ -215,8 +215,11 @@ export function keyValueDiff(
   };
 }
 
-export const safeJsonParse = <T = any>(...args: Parameters<typeof JSON.parse>) =>
+export const safeJsonParse = <T = any>(
+  ...args: Parameters<typeof JSON.parse>
+) =>
   Result.fromThrowable(
-    (...args: Parameters<typeof JSON.parse>) => JSON.parse(...args) as Partial<T>,
+    (...args: Parameters<typeof JSON.parse>) =>
+      JSON.parse(...args) as Partial<T>,
     (e) => (e instanceof SyntaxError ? e : new SyntaxError(`${e}`))
   )(...args);

@@ -103,7 +103,7 @@ watchEffect(() => {
                 </div>
 
                 <template #footer>
-                  <div class="button-group-row items-end">
+                  <div class="button-group-row justify-end">
                     <button @click="setShow(false)" class="btn btn-primary">
                       Close
                     </button>

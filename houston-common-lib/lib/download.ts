@@ -4,6 +4,7 @@ export namespace Download {
     a.href = url;
     a.style.display = "none";
     a.download = filename;
+    a.target = "_blank";
     document.body.appendChild(a);
     const event = new MouseEvent("click", {
       view: window,
@@ -18,6 +19,11 @@ export namespace Download {
     const object = new File(content, filename, {
       type: "application/octet-stream",
     });
-    Download.url(URL.createObjectURL(object), filename);
+    const url = URL.createObjectURL(object);
+    if (Object.hasOwnProperty.call(window, "chrome")) { // chromium based
+      Download.url(url, filename);
+    } else {
+      window.open(url, "filename")?.focus(); // non-chromium based
+    }
   }
 }

@@ -2,12 +2,7 @@ import { KeyValueData } from "@/syntax";
 import { Maybe, None, Some } from "monet";
 import { Result } from "neverthrow";
 
-export type ValueElseUndefiend<T> = T extends
-  | string
-  | number
-  | boolean
-  | symbol
-  | object
+export type ValueElseUndefiend<T> = T extends string | number | boolean | symbol | object
   ? T
   : undefined;
 
@@ -26,9 +21,9 @@ export function MethodFunctor<
 
 export const IdentityFunctor = <T>(o: T): T => o;
 
-export function Unwrapper<
-  Container extends { unwrap: () => any } | { some: () => any },
->(exceptionFactory: (e?: any) => Error = (e) => e) {
+export function Unwrapper<Container extends { unwrap: () => any } | { some: () => any }>(
+  exceptionFactory: (e?: any) => Error = (e) => e
+) {
   return (c: Container) => {
     try {
       return "unwrap" in c ? c.unwrap() : c.some();
@@ -68,23 +63,14 @@ export function StringToBooleanCaster(
     ignoreCase ? MethodFunctor(String, "toLowerCase") : IdentityFunctor
   );
   const caster = (text: string) =>
-    Maybe.fromNull(
-      truthyWords.includes(text)
-        ? true
-        : falsyWords.includes(text)
-          ? false
-          : null
-    );
+    Maybe.fromNull(truthyWords.includes(text) ? true : falsyWords.includes(text) ? false : null);
   if (ignoreCase) {
     return (text: string) => caster(text.toLowerCase());
   }
   return caster;
 }
 
-export function BooleanToStringCaster<
-  TruthyWord extends string,
-  FalsyWord extends string,
->(
+export function BooleanToStringCaster<TruthyWord extends string, FalsyWord extends string>(
   truthyWord: TruthyWord,
   falsyWord: FalsyWord
 ): Caster<boolean, TruthyWord | FalsyWord> {
@@ -121,15 +107,13 @@ export function KVMapper<
   caster: Caster<InValue, OutValue>
 ): KVMapper<InKeys[number], InValue, OutKey, OutValue> {
   return ([inKey, inValue]) =>
-    inKeys.includes(inKey)
-      ? caster(inValue).map((outValue) => [outKey, outValue])
-      : None();
+    inKeys.includes(inKey) ? caster(inValue).map((outValue) => [outKey, outValue]) : None();
 }
 
-export type KVGrabber<
-  InKey extends string | number | symbol,
-  InValue extends {} | null,
-> = ([key, value]: [InKey, InValue]) => boolean;
+export type KVGrabber<InKey extends string | number | symbol, InValue extends {} | null> = ([
+  key,
+  value,
+]: [InKey, InValue]) => boolean;
 
 export function KVGrabber<
   InKeys extends [string | number | symbol, ...(string | number | symbol)[]],
@@ -183,10 +167,7 @@ export type KeyValueDiff = {
   same: KeyValueData;
 };
 
-export function keyValueDiff(
-  originalObj: KeyValueData,
-  modifiedObj: KeyValueData
-) {
+export function keyValueDiff(originalObj: KeyValueData, modifiedObj: KeyValueData) {
   const added: KeyValueData = {};
   const removed: KeyValueData = {};
   const changed: KeyValueData = {};
@@ -215,11 +196,8 @@ export function keyValueDiff(
   };
 }
 
-export const safeJsonParse = <T = any>(
-  ...args: Parameters<typeof JSON.parse>
-) =>
+export const safeJsonParse = <T = any>(...args: Parameters<typeof JSON.parse>) =>
   Result.fromThrowable(
-    (...args: Parameters<typeof JSON.parse>) =>
-      JSON.parse(...args) as Partial<T>,
+    (...args: Parameters<typeof JSON.parse>) => JSON.parse(...args) as Partial<T>,
     (e) => (e instanceof SyntaxError ? e : new SyntaxError(`${e}`))
   )(...args);

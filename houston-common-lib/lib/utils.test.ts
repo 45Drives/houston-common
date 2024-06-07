@@ -36,22 +36,15 @@ suite("utils", () => {
     });
     test("Mapping functor", () => {
       const testStrings = ["HeLlO, WoRlD!", "lorem ipsum", "LOREM IPSUM"];
-      expect(testStrings.map(toLowerCase)).toEqual(
-        testStrings.map((s) => s.toLowerCase())
-      );
-      expect(testStrings.map(toUpperCase)).toEqual(
-        testStrings.map((s) => s.toUpperCase())
-      );
+      expect(testStrings.map(toLowerCase)).toEqual(testStrings.map((s) => s.toLowerCase()));
+      expect(testStrings.map(toUpperCase)).toEqual(testStrings.map((s) => s.toUpperCase()));
     });
     test("with bound args", () => {
       const testStrings = ["HeLlO, WoRlD!", "lorem ipsum", "LOREM IPSUM"];
       const firstChar = MethodFunctor(String, "charAt", 0);
-      const slicer = (start: number, end: number) =>
-        MethodFunctor(String, "slice", start, end);
+      const slicer = (start: number, end: number) => MethodFunctor(String, "slice", start, end);
       expect(testStrings.map(firstChar)).toEqual(testStrings.map((s) => s[0]));
-      expect(testStrings.map(slicer(1, 3))).toEqual(
-        testStrings.map((s) => s.slice(1, 3))
-      );
+      expect(testStrings.map(slicer(1, 3))).toEqual(testStrings.map((s) => s.slice(1, 3)));
     });
   });
   suite("Caster", () => {
@@ -60,55 +53,23 @@ suite("utils", () => {
       const trueValues = ["true", "yes", "1"];
       const falseValues = ["false", "no", "0"];
       const invalidValues = ["hello", "world", ":3"];
-      const trueValuesUpper = trueValues.map(
-        MethodFunctor(String, "toUpperCase")
-      );
-      const falseValuesUpper = falseValues.map(
-        MethodFunctor(String, "toUpperCase")
-      );
-      expect(trueValues.map(caster)).toEqual([
-        Some(true),
-        Some(true),
-        Some(true),
-      ]);
-      expect(falseValues.map(caster)).toEqual([
-        Some(false),
-        Some(false),
-        Some(false),
-      ]);
+      const trueValuesUpper = trueValues.map(MethodFunctor(String, "toUpperCase"));
+      const falseValuesUpper = falseValues.map(MethodFunctor(String, "toUpperCase"));
+      expect(trueValues.map(caster)).toEqual([Some(true), Some(true), Some(true)]);
+      expect(falseValues.map(caster)).toEqual([Some(false), Some(false), Some(false)]);
       expect(invalidValues.map(caster)).toEqual([None(), None(), None()]);
-      expect(trueValuesUpper.map(caster)).toEqual([
-        Some(true),
-        Some(true),
-        Some(true),
-      ]);
-      expect(falseValuesUpper.map(caster)).toEqual([
-        Some(false),
-        Some(false),
-        Some(false),
-      ]);
+      expect(trueValuesUpper.map(caster)).toEqual([Some(true), Some(true), Some(true)]);
+      expect(falseValuesUpper.map(caster)).toEqual([Some(false), Some(false), Some(false)]);
     });
     test("case sensitive StringToBooleanCaster", () => {
       const caster = StringToBooleanCaster({ ignoreCase: false });
       const trueValues = ["true", "yes", "1"];
       const falseValues = ["false", "no", "0"];
       const invalidValues = ["hello", "world", ":3"];
-      const trueValuesUpper = trueValues.map(
-        MethodFunctor(String, "toUpperCase")
-      );
-      const falseValuesUpper = falseValues.map(
-        MethodFunctor(String, "toUpperCase")
-      );
-      expect(trueValues.map(caster)).toEqual([
-        Some(true),
-        Some(true),
-        Some(true),
-      ]);
-      expect(falseValues.map(caster)).toEqual([
-        Some(false),
-        Some(false),
-        Some(false),
-      ]);
+      const trueValuesUpper = trueValues.map(MethodFunctor(String, "toUpperCase"));
+      const falseValuesUpper = falseValues.map(MethodFunctor(String, "toUpperCase"));
+      expect(trueValues.map(caster)).toEqual([Some(true), Some(true), Some(true)]);
+      expect(falseValues.map(caster)).toEqual([Some(false), Some(false), Some(false)]);
       expect(invalidValues.map(caster)).toEqual([None(), None(), None()]);
       expect(trueValuesUpper.map(caster)).toEqual([None(), None(), Some(true)]); // "1" is case insensitive
       expect(falseValuesUpper.map(caster)).toEqual([None(), None(), Some(false)]); // "0" is case insensitive
@@ -131,22 +92,10 @@ suite("utils", () => {
       const trueFalseCaster = BooleanToStringCaster("true", "false");
       const yesNoCaster = BooleanToStringCaster("yes", "no");
       const testPattern = [true, false, true];
-      expect(testPattern.map(trueFalseCaster)).toEqual([
-        Some("true"),
-        Some("false"),
-        Some("true"),
-      ]);
-      expect(testPattern.map(yesNoCaster)).toEqual([
-        Some("yes"),
-        Some("no"),
-        Some("yes"),
-      ]);
+      expect(testPattern.map(trueFalseCaster)).toEqual([Some("true"), Some("false"), Some("true")]);
+      expect(testPattern.map(yesNoCaster)).toEqual([Some("yes"), Some("no"), Some("yes")]);
       expect(
-        testPattern
-          .map(yesNoCaster)
-          .map(Unwrapper())
-          .map(StringToBooleanCaster())
-          .map(Unwrapper())
+        testPattern.map(yesNoCaster).map(Unwrapper()).map(StringToBooleanCaster()).map(Unwrapper())
       ).toEqual(testPattern);
     });
     test("StringToIntCaster", () => {
@@ -156,35 +105,13 @@ suite("utils", () => {
       const decCaster = StringToIntCaster(10);
       const hexCaster = StringToIntCaster(16);
       const octCaster = StringToIntCaster(8);
-      expect(input.map(anyCaster)).toEqual([
-        Some(0),
-        Some(1),
-        Some(10),
-        Some(100),
-      ]);
-      expect(input.map(decCaster)).toEqual([
-        Some(0),
-        Some(1),
-        Some(10),
-        Some(100),
-      ]);
-      expect(input.map(hexCaster)).toEqual([
-        Some(0),
-        Some(1),
-        Some(16),
-        Some(256),
-      ]);
-      expect(input.map(octCaster)).toEqual([
-        Some(0),
-        Some(1),
-        Some(8),
-        Some(64),
-      ]);
+      expect(input.map(anyCaster)).toEqual([Some(0), Some(1), Some(10), Some(100)]);
+      expect(input.map(decCaster)).toEqual([Some(0), Some(1), Some(10), Some(100)]);
+      expect(input.map(hexCaster)).toEqual([Some(0), Some(1), Some(16), Some(256)]);
+      expect(input.map(octCaster)).toEqual([Some(0), Some(1), Some(8), Some(64)]);
       [decCaster, hexCaster, octCaster].forEach((caster) => {
         const invalidInput = ["hello", "lorem ipsum", ";4lkjdf()"];
-        expect(invalidInput.map(caster)).toEqual(
-          Array(invalidInput.length).fill(None())
-        );
+        expect(invalidInput.map(caster)).toEqual(Array(invalidInput.length).fill(None()));
       });
       expect(inputHex.map(hexCaster)).toEqual(input.map(hexCaster));
       expect(inputHex.map(anyCaster)).toEqual(input.map(hexCaster));
@@ -195,24 +122,9 @@ suite("utils", () => {
       const decCaster = IntToStringCaster(10);
       const hexCaster = IntToStringCaster(16);
       const octCaster = IntToStringCaster(8);
-      expect(input.map(decCaster)).toEqual([
-        Some("0"),
-        Some("1"),
-        Some("10"),
-        Some("100"),
-      ]);
-      expect(input.map(hexCaster)).toEqual([
-        Some("0"),
-        Some("1"),
-        Some("a"),
-        Some("64"),
-      ]);
-      expect(input.map(octCaster)).toEqual([
-        Some("0"),
-        Some("1"),
-        Some("12"),
-        Some("144"),
-      ]);
+      expect(input.map(decCaster)).toEqual([Some("0"), Some("1"), Some("10"), Some("100")]);
+      expect(input.map(hexCaster)).toEqual([Some("0"), Some("1"), Some("a"), Some("64")]);
+      expect(input.map(octCaster)).toEqual([Some("0"), Some("1"), Some("12"), Some("144")]);
       expect(input.map(defaultCaster)).toEqual(input.map(decCaster));
       [defaultCaster, decCaster, hexCaster, octCaster].forEach((caster) => {
         expect(caster(NaN)).toEqual(None());
@@ -220,27 +132,15 @@ suite("utils", () => {
     });
     test("KVMapper", () => {
       const numMapper = KVMapper(["a number"], "aNumber", StringToIntCaster());
-      const boolMapper = KVMapper(
-        ["a boolean"],
-        "aBoolean",
-        StringToBooleanCaster()
-      );
+      const boolMapper = KVMapper(["a boolean"], "aBoolean", StringToBooleanCaster());
       expect(numMapper(["a number", "1234"])).toEqual(Some(["aNumber", 1234]));
       expect(numMapper(["anumber", "1234"])).toEqual(None());
       expect(numMapper(["a number", "asdv1234"])).toEqual(None());
-      expect(boolMapper(["a boolean", "yes"])).toEqual(
-        Some(["aBoolean", true])
-      );
-      expect(boolMapper(["a boolean", "true"])).toEqual(
-        Some(["aBoolean", true])
-      );
+      expect(boolMapper(["a boolean", "yes"])).toEqual(Some(["aBoolean", true]));
+      expect(boolMapper(["a boolean", "true"])).toEqual(Some(["aBoolean", true]));
       expect(boolMapper(["a boolean", "1"])).toEqual(Some(["aBoolean", true]));
-      expect(boolMapper(["a boolean", "no"])).toEqual(
-        Some(["aBoolean", false])
-      );
-      expect(boolMapper(["a boolean", "false"])).toEqual(
-        Some(["aBoolean", false])
-      );
+      expect(boolMapper(["a boolean", "no"])).toEqual(Some(["aBoolean", false]));
+      expect(boolMapper(["a boolean", "false"])).toEqual(Some(["aBoolean", false]));
       expect(boolMapper(["a boolean", "0"])).toEqual(Some(["aBoolean", false]));
       expect(boolMapper(["aboolean", "0"])).toEqual(None());
       expect(boolMapper(["a boolean", "lkjsdlfjksdf"])).toEqual(None());
@@ -257,24 +157,9 @@ suite("utils", () => {
       const output: Partial<Output> & Pick<Output, "adv"> = {
         adv: {},
       };
-      const numGrabber = KVGrabber(
-        output,
-        "aNumber",
-        ["a number"],
-        StringToIntCaster()
-      );
-      const boolGrabber = KVGrabber(
-        output,
-        "aBoolean",
-        ["a boolean"],
-        StringToBooleanCaster()
-      );
-      const stringGrabber = KVGrabber(
-        output,
-        "aString",
-        ["a string"],
-        IdentityCaster<string>()
-      );
+      const numGrabber = KVGrabber(output, "aNumber", ["a number"], StringToIntCaster());
+      const boolGrabber = KVGrabber(output, "aBoolean", ["a boolean"], StringToBooleanCaster());
+      const stringGrabber = KVGrabber(output, "aString", ["a string"], IdentityCaster<string>());
       const advGrabber = KVRemainderGrabber(output, "adv");
       expect(
         [numGrabber, boolGrabber, stringGrabber].map((grabber) =>
@@ -293,9 +178,7 @@ suite("utils", () => {
         adv: {},
       });
       expect(advGrabber(["advKey1", "some advanced value"])).toEqual(true);
-      expect(advGrabber(["advKey2", "some other advanced value"])).toEqual(
-        true
-      );
+      expect(advGrabber(["advKey2", "some other advanced value"])).toEqual(true);
       expect(output).toEqual({
         aNumber: 1234,
         aBoolean: true,
@@ -360,9 +243,7 @@ suite("utils", () => {
         "ignore"
       );
       Object.entries(input).forEach(([key, value]) => {
-        expect(
-          [overwriteGrabber, ignoreGrabber].every((g) => g([key, value]))
-        ).toEqual(true);
+        expect([overwriteGrabber, ignoreGrabber].every((g) => g([key, value]))).toEqual(true);
       });
       expect(overwriteOutput).toEqual({ aNumber: 2 });
       expect(ignoreOutput).toEqual({ aNumber: 0 });

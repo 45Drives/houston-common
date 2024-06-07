@@ -3,9 +3,10 @@ import { ParsingError } from "@/errors";
 import { Result, ok, err } from "neverthrow";
 import { RegexSnippets } from "./regex-snippets";
 
-export type KeyValueData<
-  TValue extends string | [string, ...string[]] = string,
-> = Record<string, TValue>;
+export type KeyValueData<TValue extends string | [string, ...string[]] = string> = Record<
+  string,
+  TValue
+>;
 
 export type KeyValueSyntaxOptions = {
   indent?: number | string;
@@ -36,9 +37,7 @@ export function KeyValueSyntax(
 
 export function KeyValueSyntax(
   opts: KeyValueSyntaxOptions = {}
-):
-  | SyntaxParser<KeyValueData<string>>
-  | SyntaxParser<KeyValueData<string | [string, ...string[]]>> {
+): SyntaxParser<KeyValueData<string>> | SyntaxParser<KeyValueData<string | [string, ...string[]]>> {
   let {
     indent = "",
     commentRegex = /^\s*[#;]/,
@@ -54,27 +53,18 @@ export function KeyValueSyntax(
         text
           // split lines
           .split(RegexSnippets.newlineSplitter)
-          .map(
-            (
-              line,
-              lineIndex
-            ): Result<{ key: string; value: string } | null, ParsingError> => {
-              if (commentRegex.test(line) || line.trim() === "") {
-                return ok(null);
-              }
-              const [key, value] = line
-                .split(RegexSnippets.keyValueSplitter)
-                .map((s) => s.trim());
-              if (key === undefined || value === undefined || key === "") {
-                return err(
-                  new ParsingError(
-                    `Invalid key = value format at line ${lineIndex}:\n${line}`
-                  )
-                );
-              }
-              return ok({ key, value });
+          .map((line, lineIndex): Result<{ key: string; value: string } | null, ParsingError> => {
+            if (commentRegex.test(line) || line.trim() === "") {
+              return ok(null);
             }
-          )
+            const [key, value] = line.split(RegexSnippets.keyValueSplitter).map((s) => s.trim());
+            if (key === undefined || value === undefined || key === "") {
+              return err(
+                new ParsingError(`Invalid key = value format at line ${lineIndex}:\n${line}`)
+              );
+            }
+            return ok({ key, value });
+          })
       ).andThen((keyValuePairs) => {
         const data =
           opts.duplicateKey === "append"
@@ -92,27 +82,18 @@ export function KeyValueSyntax(
             } else if (Array.isArray(currentValue)) {
               data[key] = [...currentValue, value];
             }
-          } else if (
-            currentValue === undefined ||
-            duplicateKey === "overwrite"
-          ) {
+          } else if (currentValue === undefined || duplicateKey === "overwrite") {
             data[key] = value;
           } else if (duplicateKey === "error") {
-            return err(
-              new ParsingError(`Duplicate key '${key}' at line ${index}`)
-            );
+            return err(new ParsingError(`Duplicate key '${key}' at line ${index}`));
           } // else ignore
         }
         return ok(data);
       }),
-    unapply: (
-      data: KeyValueData<string> | KeyValueData<string | [string, ...string[]]>
-    ) =>
+    unapply: (data: KeyValueData<string> | KeyValueData<string | [string, ...string[]]>) =>
       ok(
         Object.entries(data)
-          .map(([key, values]) =>
-            [values].flat().map((value) => `${indent}${key} = ${value}`)
-          )
+          .map(([key, values]) => [values].flat().map((value) => `${indent}${key} = ${value}`))
           .flat()
           .join("\n") + (trailingNewline ? "\n" : "")
       ),

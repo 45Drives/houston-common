@@ -41,14 +41,10 @@ suite("KeyValueSyntax", () => {
       expect(kvSyntax.unapply(data)).toEqual(ok(cleanRaw));
     });
     test("apply(unapply(data)) == data", () => {
-      expect(
-        ok(data).andThen(kvSyntax.unapply).andThen(kvSyntax.apply)
-      ).toEqual(ok(data));
+      expect(ok(data).andThen(kvSyntax.unapply).andThen(kvSyntax.apply)).toEqual(ok(data));
     });
     test("unapply(apply(raw)) == cleanRaw", () => {
-      expect(ok(raw).andThen(kvSyntax.apply).andThen(kvSyntax.unapply)).toEqual(
-        ok(cleanRaw)
-      );
+      expect(ok(raw).andThen(kvSyntax.apply).andThen(kvSyntax.unapply)).toEqual(ok(cleanRaw));
     });
   }
   test("catches error", () => {
@@ -66,17 +62,13 @@ key = value3
       const kvSyntax = KeyValueSyntax({ duplicateKey: "overwrite" });
       const applyResult = kvSyntax.apply(input);
       expect(applyResult).toEqual(ok({ key: "value3" }));
-      expect(applyResult.andThen(kvSyntax.unapply)).toEqual(
-        ok("key = value3\n")
-      );
+      expect(applyResult.andThen(kvSyntax.unapply)).toEqual(ok("key = value3\n"));
     });
     test("ignore", () => {
       const kvSyntax = KeyValueSyntax({ duplicateKey: "ignore" });
       const applyResult = kvSyntax.apply(input);
       expect(applyResult).toEqual(ok({ key: "value1" }));
-      expect(applyResult.andThen(kvSyntax.unapply)).toEqual(
-        ok("key = value1\n")
-      );
+      expect(applyResult.andThen(kvSyntax.unapply)).toEqual(ok("key = value1\n"));
     });
     test("append", () => {
       const kvSyntax = KeyValueSyntax({ duplicateKey: "append" });

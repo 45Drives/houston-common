@@ -13,9 +13,7 @@ export * from "@/user";
 export * from "@/group";
 export * from "@/filesystem";
 
-export function getServer(
-  host: string = "localhost"
-): ResultAsync<Server, ProcessError> {
+export function getServer(host: string = "localhost"): ResultAsync<Server, ProcessError> {
   const server = new Server(host);
   return server.isAccessible().map(() => server);
 }
@@ -25,19 +23,17 @@ export namespace _internal {
     nodes: { name: string; addrs: { addr: string }[] }[];
   };
   export const pcsNodesParseAddrs = (commandOutput: string) =>
-    safeJsonParse<PcsClusterConfigOutput>(commandOutput).andThen(
-      (clusterConfig) => {
-        const addrs =
-          clusterConfig.nodes
-            ?.map((node) => node.addrs[0]?.addr)
-            .filter((addr): addr is string => addr !== undefined) ?? [];
-        if (addrs.length === 0) {
-          console.warn("pcs cluster config output:", clusterConfig);
-          return err(new ParsingError("no nodes found in output"));
-        }
-        return ok(addrs);
+    safeJsonParse<PcsClusterConfigOutput>(commandOutput).andThen((clusterConfig) => {
+      const addrs =
+        clusterConfig.nodes
+          ?.map((node) => node.addrs[0]?.addr)
+          .filter((addr): addr is string => addr !== undefined) ?? [];
+      if (addrs.length === 0) {
+        console.warn("pcs cluster config output:", clusterConfig);
+        return err(new ParsingError("no nodes found in output"));
       }
-    );
+      return ok(addrs);
+    });
 }
 
 export function getServerCluster(
@@ -53,25 +49,23 @@ export function getServerCluster(
         const ctdbNodesFile = new File(server, "/etc/ctdb/nodes");
         return ctdbNodesFile.exists().andThen((ctdbNodesFileExists) => {
           if (ctdbNodesFileExists) {
-            return ctdbNodesFile
-              .read({ superuser: "try" })
-              .andThen((nodesString) =>
-                ResultAsync.combine(
-                  nodesString
-                    .split(RegexSnippets.newlineSplitter)
-                    .map((n) => n.trim())
-                    .filter((n) => n)
-                    .map((node) => getServer(node))
-                ).map((servers) => {
-                  if (servers.length < 1) {
-                    console.warn(
-                      "getServerCluster('ctdb'): Found /etc/ctdb/nodes file, but contained no hosts. Assuming single-server."
-                    );
-                    return [server] as [Server, ...Server[]];
-                  }
-                  return servers as [Server, ...Server[]];
-                })
-              );
+            return ctdbNodesFile.read({ superuser: "try" }).andThen((nodesString) =>
+              ResultAsync.combine(
+                nodesString
+                  .split(RegexSnippets.newlineSplitter)
+                  .map((n) => n.trim())
+                  .filter((n) => n)
+                  .map((node) => getServer(node))
+              ).map((servers) => {
+                if (servers.length < 1) {
+                  console.warn(
+                    "getServerCluster('ctdb'): Found /etc/ctdb/nodes file, but contained no hosts. Assuming single-server."
+                  );
+                  return [server] as [Server, ...Server[]];
+                }
+                return servers as [Server, ...Server[]];
+              })
+            );
           } else {
             console.warn(
               "getServerCluster('ctdb'): File not found: /etc/ctdb/nodes. Assuming single-server."
@@ -84,12 +78,9 @@ export function getServerCluster(
       return localServerResult.andThen((localServer) =>
         localServer
           .execute(
-            new Command(
-              ["pcs", "cluster", "config", "--output-format", "json"],
-              {
-                superuser: "try",
-              }
-            )
+            new Command(["pcs", "cluster", "config", "--output-format", "json"], {
+              superuser: "try",
+            })
           )
           .map((proc) => proc.getStdout())
           .andThen(_internal.pcsNodesParseAddrs)

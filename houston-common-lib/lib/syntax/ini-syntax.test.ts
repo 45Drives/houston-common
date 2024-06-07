@@ -122,14 +122,10 @@ suite("IniSyntax", () => {
       expect(iniSyntax.unapply(data)).toEqual(ok(cleanRaw));
     });
     test("apply(unapply(data)) == data", () => {
-      expect(
-        ok(data).andThen(iniSyntax.unapply).andThen(iniSyntax.apply)
-      ).toEqual(ok(data));
+      expect(ok(data).andThen(iniSyntax.unapply).andThen(iniSyntax.apply)).toEqual(ok(data));
     });
     test("unapply(apply(raw)) == cleanRaw", () => {
-      expect(
-        ok(raw).andThen(iniSyntax.apply).andThen(iniSyntax.unapply)
-      ).toEqual(ok(cleanRaw));
+      expect(ok(raw).andThen(iniSyntax.apply).andThen(iniSyntax.unapply)).toEqual(ok(cleanRaw));
     });
   }
   suite("duplicateKeys:", () => {
@@ -145,9 +141,7 @@ suite("IniSyntax", () => {
       });
       const applyResult = iniSyntax.apply(input);
       expect(applyResult).toEqual(ok({ section: { key: "value3" } }));
-      expect(applyResult.andThen(iniSyntax.unapply)).toEqual(
-        ok("[section]\n\tkey = value3\n")
-      );
+      expect(applyResult.andThen(iniSyntax.unapply)).toEqual(ok("[section]\n\tkey = value3\n"));
     });
     test("ignore", () => {
       const iniSyntax = IniSyntax({
@@ -156,9 +150,7 @@ suite("IniSyntax", () => {
       });
       const applyResult = iniSyntax.apply(input);
       expect(applyResult).toEqual(ok({ section: { key: "value1" } }));
-      expect(applyResult.andThen(iniSyntax.unapply)).toEqual(
-        ok("[section]\n\tkey = value1\n")
-      );
+      expect(applyResult.andThen(iniSyntax.unapply)).toEqual(ok("[section]\n\tkey = value1\n"));
     });
     test("append", () => {
       const iniSyntax = IniSyntax({
@@ -166,9 +158,7 @@ suite("IniSyntax", () => {
         duplicateKey: "append",
       });
       const applyResult = iniSyntax.apply(input);
-      expect(applyResult).toEqual(
-        ok({ section: { key: ["value1", "value2", "value3"] } })
-      );
+      expect(applyResult).toEqual(ok({ section: { key: ["value1", "value2", "value3"] } }));
       expect(applyResult.andThen(iniSyntax.unapply)).toEqual(ok(input));
     });
     test("error", () => {

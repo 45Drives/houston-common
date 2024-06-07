@@ -30,23 +30,14 @@ export class Server {
     return okAsync(this.hostname);
   }
 
-  getIpAddress(
-    cache: boolean = true
-  ): ResultAsync<string, ProcessError | ParsingError> {
+  getIpAddress(cache: boolean = true): ResultAsync<string, ProcessError | ParsingError> {
     if (this.ipAddress === undefined || cache === false) {
       const target = "1.1.1.1";
-      return this.execute(
-        new Command(["ip", "route", "get", target]),
-        true
-      ).andThen((proc) => {
+      return this.execute(new Command(["ip", "route", "get", target]), true).andThen((proc) => {
         const stdout = proc.getStdout();
-        const match = stdout.match(
-          /\bsrc\s+(?<ipAddress>\d{1,3}(?:\.\d{1,3}){3})\b/
-        );
+        const match = stdout.match(/\bsrc\s+(?<ipAddress>\d{1,3}(?:\.\d{1,3}){3})\b/);
         if (match === null || match.groups === undefined) {
-          return err(
-            new ParsingError(`Malformed output from ${proc}`, { cause: stdout })
-          );
+          return err(new ParsingError(`Malformed output from ${proc}`, { cause: stdout }));
         }
         this.ipAddress = match.groups["ipAddress"] as string;
         return ok(this.ipAddress);
@@ -75,31 +66,25 @@ export class Server {
         binary: "raw",
         spawn: command.argv,
         external: {
-          "content-disposition":
-            'attachment; filename="' + encodeURIComponent(filename) + '"',
+          "content-disposition": 'attachment; filename="' + encodeURIComponent(filename) + '"',
           "content-type": "application/x-xz, application/octet-stream",
         },
       })
     );
-    const prefix = new URL(
-      cockpit.transport.uri("channel/" + cockpit.transport.csrf_token)
-    ).pathname;
+    const prefix = new URL(cockpit.transport.uri("channel/" + cockpit.transport.csrf_token))
+      .pathname;
     const url = prefix + "?" + query;
     Download.url(url, filename);
   }
 
   getLocalUsers(cache: boolean = true): ResultAsync<LocalUser[], ProcessError> {
     if (this.localUsers === undefined || cache === false) {
-      return this.execute(
-        new Command(["getent", "-s", "files", "passwd"]),
-        true
-      ).map((proc) => {
+      return this.execute(new Command(["getent", "-s", "files", "passwd"]), true).map((proc) => {
         this.localUsers = proc
           .getStdout()
           .split("\n")
           .map((line) => {
-            const [login, _, uidStr, gidStr, name, home, shell] =
-              line.split(":");
+            const [login, _, uidStr, gidStr, name, home, shell] = line.split(":");
             if (
               login === undefined ||
               uidStr === undefined ||
@@ -132,24 +117,15 @@ export class Server {
     return okAsync(this.localUsers);
   }
 
-  getLocalGroups(
-    cache: boolean = true
-  ): ResultAsync<LocalGroup[], ProcessError> {
+  getLocalGroups(cache: boolean = true): ResultAsync<LocalGroup[], ProcessError> {
     if (this.localGroups === undefined || cache === false) {
-      return this.execute(
-        new Command(["getent", "-s", "files", "group"]),
-        true
-      ).map((proc) => {
+      return this.execute(new Command(["getent", "-s", "files", "group"]), true).map((proc) => {
         this.localGroups = proc
           .getStdout()
           .split("\n")
           .map((line) => {
             const [name, _, gidStr, membersStr] = line.split(":");
-            if (
-              name === undefined ||
-              gidStr === undefined ||
-              membersStr === undefined
-            ) {
+            if (name === undefined || gidStr === undefined || membersStr === undefined) {
               return null;
             }
             const gid = parseInt(gidStr);
@@ -165,13 +141,9 @@ export class Server {
     return okAsync(this.localGroups);
   }
 
-  getUserGroups(
-    user: User
-  ): ResultAsync<LocalGroup[], ProcessError | ValueError> {
+  getUserGroups(user: User): ResultAsync<LocalGroup[], ProcessError | ValueError> {
     if (!isLocalUser(user)) {
-      return errAsync(
-        new ValueError(`Can't get groups from non-local user ${user.uid}`)
-      );
+      return errAsync(new ValueError(`Can't get groups from non-local user ${user.uid}`));
     }
     return this.execute(new Command(["groups", user.login]), true)
       .map((proc) =>
@@ -189,22 +161,16 @@ export class Server {
       });
   }
 
-  getGroupMembers(
-    group: Group
-  ): ResultAsync<LocalUser[], ProcessError | ValueError> {
+  getGroupMembers(group: Group): ResultAsync<LocalUser[], ProcessError | ValueError> {
     if (!isLocalGroup(group)) {
-      return errAsync(
-        new ValueError(`Can't get members of non-local group ${group.gid}`)
-      );
+      return errAsync(new ValueError(`Can't get members of non-local group ${group.gid}`));
     }
     return this.getLocalUsers().map((localUsers) =>
       localUsers.filter((user) => user.login in group.members)
     );
   }
 
-  getUserByLogin(
-    login: string
-  ): ResultAsync<LocalUser, ProcessError | ValueError> {
+  getUserByLogin(login: string): ResultAsync<LocalUser, ProcessError | ValueError> {
     return this.getLocalUsers()
       .map((localUsers) => localUsers.filter((user) => user.login === login))
       .andThen((userMatches) =>
@@ -219,28 +185,14 @@ export class Server {
       .map((localUsers) => localUsers.filter((user) => user.uid === uid))
       .andThen((userMatches) =>
         userMatches.length === 0
-          ? ok(
-              User(
-                this,
-                undefined,
-                uid,
-                undefined,
-                undefined,
-                undefined,
-                undefined
-              )
-            )
+          ? ok(User(this, undefined, uid, undefined, undefined, undefined, undefined))
           : ok(userMatches[0]!)
       );
   }
 
-  getGroupByName(
-    groupName: string
-  ): ResultAsync<LocalGroup, ProcessError | ValueError> {
+  getGroupByName(groupName: string): ResultAsync<LocalGroup, ProcessError | ValueError> {
     return this.getLocalGroups()
-      .map((localGroups) =>
-        localGroups.filter((group) => group.name === groupName)
-      )
+      .map((localGroups) => localGroups.filter((group) => group.name === groupName))
       .andThen((groupMatches) =>
         groupMatches.length === 0
           ? err(new ValueError(`Group not found: ${groupName}`))

@@ -7,10 +7,7 @@ import { Maybe } from "monet";
 const utf8Decoder = new TextDecoder("utf-8", { fatal: false });
 const utf8Encoder = new TextEncoder();
 
-export type CommandOptions = Omit<
-  Cockpit.SpawnOptions,
-  "host" | "binary" | "err"
->;
+export type CommandOptions = Omit<Cockpit.SpawnOptions, "host" | "binary" | "err">;
 
 export class Command {
   public readonly argv: string[];
@@ -30,18 +27,12 @@ export class Command {
   }
 
   public toString(): string {
-    return `Command(${JSON.stringify(this.argv)}, ${JSON.stringify(
-      this.spawnOptions
-    )})`;
+    return `Command(${JSON.stringify(this.argv)}, ${JSON.stringify(this.spawnOptions)})`;
   }
 }
 
 export class BashCommand extends Command {
-  constructor(
-    script: string,
-    args: string[] = [],
-    opts: CommandOptions & { arg0?: string } = {}
-  ) {
+  constructor(script: string, args: string[] = [], opts: CommandOptions & { arg0?: string } = {}) {
     const arg0 = opts.arg0 ?? "HoustonBashCommand";
     super(["/usr/bin/env", "bash", "-c", script, arg0, ...args], opts);
   }
@@ -58,9 +49,7 @@ export class ProcessBase {
 
   public prefixMessage(message: string): string {
     const arg0Prefix = `${this.getName()}: `;
-    message = message.startsWith(arg0Prefix)
-      ? message.replace(arg0Prefix, "")
-      : message;
+    message = message.startsWith(arg0Prefix) ? message.replace(arg0Prefix, "") : message;
     return Maybe.fromUndefined(this.server.host)
       .fold("")((host) => `${host}: `)
       .concat(arg0Prefix, message);
@@ -151,28 +140,16 @@ export class Process extends ProcessBase {
     return this;
   }
 
-  public wait(
-    failIfNonZero: boolean = true
-  ): ResultAsync<ExitedProcess, ProcessError> {
+  public wait(failIfNonZero: boolean = true): ResultAsync<ExitedProcess, ProcessError> {
     return ResultAsync.fromPromise(
       new Promise((resolve, reject) => {
         if (this.spawnHandle === undefined) {
-          return reject(
-            new ProcessError(this.prefixMessage("Process never started!"))
-          );
+          return reject(new ProcessError(this.prefixMessage("Process never started!")));
         }
         this.spawnHandle
           .then((stdout, stderr) => {
             const exitStatus = 0;
-            resolve(
-              new ExitedProcess(
-                this.server,
-                this.command,
-                exitStatus,
-                stdout,
-                stderr
-              )
-            );
+            resolve(new ExitedProcess(this.server, this.command, exitStatus, stdout, stderr));
           })
           .catch((ex, stdout) => {
             if (
@@ -180,27 +157,15 @@ export class Process extends ProcessBase {
               ex.exit_status === null ||
               ex.exit_status === undefined
             ) {
-              return reject(
-                new ProcessError(
-                  this.prefixMessage(`${ex.message} (${ex.problem})`)
-                )
-              );
+              return reject(new ProcessError(this.prefixMessage(`${ex.message} (${ex.problem})`)));
             }
             if (failIfNonZero && ex.exit_status !== 0) {
               return reject(
-                new NonZeroExit(
-                  this.prefixMessage(`${ex.message} (${ex.exit_status})`)
-                )
+                new NonZeroExit(this.prefixMessage(`${ex.message} (${ex.exit_status})`))
               );
             }
             resolve(
-              new ExitedProcess(
-                this.server,
-                this.command,
-                ex.exit_status,
-                stdout,
-                ex.message
-              )
+              new ExitedProcess(this.server, this.command, ex.exit_status, stdout, ex.message)
             );
           });
       }),
@@ -215,10 +180,7 @@ export class Process extends ProcessBase {
     );
   }
 
-  public write(
-    data: string | Uint8Array,
-    stream: boolean = false
-  ): Result<null, ProcessError> {
+  public write(data: string | Uint8Array, stream: boolean = false): Result<null, ProcessError> {
     if (this.spawnHandle === undefined) {
       return err(new ProcessError(this.prefixMessage("process not running!")));
     }

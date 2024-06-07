@@ -41,11 +41,7 @@ export class Mode {
   }
 
   toNumber(): number {
-    return (
-      (this.owner.toNumber() << 6) |
-      (this.group.toNumber() << 3) |
-      this.other.toNumber()
-    );
+    return (this.owner.toNumber() << 6) | (this.group.toNumber() << 3) | this.other.toNumber();
   }
   toString(): string {
     return `${this.owner.toString()}${this.group.toString()}${this.other.toString()} (0${this.toOctal()})`;
@@ -128,17 +124,11 @@ export class Path {
     commandOptions?: CommandOptions
   ): ResultAsync<boolean, ProcessError> {
     return server
-      .execute(
-        new Command(["test", testFlag, this.path], commandOptions),
-        false
-      )
+      .execute(new Command(["test", testFlag, this.path], commandOptions), false)
       .map((proc) => proc.exitStatus === 0);
   }
 
-  isBlockOn(
-    server: Server,
-    commandOptions?: CommandOptions
-  ): ResultAsync<boolean, ProcessError> {
+  isBlockOn(server: Server, commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-b", commandOptions);
   }
 
@@ -156,17 +146,11 @@ export class Path {
     return this.testOn(server, "-d", commandOptions);
   }
 
-  existsOn(
-    server: Server,
-    commandOptions?: CommandOptions
-  ): ResultAsync<boolean, ProcessError> {
+  existsOn(server: Server, commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-e", commandOptions);
   }
 
-  isFileOn(
-    server: Server,
-    commandOptions?: CommandOptions
-  ): ResultAsync<boolean, ProcessError> {
+  isFileOn(server: Server, commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-f", commandOptions);
   }
 
@@ -177,17 +161,11 @@ export class Path {
     return this.testOn(server, "-L", commandOptions);
   }
 
-  isPipeOn(
-    server: Server,
-    commandOptions?: CommandOptions
-  ): ResultAsync<boolean, ProcessError> {
+  isPipeOn(server: Server, commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-p", commandOptions);
   }
 
-  isSocketOn(
-    server: Server,
-    commandOptions?: CommandOptions
-  ): ResultAsync<boolean, ProcessError> {
+  isSocketOn(server: Server, commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.testOn(server, "-S", commandOptions);
   }
 
@@ -212,19 +190,11 @@ export class Path {
     const createResult = (
       parents
         ? server
-            .execute(
-              new Command(["mkdir", "-p", this.parent().path], commandOptions)
-            )
+            .execute(new Command(["mkdir", "-p", this.parent().path], commandOptions))
             .map(() => null)
         : okAsync(null)
     )
-      .map(
-        () =>
-          new Command(
-            [type === "file" ? "touch" : "mkdir", this.path],
-            commandOptions
-          )
-      )
+      .map(() => new Command([type === "file" ? "touch" : "mkdir", this.path], commandOptions))
       .andThen((cmd) => server.execute(cmd, true));
     return type === "file"
       ? createResult.map(() => new File(server, this))
@@ -236,26 +206,12 @@ export class Path {
     commandOptions?: CommandOptions
   ): ResultAsync<FilesystemMount, ProcessError> {
     return server
-      .execute(
-        new Command(
-          ["df", "--output=source,target,fstype", this.path],
-          commandOptions
-        )
-      )
-      .map(
-        (proc) =>
-          proc.getStdout().trim().split(RegexSnippets.newlineSplitter)[1]
-      )
+      .execute(new Command(["df", "--output=source,target,fstype", this.path], commandOptions))
+      .map((proc) => proc.getStdout().trim().split(RegexSnippets.newlineSplitter)[1])
       .andThen((tokens) => {
         const [source, mountpoint, realType] = tokens?.split(/\s+/g) ?? [];
-        if (
-          source === undefined ||
-          mountpoint === undefined ||
-          realType === undefined
-        ) {
-          return errAsync(
-            new ParsingError(`Failed to parse filesystem mount:\n${tokens}`)
-          );
+        if (source === undefined || mountpoint === undefined || realType === undefined) {
+          return errAsync(new ParsingError(`Failed to parse filesystem mount:\n${tokens}`));
         }
         return okAsync({
           filesystem: {
@@ -276,11 +232,7 @@ export class Path {
     return server
       .execute(
         new Command(
-          [
-            "realpath",
-            mustExist ? "--canonicalize-existing" : "--canonicalize-missing",
-            this.path,
-          ],
+          ["realpath", mustExist ? "--canonicalize-existing" : "--canonicalize-missing", this.path],
           commandOptions
         )
       )
@@ -293,9 +245,7 @@ export class Path {
   ): ResultAsync<Path, ProcessError> {
     if (!this.isAbsolute()) {
       return errAsync(
-        new ProcessError(
-          `Path.findLongestExistingStemOn: Path not absolute: ${this.path}`
-        )
+        new ProcessError(`Path.findLongestExistingStemOn: Path not absolute: ${this.path}`)
       );
     }
     let path: Path = this;
@@ -317,16 +267,9 @@ export class Path {
     commandOptions?: CommandOptions
   ): ResultAsync<Mode, ProcessError | ParsingError> {
     return server
-      .execute(
-        new Command(
-          ["stat", "--printf", "%#a", "--", this.path],
-          commandOptions
-        )
-      )
+      .execute(new Command(["stat", "--printf", "%#a", "--", this.path], commandOptions))
       .map((proc) => parseInt(proc.getStdout().trim(), 8))
-      .andThen((mode) =>
-        isNaN(mode) ? err(new ParsingError("Failed to parse mode")) : ok(mode)
-      )
+      .andThen((mode) => (isNaN(mode) ? err(new ParsingError("Failed to parse mode")) : ok(mode)))
       .map((mode) => new Mode(mode));
   }
 
@@ -337,9 +280,7 @@ export class Path {
   ): ResultAsync<this, ProcessError> {
     mode = typeof mode === "number" ? new Mode(mode) : mode;
     return server
-      .execute(
-        new Command(["chmod", "--", mode.toOctal(), this.path], commandOptions)
-      )
+      .execute(new Command(["chmod", "--", mode.toOctal(), this.path], commandOptions))
       .map(() => this);
   }
 
@@ -348,31 +289,16 @@ export class Path {
     commandOptions?: CommandOptions
   ): ResultAsync<Ownership, ProcessError | ParsingError> {
     return server
-      .execute(
-        new Command(
-          ["stat", "--printf", "%u:%g", "--", this.path],
-          commandOptions
-        )
-      )
+      .execute(new Command(["stat", "--printf", "%u:%g", "--", this.path], commandOptions))
       .andThen((proc) => {
         const ownershipString = proc.getStdout().trim();
         const [uid, gid] = ownershipString.split(":").map((s) => parseInt(s));
-        if (
-          uid === undefined ||
-          gid === undefined ||
-          isNaN(uid) ||
-          isNaN(gid)
-        ) {
-          return err(
-            new ParsingError(
-              `Failed to parse ownership from ${ownershipString}`
-            )
-          );
+        if (uid === undefined || gid === undefined || isNaN(uid) || isNaN(gid)) {
+          return err(new ParsingError(`Failed to parse ownership from ${ownershipString}`));
         }
-        return ResultAsync.combine([
-          server.getUserByUid(uid),
-          server.getGroupByGid(gid),
-        ]).map(([user, group]) => new Ownership(user, group));
+        return ResultAsync.combine([server.getUserByUid(uid), server.getGroupByGid(gid)]).map(
+          ([user, group]) => new Ownership(user, group)
+        );
       });
   }
 
@@ -382,12 +308,7 @@ export class Path {
     commandOptions?: CommandOptions
   ): ResultAsync<this, ProcessError> {
     return server
-      .execute(
-        new Command(
-          ["chown", "--", ownership.toChownString(), this.path],
-          commandOptions
-        )
-      )
+      .execute(new Command(["chown", "--", ownership.toChownString(), this.path], commandOptions))
       .map(() => this);
   }
 
@@ -397,12 +318,7 @@ export class Path {
   ): ResultAsync<ExtendedAttributes, ProcessError> {
     const kvParser = KeyValueSyntax({ duplicateKey: "error" });
     return server
-      .execute(
-        new Command(
-          ["getfattr", "--dump", "--match=-", "--", this.path],
-          commandOptions
-        )
-      )
+      .execute(new Command(["getfattr", "--dump", "--match=-", "--", this.path], commandOptions))
       .map((proc) => proc.getStdout())
       .andThen(kvParser.apply);
   }
@@ -457,13 +373,7 @@ export class Path {
     return server
       .execute(
         new Command(
-          [
-            "setfattr",
-            `--name=${attributeName}`,
-            `--value=${attributeValue}`,
-            "--",
-            this.path,
-          ],
+          ["setfattr", `--name=${attributeName}`, `--value=${attributeValue}`, "--", this.path],
           commandOptions
         )
       )
@@ -477,10 +387,7 @@ export class Path {
   ): ResultAsync<this, ProcessError> {
     return server
       .execute(
-        new Command(
-          ["setfattr", `--remove=${attributeName}`, "--", this.path],
-          commandOptions
-        )
+        new Command(["setfattr", `--remove=${attributeName}`, "--", this.path], commandOptions)
       )
       .map(() => this);
   }
@@ -512,15 +419,11 @@ export class FileSystemNode extends Path {
     return this.isBlockOn(this.server, commandOptions);
   }
 
-  isCharacter(
-    commandOptions?: CommandOptions
-  ): ResultAsync<boolean, ProcessError> {
+  isCharacter(commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.isCharacterOn(this.server, commandOptions);
   }
 
-  isDirectory(
-    commandOptions?: CommandOptions
-  ): ResultAsync<boolean, ProcessError> {
+  isDirectory(commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.isDirectoryOn(this.server, commandOptions);
   }
 
@@ -532,9 +435,7 @@ export class FileSystemNode extends Path {
     return this.isFileOn(this.server, commandOptions);
   }
 
-  isSymbolicLink(
-    commandOptions?: CommandOptions
-  ): ResultAsync<boolean, ProcessError> {
+  isSymbolicLink(commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.isSymbolicLinkOn(this.server, commandOptions);
   }
 
@@ -542,15 +443,11 @@ export class FileSystemNode extends Path {
     return this.isPipeOn(this.server, commandOptions);
   }
 
-  isSocket(
-    commandOptions?: CommandOptions
-  ): ResultAsync<boolean, ProcessError> {
+  isSocket(commandOptions?: CommandOptions): ResultAsync<boolean, ProcessError> {
     return this.isSocketOn(this.server, commandOptions);
   }
 
-  getFilesystemMount(
-    commandOptions?: CommandOptions
-  ): ResultAsync<FilesystemMount, ProcessError> {
+  getFilesystemMount(commandOptions?: CommandOptions): ResultAsync<FilesystemMount, ProcessError> {
     return this.getFilesystemMountOn(this.server, commandOptions);
   }
 
@@ -571,16 +468,11 @@ export class FileSystemNode extends Path {
     );
   }
 
-  getMode(
-    commandOptions?: CommandOptions
-  ): ResultAsync<Mode, ProcessError | ParsingError> {
+  getMode(commandOptions?: CommandOptions): ResultAsync<Mode, ProcessError | ParsingError> {
     return this.getModeOn(this.server, commandOptions);
   }
 
-  setMode(
-    mode: Mode | number,
-    commandOptions?: CommandOptions
-  ): ResultAsync<this, ProcessError>;
+  setMode(mode: Mode | number, commandOptions?: CommandOptions): ResultAsync<this, ProcessError>;
   setMode(
     reference: FileSystemNode,
     commandOptions?: CommandOptions
@@ -618,9 +510,7 @@ export class FileSystemNode extends Path {
       ownership instanceof FileSystemNode
         ? ownership.getOwnership(commandOptions)
         : okAsync(ownership)
-    ).andThen((ownership) =>
-      this.setOwnershipOn(this.server, ownership, commandOptions)
-    );
+    ).andThen((ownership) => this.setOwnershipOn(this.server, ownership, commandOptions));
   }
 
   assertExists(
@@ -630,19 +520,13 @@ export class FileSystemNode extends Path {
     return this.exists(commandOptions).andThen((exists) =>
       exists === expected
         ? ok(this)
-        : err(
-            new ProcessError(`assertExists(${expected}) failed: ${this.path}`)
-          )
+        : err(new ProcessError(`assertExists(${expected}) failed: ${this.path}`))
     );
   }
 
-  assertIsFile(
-    commandOptions?: CommandOptions | undefined
-  ): ResultAsync<File, ProcessError> {
+  assertIsFile(commandOptions?: CommandOptions | undefined): ResultAsync<File, ProcessError> {
     return this.isFile(commandOptions).andThen((isFile) =>
-      isFile
-        ? ok(new File(this))
-        : err(new ProcessError(`assertIsFile failed: ${this.path}`))
+      isFile ? ok(new File(this)) : err(new ProcessError(`assertIsFile failed: ${this.path}`))
     );
   }
 
@@ -666,22 +550,14 @@ export class FileSystemNode extends Path {
     attributes: ExtendedAttributes,
     commandOptions?: CommandOptions
   ): ResultAsync<this, ProcessError> {
-    return this.setExtendedAttributesOn(
-      this.server,
-      attributes,
-      commandOptions
-    );
+    return this.setExtendedAttributesOn(this.server, attributes, commandOptions);
   }
 
   getExtendedAttribute(
     attributeName: string,
     commandOptions?: CommandOptions
   ): ResultAsync<Maybe<string>, ProcessError> {
-    return this.getExtendedAttributeOn(
-      this.server,
-      attributeName,
-      commandOptions
-    );
+    return this.getExtendedAttributeOn(this.server, attributeName, commandOptions);
   }
 
   setExtendedAttribute(
@@ -689,23 +565,14 @@ export class FileSystemNode extends Path {
     attributeValue: string,
     commandOptions?: CommandOptions
   ): ResultAsync<this, ProcessError> {
-    return this.setExtendedAttributeOn(
-      this.server,
-      attributeName,
-      attributeValue,
-      commandOptions
-    );
+    return this.setExtendedAttributeOn(this.server, attributeName, attributeValue, commandOptions);
   }
 
   removeExtendedAttribute(
     attributeName: string,
     commandOptions?: CommandOptions
   ): ResultAsync<this, ProcessError> {
-    return this.removeExtendedAttributeOn(
-      this.server,
-      attributeName,
-      commandOptions
-    );
+    return this.removeExtendedAttributeOn(this.server, attributeName, commandOptions);
   }
 
   move(
@@ -726,14 +593,7 @@ export class FileSystemNode extends Path {
     return this.server
       .execute(
         new Command(
-          [
-            "mv",
-            ...existingFlagsLUT[existing],
-            "--no-target-directory",
-            "--",
-            this.path,
-            newPath,
-          ],
+          ["mv", ...existingFlagsLUT[existing], "--no-target-directory", "--", this.path, newPath],
           options
         )
       )
@@ -742,10 +602,7 @@ export class FileSystemNode extends Path {
 }
 
 export class File extends FileSystemNode {
-  create(
-    parents?: boolean,
-    commandOptions?: CommandOptions
-  ): ResultAsync<File, ProcessError> {
+  create(parents?: boolean, commandOptions?: CommandOptions): ResultAsync<File, ProcessError> {
     return this.createOn(this.server, "file", parents, commandOptions);
   }
 
@@ -755,19 +612,13 @@ export class File extends FileSystemNode {
       .map(() => this);
   }
 
-  read(
-    commandOptions?: CommandOptions & { binary?: false }
-  ): ResultAsync<string, ProcessError>;
-  read(
-    commandOptions: CommandOptions & { binary: true }
-  ): ResultAsync<Uint8Array, ProcessError>;
+  read(commandOptions?: CommandOptions & { binary?: false }): ResultAsync<string, ProcessError>;
+  read(commandOptions: CommandOptions & { binary: true }): ResultAsync<Uint8Array, ProcessError>;
   read(
     commandOptions: CommandOptions & { binary?: boolean } = {}
   ): ResultAsync<string, ProcessError> | ResultAsync<Uint8Array, ProcessError> {
     const { binary, ...options } = commandOptions;
-    const procResult = this.server.execute(
-      new Command(["cat", this.path], options)
-    );
+    const procResult = this.server.execute(new Command(["cat", this.path], options));
     if (binary) {
       return procResult.map((p) => p.getStdout(true));
     }
@@ -794,9 +645,7 @@ export class File extends FileSystemNode {
     return proc.wait(true).map(() => this);
   }
 
-  move(
-    ...args: Parameters<FileSystemNode["move"]>
-  ): ResultAsync<File, ProcessError> {
+  move(...args: Parameters<FileSystemNode["move"]>): ResultAsync<File, ProcessError> {
     return super.move(...args).map((node) => new File(node));
   }
 
@@ -826,9 +675,7 @@ export class File extends FileSystemNode {
         if (typeof newContentOrReplacer === "function") {
           if (binary) {
             return this.read({ ...options, binary: true })
-              .map(
-                newContentOrReplacer as (oldContent: Uint8Array) => Uint8Array
-              )
+              .map(newContentOrReplacer as (oldContent: Uint8Array) => Uint8Array)
               .andThen((newContent) => tempFile.write(newContent, options));
           }
           return this.read({ ...options, binary: false })
@@ -858,10 +705,7 @@ export class File extends FileSystemNode {
     return server
       .execute(
         new Command(
-          [
-            "mktemp",
-            ...(directory === undefined ? [] : [`--tmpdir=${directory}`]),
-          ],
+          ["mktemp", ...(directory === undefined ? [] : [`--tmpdir=${directory}`])],
           commandOptions
         )
       )
@@ -870,10 +714,7 @@ export class File extends FileSystemNode {
 }
 
 export class Directory extends FileSystemNode {
-  create(
-    parents?: boolean,
-    commandOptions?: CommandOptions
-  ): ResultAsync<Directory, ProcessError> {
+  create(parents?: boolean, commandOptions?: CommandOptions): ResultAsync<Directory, ProcessError> {
     return this.createOn(this.server, "directory", parents, commandOptions);
   }
 
@@ -906,9 +747,7 @@ export class Directory extends FileSystemNode {
       .execute(
         new BashCommand(
           'find -H "$1" -mindepth 1 -maxdepth 1 -name "$2" -path "$3" -print0' +
-            (opts.limit === "none"
-              ? ""
-              : ` | head -z -n ${opts.limit.toString()}`),
+            (opts.limit === "none" ? "" : ` | head -z -n ${opts.limit.toString()}`),
           [this.path, opts.nameFilter ?? "*", opts.pathFilter ?? "*"],
           commandOptions
         )
@@ -923,9 +762,7 @@ export class Directory extends FileSystemNode {
       );
   }
 
-  move(
-    ...args: Parameters<FileSystemNode["move"]>
-  ): ResultAsync<Directory, ProcessError> {
+  move(...args: Parameters<FileSystemNode["move"]>): ResultAsync<Directory, ProcessError> {
     return super.move(...args).map((node) => new Directory(node));
   }
 }

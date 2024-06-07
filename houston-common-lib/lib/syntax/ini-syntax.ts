@@ -4,9 +4,10 @@ import { RegexSnippets } from "./regex-snippets";
 import { KeyValueData, KeyValueSyntax } from "@/syntax/key-value-syntax";
 import { ParsingError } from "@/errors";
 
-export type IniConfigData<
-  TValue extends string | [string, ...string[]] = string,
-> = Record<string, Record<string, TValue>>;
+export type IniConfigData<TValue extends string | [string, ...string[]] = string> = Record<
+  string,
+  Record<string, TValue>
+>;
 
 export type IniSyntaxOptions = {
   paramIndent?: number | string;
@@ -66,11 +67,7 @@ export function IniSyntax(
           }
         } else if (paramRegex.test(line)) {
           const match = line.match(paramRegex);
-          if (
-            currentSection !== null &&
-            match !== null &&
-            match.groups !== undefined
-          ) {
+          if (currentSection !== null && match !== null && match.groups !== undefined) {
             const key = match.groups["key"] as string;
             const value = match.groups["value"] as string;
             if (data[currentSection] === undefined) {
@@ -86,32 +83,19 @@ export function IniSyntax(
               } else if (Array.isArray(currentValue)) {
                 currentKeyValues[key] = [...currentValue, value];
               }
-            } else if (
-              currentValue === undefined ||
-              duplicateKey === "overwrite"
-            ) {
+            } else if (currentValue === undefined || duplicateKey === "overwrite") {
               currentKeyValues[key] = value;
             } else if (duplicateKey === "error") {
-              return err(
-                new ParsingError(
-                  `Duplicate key '${key}' at line ${index}:\n${line}`
-                )
-              );
+              return err(new ParsingError(`Duplicate key '${key}' at line ${index}:\n${line}`));
             } // else ignore
           }
         } else {
-          return err(
-            new ParsingError(`Invalid INI format at line ${index}:\n${line}`)
-          );
+          return err(new ParsingError(`Invalid INI format at line ${index}:\n${line}`));
         }
       }
       return ok(data);
     },
-    unapply: (
-      data:
-        | IniConfigData<string>
-        | IniConfigData<string | [string, ...string[]]>
-    ) => {
+    unapply: (data: IniConfigData<string> | IniConfigData<string | [string, ...string[]]>) => {
       return Result.combine(
         Object.entries(data).map(([sectionName, params]) =>
           (duplicateKey === "append"
@@ -129,9 +113,7 @@ export function IniSyntax(
               }).unapply(params as KeyValueData<string>)
           ).map((paramsText) => `[${sectionName}]\n${paramsText}`)
         )
-      ).map(
-        (sections) => sections.join("\n\n") + (trailingNewline ? "\n" : "")
-      );
+      ).map((sections) => sections.join("\n\n") + (trailingNewline ? "\n" : ""));
     },
   };
 }

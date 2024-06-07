@@ -20,7 +20,8 @@ export namespace Download {
       type: "application/octet-stream",
     });
     const url = URL.createObjectURL(object);
-    if (Object.hasOwnProperty.call(window, "chrome")) { // chromium based
+    if (Object.hasOwnProperty.call(window, "chrome")) {
+      // chromium based
       Download.url(url, filename);
     } else {
       window.open(url, "filename")?.focus(); // non-chromium based

@@ -2,22 +2,17 @@ import { Result } from "neverthrow";
 import { Maybe } from "monet";
 import { ParsingError } from "@/errors";
 
-export type MaybeOption<
-  UseOption extends boolean,
-  T extends {},
-> = UseOption extends true ? Maybe<T> : T;
+export type MaybeOption<UseOption extends boolean, T extends {}> = UseOption extends true
+  ? Maybe<T>
+  : T;
 
 export type Transformer<
   TParsed extends {},
   TUnparsed extends {},
   ReturnsOption extends boolean = false,
 > = {
-  apply: (
-    unparsed: TUnparsed
-  ) => Result<MaybeOption<ReturnsOption, TParsed>, ParsingError>;
-  unapply: (
-    parsed: TParsed
-  ) => Result<MaybeOption<ReturnsOption, TUnparsed>, ParsingError>;
+  apply: (unparsed: TUnparsed) => Result<MaybeOption<ReturnsOption, TParsed>, ParsingError>;
+  unapply: (parsed: TParsed) => Result<MaybeOption<ReturnsOption, TUnparsed>, ParsingError>;
 };
 
 // export type PropertyMapper<

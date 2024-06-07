@@ -1,4 +1,4 @@
-import { Result, /* Ok, Err, Option, Some, None */ } from "neverthrow";
+import { Result /* Ok, Err, Option, Some, None */ } from "neverthrow";
 import { ParsingError } from "@/errors";
 // import { Transformer } from "./transformer";
 
@@ -18,10 +18,7 @@ export function definePropertyTransformSchema<
   To extends {} | null,
   const InputKeys extends readonly [string, ...string[]],
 >(
-  propertyTransformSchema: Omit<
-    PropertyTransformSchema<From, To, InputKeys>,
-    "_type"
-  >
+  propertyTransformSchema: Omit<PropertyTransformSchema<From, To, InputKeys>, "_type">
 ): PropertyTransformSchema<From, To, InputKeys> {
   return {
     ...propertyTransformSchema,
@@ -87,9 +84,7 @@ export type ParsedType<
     ? To
     : S extends ObjectTransformSchema<infer TKey, any>
       ? {
-          [P in TKey as P extends "inputKeys" | "_type"
-            ? never
-            : P]: ParsedType<S[P]>;
+          [P in TKey as P extends "inputKeys" | "_type" ? never : P]: ParsedType<S[P]>;
         }
       : never;
 
@@ -105,9 +100,7 @@ export type UnparsedKeys<
       : never;
 
 export type UnparsedType<
-  S extends
-    | ObjectTransformSchema<any, any>
-    | PropertyTransformSchema<any, any, any>,
+  S extends ObjectTransformSchema<any, any> | PropertyTransformSchema<any, any, any>,
 > =
   S extends PropertyTransformSchema<infer From, any, any>
     ? From

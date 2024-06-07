@@ -24,6 +24,7 @@
 		"docs": "typedoc --out ../docs"
 	},
 	"devDependencies": {
+		"prettier": "^3.3.1",
 		"typedoc": "^0.25.13",
 		"typedoc-plugin-mdn-links": "^3.1.25",
 		"typedoc-umlclass": "^0.9.0",

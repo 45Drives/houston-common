@@ -15,20 +15,14 @@ export namespace Upload {
   }
 
   export function text(accept?: string) {
-    return file(accept).andThen((file) =>
-      ResultAsync.fromSafePromise(file.text())
-    );
+    return file(accept).andThen((file) => ResultAsync.fromSafePromise(file.text()));
   }
 
   export function binary(accept?: string) {
-    return file(accept).andThen((file) =>
-      ResultAsync.fromSafePromise(file.arrayBuffer())
-    );
+    return file(accept).andThen((file) => ResultAsync.fromSafePromise(file.arrayBuffer()));
   }
 
-  function getUpload(
-    options: Options = {}
-  ): ResultAsync<FileList, CancelledByUser> {
+  function getUpload(options: Options = {}): ResultAsync<FileList, CancelledByUser> {
     const promise = new Promise<FileList>((resolve, reject) => {
       fakeUploadClick(resolve, reject, options);
     });
@@ -53,11 +47,7 @@ export namespace Upload {
     input.multiple = options.multiple ?? input.multiple;
     input.accept = options.accept ?? input.accept;
     input.addEventListener("change", ({ target }: Event) => {
-      if (
-        target instanceof HTMLInputElement &&
-        target.files &&
-        target.files.length > 0
-      ) {
+      if (target instanceof HTMLInputElement && target.files && target.files.length > 0) {
         resolver(target.files);
         document.body.removeChild(input);
       }

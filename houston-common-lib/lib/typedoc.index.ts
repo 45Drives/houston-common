@@ -1,4 +1,4 @@
-export * from './index';
+export * from "./index";
 
 import type cockpit from "cockpit";
 

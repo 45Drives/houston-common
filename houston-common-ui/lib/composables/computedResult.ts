@@ -1,5 +1,5 @@
 import { reportError } from "@/components/NotificationView.vue";
-import { ResultAsync, Result } from "neverthrow";
+import { ResultAsync, Result, ok, okAsync } from "neverthrow";
 import { watchEffect, ref, type Ref } from "vue";
 
 /**
@@ -19,10 +19,10 @@ import { watchEffect, ref, type Ref } from "vue";
  * // dirContents.value is undefined until listDirectory() finishes
  */
 export function computedResult<T>(
-  getter: () => Result<T, any>
+  getter: () => Result<T, Error>
 ): [reference: Ref<T | undefined>, triggerUpdate: typeof getter];
 export function computedResult<T>(
-  getter: () => ResultAsync<T, any>
+  getter: () => ResultAsync<T, Error>
 ): [reference: Ref<T | undefined>, triggerUpdate: typeof getter];
 /**
  * Create a computed ref with default value that grabs it's value from a {@link Result} or {@link ResultAsync},
@@ -42,20 +42,28 @@ export function computedResult<T>(
  * // dirContents.value defaults to [] until listDirectory() finishes
  */
 export function computedResult<T>(
-  getter: () => Result<T, any>,
+  getter: () => Result<T, Error>,
   defaultValue: T
 ): [reference: Ref<T>, triggerUpdate: typeof getter];
 export function computedResult<T>(
-  getter: () => ResultAsync<T, any>,
+  getter: () => ResultAsync<T, Error>,
   defaultValue: T
 ): [reference: Ref<T>, triggerUpdate: typeof getter];
 export function computedResult<T>(
-  getter: (() => Result<T, any>) | (() => ResultAsync<T, any>),
+  getter: (() => Result<T, Error>) | (() => ResultAsync<T, Error>),
   defaultValue?: T
 ): [reference: Ref<T | undefined>, triggerUpdate: typeof getter] {
   const reference = ref<T>();
   reference.value = defaultValue;
-  const triggerUpdate = () => getter().map((v) => (reference.value = v));
+  const triggerUpdate = () =>
+    getter()
+      .mapErr((e) => {
+        reference.value = defaultValue;
+        return e;
+      })
+      .map((v) => {
+        return (reference.value = v);
+      });
   watchEffect(() => triggerUpdate().mapErr(reportError));
   return [reference, triggerUpdate as typeof getter];
 }

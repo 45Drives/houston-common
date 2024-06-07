@@ -15,16 +15,32 @@ export namespace Download {
     document.body.removeChild(a);
   }
 
-  export function content(content: BlobPart[], filename: string) {
-    const object = new File(content, filename, {
-      type: "application/octet-stream",
+  export function blobParts(
+    content: BlobPart[],
+    filename: string,
+    type: string = "application/octet-stream"
+  ) {
+    const f = new window.File(content, filename, {
+      type,
     });
-    const url = URL.createObjectURL(object);
+    file(f);
+  }
+
+  export function file(f: InstanceType<typeof window.File>) {
+    const url = URL.createObjectURL(f);
     if (Object.hasOwnProperty.call(window, "chrome")) {
       // chromium based
-      Download.url(url, filename);
+      Download.url(url, f.name);
     } else {
-      window.open(url, "filename")?.focus(); // non-chromium based
+      window.open(url, "_blank")?.focus(); // non-chromium based
     }
+  }
+
+  export function text(content: string, filename: string) {
+    return blobParts([content], filename, "text/plain");
+  }
+
+  export function binary(content: BufferSource, filename: string) {
+    return blobParts([content], filename, "application/octet-stream");
   }
 }

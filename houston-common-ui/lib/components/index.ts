@@ -22,6 +22,7 @@ export { default as UserSelector } from "./UserSelector.vue";
 export { default as GroupSelector } from "./GroupSelector.vue";
 export { default as ModeAndPermissionsEditor } from "./ModeAndPermissionsEditor.vue";
 export { default as ValidationResultView } from "./ValidationResultView.vue";
+export { default as Table } from "./Table.vue";
 
 export * from "./tabs";
 export * from "./modals";

@@ -61,7 +61,7 @@ watchEffect(() => {
       </div>
       <div class="grow-0 overflow-visible relative">
         <div
-          class="absolute bottom-0 left-0 right-0 h-auto flex flex-row justify-end gap-2 py-2 px-6"
+          class="absolute bottom-0 right-0 h-auto inline-flex flex-row justify-end gap-2 py-2 px-6"
         >
           <slot name="bottomRightButtonIcons"></slot>
           <!-- plugin info popup -->

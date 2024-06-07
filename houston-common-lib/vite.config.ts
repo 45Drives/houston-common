@@ -22,6 +22,7 @@ export default defineConfig({
     },
   },
   build: {
+    minify: false,
     // lib property is set in build script
     lib: {
       entry: new URL("./lib/index.ts", import.meta.url).pathname,

@@ -27,7 +27,7 @@ export default defineConfig({
     }
   },
   build: {
-    minify: true,
+    minify: false,
     lib: {
       entry: path.resolve(__dirname, 'lib/index.ts'),
       name: 'Houston Common UI',

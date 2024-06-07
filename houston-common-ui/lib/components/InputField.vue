@@ -3,19 +3,8 @@ import {
   defineProps,
   defineModel,
   defineEmits,
-  computed,
-  defineExpose,
-  ref,
-  watchEffect,
-  onMounted,
 } from "vue";
-import InputFeedback from "@/components/InputFeedback.vue";
 import { v4 as uuidv4 } from "uuid";
-import { type Feedback } from "@/components/InputFeedback.vue";
-
-export type InputValidator = (
-  value: string
-) => Feedback | undefined | PromiseLike<Feedback | undefined>;
 
 const [model, modifiers] = defineModel<string>({ default: "" });
 
@@ -23,7 +12,6 @@ const props = withDefaults(
   defineProps<{
     type?: HTMLInputElement["type"];
     placeholder?: string;
-    validator?: InputValidator;
     disabled?: boolean;
     suggestions?: string[];
   }>(),
@@ -56,19 +44,7 @@ const onChange = ({ target }: Event) => {
   emit("change", model.value);
 };
 
-const feedback = ref<Feedback>();
-const updateFeedback = async () =>
-  (feedback.value = await props.validator?.(model.value));
-watchEffect(updateFeedback);
-
-const suggestionListId = ref<string>();
-onMounted(() => (suggestionListId.value = uuidv4()));
-
-const valid = computed<boolean>(() => !(feedback.value?.type === "error"));
-
-defineExpose({
-  valid,
-});
+const suggestionListId = uuidv4();
 </script>
 
 <template>
@@ -87,14 +63,6 @@ defineExpose({
   <datalist v-if="suggestions" :id="suggestionListId">
     <option v-for="suggestion in suggestions" :value="suggestion"></option>
   </datalist>
-  <InputFeedback
-    v-if="feedback"
-    :type="feedback.type"
-    :actions="feedback.actions"
-    @feedbackAction="updateFeedback"
-  >
-    {{ feedback.message }}
-  </InputFeedback>
 </template>
 
 <style scoped>

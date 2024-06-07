@@ -8,3 +8,4 @@ export {
   assertConfirm,
 } from "./globalModalConfirm";
 export * from "./computedResult";
+export * from "./validation";

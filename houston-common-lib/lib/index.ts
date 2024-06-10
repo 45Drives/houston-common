@@ -29,3 +29,4 @@ export * from "@/utils";
 export * from "@/errors";
 export * from "@/download";
 export * from "@/upload";
+export * from "@/functional";

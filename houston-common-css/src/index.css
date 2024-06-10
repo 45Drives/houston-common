@@ -360,11 +360,11 @@
 	}
 
 	.button-group-row {
-		@apply flex flex-row space-x-buttons;
+		@apply flex flex-row gap-buttons;
 	}
 
 	.button-group-col {
-		@apply flex flex-col space-y-buttons;
+		@apply flex flex-col gap-buttons;
 	}
 
 	.button-group-row-wrap {
@@ -376,11 +376,11 @@
 	}
 
 	.inline-button-group-row {
-		@apply inline-flex flex-row space-x-buttons;
+		@apply inline-flex flex-row gap-buttons;
 	}
 
 	.inline-button-group-col {
-		@apply inline-flex flex-col space-y-buttons;
+		@apply inline-flex flex-col gap-buttons;
 	}
 
 	.inline-button-group-row-wrap {

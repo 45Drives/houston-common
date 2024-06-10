@@ -167,4 +167,51 @@ suite("IniSyntax", () => {
       expect(applyResult.isErr()).toEqual(true);
     });
   });
+  test("Section name with []", () => {
+    const input = `[section]
+    key = value
+    
+    [sec[tion]
+    key = value
+    
+    [s]ection]
+    key = value
+    
+    [s[e]ction]
+    key = value`;
+    expect(iniSyntax.apply(input)).toEqual(
+      ok({
+        section: {
+          key: "value",
+        },
+        "sec[tion": {
+          key: "value",
+        },
+        "s]ection": {
+          key: "value",
+        },
+        "s[e]ction": {
+          key: "value",
+        },
+      })
+    );
+  });
+  test("escaped newline", () => {
+    const input = `[section]
+    key1 = value1
+    key2 = a b \\
+c
+    key3 =\\
+12345
+`;
+    expect(iniSyntax.apply(input)).toEqual(
+      ok({
+        section: {
+          key1: "value1",
+          key2: "a b c",
+          key3: "12345",
+        },
+      })
+    );
+  });
 });

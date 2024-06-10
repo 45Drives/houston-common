@@ -3,6 +3,9 @@ import { Result, ok, err } from "neverthrow";
 import { RegexSnippets } from "./regex-snippets";
 import { KeyValueData, KeyValueSyntax } from "@/syntax/key-value-syntax";
 import { ParsingError } from "@/errors";
+import { Identity } from "@/functional";
+import { StringUtils } from "./string-utils";
+import { Maybe, None, Some } from "monet";
 
 export type IniConfigData<TValue extends string | [string, ...string[]] = string> = Record<
   string,
@@ -47,8 +50,6 @@ export function IniSyntax(
     trailingNewline = true,
     duplicateKey = "overwrite",
   } = opts;
-  const sectionRegex = /^\s*\[\s*(?<name>[^\]]*?)\s*\]\s*$/;
-  const paramRegex = /^\s*(?<key>[^=]+?)\s*=\s*(?<value>.*?)\s*$/;
   return {
     apply: (text) => {
       const data =
@@ -56,42 +57,66 @@ export function IniSyntax(
           ? ({} as IniConfigData<string | [string, ...string[]]>)
           : ({} as IniConfigData<string>);
       let currentSection: string | null = null;
-      for (const [index, line] of text.split(RegexSnippets.newlineSplitter).entries()) {
-        if (line.trim() === "" || commentRegex.test(line)) {
+      const lines = Identity(text)
+        .map(StringUtils.splitBy(RegexSnippets.newlineSplitter))
+        .map(
+          StringUtils.filter(
+            StringUtils.nonEmptyFilter(),
+            StringUtils.regexFilter(commentRegex, true)
+          )
+        )
+        .map(StringUtils.joinEscapedNewlines)
+        .flatten();
+      const sectionHeader = (line: string): Maybe<string> =>
+        Some(line.trim()).flatMap((line) =>
+          line.startsWith("[") && line.endsWith("]") ? Some(line.slice(1, -1)) : None()
+        );
+      const parameter = (line: string): Maybe<{ key: string; value: string }> =>
+        line.includes("=")
+          ? Some(line)
+              .map(StringUtils.splitBy(RegexSnippets.keyValueSplitter))
+              .flatMap(([key, value]) =>
+                Maybe.fromEmpty(key).flatMap((key) =>
+                  Maybe.fromUndefined(value).map((value) => ({
+                    key: key.trim(),
+                    value: value.trimStart(),
+                  }))
+                )
+              )
+          : None();
+      const getSectionData = (section: string) => {
+        if (data[section] === undefined) {
+          data[section] = {};
+        }
+        return data[section]!;
+      };
+      for (const [index, line] of lines.entries()) {
+        const maybeSection = sectionHeader(line);
+        if (maybeSection.isSome()) {
+          currentSection = maybeSection.some();
           continue;
         }
-        if (sectionRegex.test(line)) {
-          const match = line.match(sectionRegex);
-          if (match !== null && match.groups !== undefined) {
-            currentSection = match.groups["name"] as string;
-          }
-        } else if (paramRegex.test(line)) {
-          const match = line.match(paramRegex);
-          if (currentSection !== null && match !== null && match.groups !== undefined) {
-            const key = match.groups["key"] as string;
-            const value = match.groups["value"] as string;
-            if (data[currentSection] === undefined) {
-              data[currentSection] = {};
-            }
-            const currentKeyValues = data[currentSection]!;
-            const currentValue = currentKeyValues[key];
-            if (duplicateKey === "append") {
-              if (currentValue === undefined) {
-                currentKeyValues[key] = value;
-              } else if (typeof currentValue === "string") {
-                currentKeyValues[key] = [currentValue, value];
-              } else if (Array.isArray(currentValue)) {
-                currentKeyValues[key] = [...currentValue, value];
-              }
-            } else if (currentValue === undefined || duplicateKey === "overwrite") {
+        const maybeParameter = parameter(line);
+        if (maybeParameter.isSome() && currentSection !== null) {
+          const { key, value } = maybeParameter.some();
+          const currentKeyValues = getSectionData(currentSection);
+          const currentValue = currentKeyValues[key];
+          if (duplicateKey === "append") {
+            if (currentValue === undefined) {
               currentKeyValues[key] = value;
-            } else if (duplicateKey === "error") {
-              return err(new ParsingError(`Duplicate key '${key}' at line ${index}:\n${line}`));
-            } // else ignore
-          }
-        } else {
-          return err(new ParsingError(`Invalid INI format at line ${index}:\n${line}`));
+            } else if (typeof currentValue === "string") {
+              currentKeyValues[key] = [currentValue, value];
+            } else if (Array.isArray(currentValue)) {
+              currentKeyValues[key] = [...currentValue, value];
+            }
+          } else if (currentValue === undefined || duplicateKey === "overwrite") {
+            currentKeyValues[key] = value;
+          } else if (duplicateKey === "error") {
+            return err(new ParsingError(`Duplicate key '${key}' at line ${index}:\n${line}`));
+          } // else ignore
+          continue;
         }
+        return err(new ParsingError(`Invalid INI format at line ${index}:\n${line}`));
       }
       return ok(data);
     },

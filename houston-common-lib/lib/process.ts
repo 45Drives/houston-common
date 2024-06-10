@@ -159,14 +159,20 @@ export class Process extends ProcessBase {
             ) {
               return reject(new ProcessError(this.prefixMessage(`${ex.message} (${ex.problem})`)));
             }
+            const exitedProcess = new ExitedProcess(
+              this.server,
+              this.command,
+              ex.exit_status,
+              stdout,
+              ex.message
+            );
             if (failIfNonZero && ex.exit_status !== 0) {
+              exitedProcess.logDebug(console.error);
               return reject(
                 new NonZeroExit(this.prefixMessage(`${ex.message} (${ex.exit_status})`))
               );
             }
-            resolve(
-              new ExitedProcess(this.server, this.command, ex.exit_status, stdout, ex.message)
-            );
+            resolve(exitedProcess);
           });
       }),
       (e) => {

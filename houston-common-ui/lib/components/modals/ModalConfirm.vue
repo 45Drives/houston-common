@@ -139,7 +139,7 @@ defineExpose({
           v-if="isDangerous"
           class="size-icon-xl icon-danger shrink-0"
         />
-        <div class="grow overflow-x-auto whitespace-pre">
+        <div class="grow overflow-x-auto whitespace-pre-wrap">
           {{ bodyText }}
         </div>
       </div>

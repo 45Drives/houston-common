@@ -33,11 +33,8 @@ withDefaults(
 </script>
 
 <template>
-  <div class="h-full overflow-hidden bg-accent">
-    <div
-      v-if="$slots.header"
-      class="py-3 px-4 lg:px-6 text-sm font-semibold flex flex-row"
-    >
+  <div class="bg-accent" :class="[noScroll ? '' : 'overflow-hidden']">
+    <div v-if="$slots.header" class="py-3 px-4 lg:px-6 text-sm font-semibold flex flex-row">
       <div class="grow">
         <slot name="header"></slot>
       </div>
@@ -47,21 +44,18 @@ withDefaults(
       ></div>
     </div>
     <div
-      class="flex flex-col overflow-x-auto"
-      :class="{ 'overflow-y-scroll': !noScroll }"
+      class="w-full"
+      :class="{ 'overflow-y-scroll overflow-x-auto': !noScroll }"
       :style="{ 'scrollbar-gutter': noScroll ? 'auto' : 'stable' }"
     >
-      <table class="min-w-full divide-y divide-default houston-table">
+      <table class="w-full divide-y divide-default houston-table">
         <thead :class="{ 'use-sticky': stickyHeaders }">
           <slot name="thead" />
         </thead>
         <tbody class="bg-default w-full">
           <slot name="tbody">
             <tr>
-              <td
-                colspan="100%"
-                class="text-center align-middle text-muted text-sm"
-              >
+              <td colspan="100%" class="text-center align-middle text-muted text-sm">
                 {{ emptyText }}
               </td>
             </tr>

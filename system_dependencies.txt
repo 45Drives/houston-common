@@ -1,0 +1,42 @@
+commands:
+test
+mkdir
+touch
+df
+realpath
+stat
+chmod
+chown
+getfattr
+setfattr
+mv
+rm
+cat
+dd
+mktemp
+rmdir
+find
+env
+true
+hostname
+ip
+getent
+groups
+
+RHEL 8:
+cockpit-bridge
+coreutils - test, mkdir, touch, df, realpath, stat, chmod, chown, mv, rm, cat, dd, mktemp, rmdir, env, true, groups
+attr - getfattr, setfattr
+findutils - find
+hostname - hostname
+iproute - ip
+glibc-common - getent
+
+Ubuntu Focal:
+cockpit-bridge
+coreutils - test, mkdir, touch, df, realpath, stat, chmod, chown, mv, rm, cat, dd, mktemp, rmdir, env, true, groups
+attr - getfattr, setfattr
+findutils - find
+hostname - hostname
+iproute2 - ip
+libc-bin - getent

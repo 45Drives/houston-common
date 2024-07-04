@@ -94,26 +94,10 @@ const confirm = (options: ConfirmOptions): ResultAsync<boolean, never> => {
   return ResultAsync.fromSafePromise(confirmation.promise);
 };
 
-const confirmBeforeAction = (
-  options: ConfirmOptions,
-  action: Action<any, any, any>
-): typeof action => {
-  return (
-    ...args: Parameters<typeof action>
-  ): ReturnType<typeof action> | ResultAsync<null, never> => {
-    return confirm(options).andThen((confirmed) => {
-      if (!confirmed) {
-        return okAsync(null);
-      }
-      return action(...args);
-    });
-  };
-};
-
 const assertConfirm = <T,>(
   options: ConfirmOptions,
   resultIfConfirmed?: T
-): ResultAsync<ValueElseUndefiend<T>, Error> => {
+): ResultAsync<ValueElseUndefiend<T>, CancelledByUser> => {
   return confirm(options).andThen((confirmed) =>
     confirmed
       ? okAsync(resultIfConfirmed as any)
@@ -123,7 +107,6 @@ const assertConfirm = <T,>(
 
 defineExpose({
   confirm,
-  confirmBeforeAction,
   assertConfirm,
 });
 </script>

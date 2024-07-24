@@ -14,6 +14,7 @@ import {
   ref,
   computed,
   watchEffect,
+  watch,
 } from "vue";
 import Disclosure from "@/components/Disclosure.vue";
 import { ChevronDownIcon } from "@heroicons/vue/20/solid";
@@ -33,7 +34,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  (e: "change", value: string): void;
+  (e: "change", value: unknown): void;
 }>();
 
 const currentSelectionIndex = computed<number | undefined>(() => {
@@ -67,6 +68,8 @@ const useTempInputBuffer = (timeoutMilliseconds: number) => {
 const { inputBuffer, onInput } = useTempInputBuffer(1000);
 
 const optionRefs = ref<HTMLButtonElement[]>([]);
+
+watch(model, () => emit('change', model.value), {deep: true, immediate: true})
 
 watchEffect(() => {
   const searchText = inputBuffer.value?.toLowerCase();

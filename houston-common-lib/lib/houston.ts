@@ -41,59 +41,79 @@ export function getServerCluster(
   localServer?: Server
 ): ResultAsync<[Server, ...Server[]], ProcessError | ParsingError> {
   const localServerResult = localServer ? okAsync(localServer) : getServer();
-  switch (scope) {
-    case "local":
-      return localServerResult.map((s) => [s]);
-    case "ctdb":
-      return localServerResult.andThen((server) => {
-        const ctdbNodesFile = new File(server, "/etc/ctdb/nodes");
-        return ctdbNodesFile.exists().andThen((ctdbNodesFileExists) => {
-          if (ctdbNodesFileExists) {
-            return ctdbNodesFile.read({ superuser: "try" }).andThen((nodesString) =>
-              ResultAsync.combine(
-                nodesString
+  const getServerResults = (): ResultAsync<
+    ResultAsync<Server, ProcessError | ParsingError>[],
+    ProcessError
+  > => {
+    switch (scope) {
+      case "local":
+        return okAsync([localServerResult]);
+      case "ctdb":
+        return localServerResult.andThen((server) => {
+          const ctdbNodesFile = new File(server, "/etc/ctdb/nodes");
+          return ctdbNodesFile.exists().andThen((ctdbNodesFileExists) => {
+            if (ctdbNodesFileExists) {
+              return ctdbNodesFile.read({ superuser: "try" }).map((nodesString) => {
+                const serverIpAddresses = nodesString
                   .split(RegexSnippets.newlineSplitter)
                   .map((n) => n.trim())
-                  .filter((n) => n)
-                  .map((node) => getServer(node))
-              ).map((servers) => {
-                if (servers.length < 1) {
+                  .filter((n) => n);
+                if (serverIpAddresses.length < 1) {
                   console.warn(
                     "getServerCluster('ctdb'): Found /etc/ctdb/nodes file, but contained no hosts. Assuming single-server."
                   );
-                  return [server] as [Server, ...Server[]];
+                  return [okAsync<Server, ProcessError | ParsingError>(server)];
                 }
-                return servers as [Server, ...Server[]];
-              })
-            );
-          } else {
-            console.warn(
-              "getServerCluster('ctdb'): File not found: /etc/ctdb/nodes. Assuming single-server."
-            );
-            return ok([server] as [Server, ...Server[]]);
-          }
+                return serverIpAddresses.map((ip) => getServer(ip));
+              });
+            } else {
+              console.warn(
+                "getServerCluster('ctdb'): File not found: /etc/ctdb/nodes. Assuming single-server."
+              );
+              return okAsync([okAsync<Server, ProcessError | ParsingError>(server)]);
+            }
+          });
         });
-      });
-    case "pcs":
-      return localServerResult.andThen((localServer) =>
-        localServer
-          .execute(
-            new Command(["pcs", "cluster", "config", "--output-format", "json"], {
-              superuser: "try",
+      case "pcs":
+        return localServerResult.andThen((localServer) =>
+          localServer
+            .execute(
+              new Command(["pcs", "cluster", "config", "--output-format", "json"], {
+                superuser: "try",
+              })
+            )
+            .map((proc) => proc.getStdout())
+            .andThen(_internal.pcsNodesParseAddrs)
+            .map((hosts) => {
+              if (hosts.length < 1) {
+                console.warn("parsed no hosts from `pcs clust config`. Assuming single-server.");
+                return [okAsync<Server, ProcessError | ParsingError>(localServer)];
+              }
+              return hosts.map((host) => getServer(host));
             })
-          )
-          .map((proc) => proc.getStdout())
-          .andThen(_internal.pcsNodesParseAddrs)
-          .andThen((hosts) =>
-            ResultAsync.combine(hosts.map((host) => getServer(host))).map(
-              (servers) => servers as [Server, ...Server[]]
+        );
+    }
+  };
+
+  return getServerResults()
+    .map((serverResults) => Promise.all(serverResults))
+    .map(
+      (serverResults) =>
+        serverResults
+          .map((serverResult) =>
+            serverResult.match(
+              (s) => s,
+              (e) => {
+                window.reportHoustonError(e, `While getting ${scope} cluster hosts:`);
+                return null;
+              }
             )
           )
-          .orElse((e) => {
-            console.warn(e);
-            console.warn("assuming single-server");
-            return okAsync([localServer] as [Server, ...Server[]]);
-          })
-      );
-  }
+          .filter((s): s is Server => s !== null) as [Server, ...Server[]]
+    )
+    .orElse((e) => {
+      console.warn(e);
+      console.warn("assuming single-server");
+      return okAsync([localServer] as [Server, ...Server[]]);
+    });
 }

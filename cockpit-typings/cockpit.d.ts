@@ -215,10 +215,10 @@ declare module 'cockpit' {
         path: string;
     }
 
-    type FileOpenOptions = {
+    interface FileOpenOptions {
         max_read_size?: number;
         superuser?: string;
-    };
+    }
 
     function file(
         path: string,

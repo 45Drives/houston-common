@@ -13,9 +13,23 @@ export class ProcessError extends Error {
 }
 
 export class NonZeroExit extends ProcessError {
-  constructor(...args: ConstructorParameters<typeof Error>) {
+  constructor(...args: ConstructorParameters<typeof ProcessError>) {
     super(...args);
     this.name = "ProcessError (exited non-zero)";
+  }
+}
+
+export class UnknownHost extends ProcessError {
+  constructor(...args: ConstructorParameters<typeof ProcessError>) {
+    super(...args);
+    this.name = "ProcessError (unknown/untrusted host)";
+  }
+}
+
+export class NotFound extends ProcessError {
+  constructor(...args: ConstructorParameters<typeof ProcessError>) {
+    super(...args);
+    this.name = "ProcessError (not found)";
   }
 }
 

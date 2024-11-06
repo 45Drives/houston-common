@@ -54,10 +54,10 @@ const emit = defineEmits<{
       >
         <div
           v-if="show"
-          class="fixed z-10 inset-0 flex items-end sm:items-center justify-center px-4 pb-20 sm:p-0"
+          class="fixed overflow-hidden z-10 inset-0 flex items-end sm:items-center justify-center px-4 pb-20 pt-4 sm:pb-4"
           @click.self="emit('clickOutside')"
         >
-          <div class="max-w-full sm:px-10 whitespace-normal">
+          <div class="max-w-full max-h-full overflow-auto whitespace-normal">
             <slot />
           </div>
         </div>

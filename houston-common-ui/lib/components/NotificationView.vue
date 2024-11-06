@@ -150,13 +150,13 @@ export function pushNotification(notif: Notification): Notification {
  * server.execute(new Command(["false"])).mapError(reportError);
  * ```
  */
-export function reportError<TErr extends Error | Error[]>(e: TErr): TErr {
+export function reportError<TErr extends Error | Error[]>(e: TErr, context: string = ""): TErr {
   if (Array.isArray(e)) {
     return e.map((e) => reportError(e)) as TErr;
   }
-  console.error(e);
+  console.error(context, e);
   if (!(e instanceof SilentError)) {
-    pushNotification(new Notification(_(e.name), e.message, "error", 20_000));
+    pushNotification(new Notification(_(e.name), [context, e.message].join("\n").trim(), "error", 20_000));
   }
   return e;
 }

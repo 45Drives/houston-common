@@ -16,3 +16,5 @@ window.onerror = (event) => {
   }
   return false;
 };
+
+window.reportHoustonError = reportError;

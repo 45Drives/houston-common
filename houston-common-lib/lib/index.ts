@@ -22,6 +22,7 @@
 /// <reference path="../typings/cockpit-typings/cockpit.d.ts" />
 /// <reference path="../typings/cockpit-typings/cockpit-extra.d.ts" />
 /// <reference path="../typings/cockpit-typings/cockpit-import-hack.d.ts" />
+/// <reference path="../typings/window.d.ts" />
 
 export * from "@/houston";
 export * from "@/syntax";
@@ -30,3 +31,8 @@ export * from "@/errors";
 export * from "@/download";
 export * from "@/upload";
 export * from "@/functional";
+
+window.reportHoustonError ??= (e, ctx: string = "") => {
+  console.error(ctx, e);
+  return e;
+};

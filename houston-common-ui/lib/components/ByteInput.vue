@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { StringToIntCaster } from '@45drives/houston-common-lib';
-import { InputField, SelectMenu, type SelectMenuOption } from '@45drives/houston-common-ui';
+import { InputField, SelectMenu, type SelectMenuOption } from '@/components';
 import { Maybe } from 'monet';
 import { computed, type ComputedRef, ref, watchEffect } from 'vue';
 

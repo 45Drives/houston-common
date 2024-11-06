@@ -57,7 +57,7 @@ export default defineComponent({
 			setInterval(() => {
 				let elems = document.querySelectorAll('#app *') as NodeListOf<HTMLElement>;
 				for (let i = 0; i < elems.length; i++) {
-					const element = elems[i];
+					const element = elems[i]!;
 					if (element.children.length > 0)
 						continue;
 					if (element.textContent) {

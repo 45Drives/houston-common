@@ -1,4 +1,4 @@
-import { ParsingError, ProcessError } from "@/errors";
+import { NotFound, ParsingError, ProcessError } from "@/errors";
 import { Command } from "@/process";
 import { Server } from "@/server";
 import { RegexSnippets } from "@/syntax";
@@ -53,19 +53,13 @@ export function getServerCluster(
           const ctdbNodesFile = new File(server, "/etc/ctdb/nodes");
           return ctdbNodesFile.exists().andThen((ctdbNodesFileExists) => {
             if (ctdbNodesFileExists) {
-              return ctdbNodesFile.read({ superuser: "try" }).map((nodesString) => {
-                const serverIpAddresses = nodesString
+              return ctdbNodesFile.read({ superuser: "try" }).map((nodesString) =>
+                nodesString
                   .split(RegexSnippets.newlineSplitter)
                   .map((n) => n.trim())
-                  .filter((n) => n);
-                if (serverIpAddresses.length < 1) {
-                  console.warn(
-                    "getServerCluster('ctdb'): Found /etc/ctdb/nodes file, but contained no hosts. Assuming single-server."
-                  );
-                  return [okAsync<Server, ProcessError | ParsingError>(server)];
-                }
-                return serverIpAddresses.map((ip) => getServer(ip));
-              });
+                  .filter((n) => n)
+                  .map((ip) => getServer(ip))
+              );
             } else {
               console.warn(
                 "getServerCluster('ctdb'): File not found: /etc/ctdb/nodes. Assuming single-server."
@@ -84,12 +78,13 @@ export function getServerCluster(
             )
             .map((proc) => proc.getStdout())
             .andThen(_internal.pcsNodesParseAddrs)
-            .map((hosts) => {
-              if (hosts.length < 1) {
-                console.warn("parsed no hosts from `pcs clust config`. Assuming single-server.");
-                return [okAsync<Server, ProcessError | ParsingError>(localServer)];
+            .map((hosts) => hosts.map((host) => getServer(host)))
+            .orElse((e) => {
+              if (e instanceof NotFound) {
+                console.warn("pcs command not found. Assuming single-server.");
+                return okAsync([okAsync<Server, ProcessError | ParsingError>(localServer)]);
               }
-              return hosts.map((host) => getServer(host));
+              return err(e);
             })
         );
     }

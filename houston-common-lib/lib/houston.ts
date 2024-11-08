@@ -111,9 +111,11 @@ export function getServerCluster(
           )
           .filter((s): s is Server => s !== null) as [Server, ...Server[]]
     )
+    .andThen((servers) =>
+      servers.length > 0 ? ok(servers) : err(new ProcessError("No acessible servers in cluster."))
+    )
     .orElse((e) => {
-      console.warn(e);
-      console.warn("assuming single-server");
-      return okAsync([localServer] as [Server, ...Server[]]);
+      window.reportHoustonError(e, "Assuming single server:");
+      return localServerResult.map((s) => [s] as [Server, ...Server[]]);
     });
 }

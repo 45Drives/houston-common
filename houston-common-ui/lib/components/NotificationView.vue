@@ -16,7 +16,7 @@ If not, see <https://www.gnu.org/licenses/>.
 -->
 
 <script lang="ts">
-import { ref, reactive } from "vue";
+import { ref, reactive, computed, type ComputedRef } from "vue";
 import {
   InformationCircleIcon,
   ExclamationCircleIcon,
@@ -45,12 +45,7 @@ interface NotificationAction {
   processing: boolean;
 }
 
-export type NotificationLevel =
-  | "info"
-  | "warning"
-  | "error"
-  | "success"
-  | "denied";
+export type NotificationLevel = "info" | "warning" | "error" | "success" | "denied";
 
 export class Notification {
   public readonly title: string;
@@ -61,6 +56,9 @@ export class Notification {
   public readonly key: symbol;
   public remove: () => void;
   public removerTimeout?: number;
+  private removerStartTime?: number;
+  public timeLeftPercent: number;
+  public timeLeftUpdaterInterval?: number;
   constructor(
     title: string,
     body: string,
@@ -74,6 +72,7 @@ export class Notification {
     this.actions = [];
     this.key = Symbol();
     this.remove = () => {};
+    this.timeLeftPercent = 0;
   }
 
   addAction(
@@ -100,16 +99,23 @@ export class Notification {
 
   startRemoveTimeout() {
     if (this.timeout !== "never") {
-      this.removerTimeout = window.setTimeout(
-        () => this.remove(),
-        this.timeout
-      );
+      this.removerStartTime = Date.now();
+      this.timeLeftUpdaterInterval = window.setInterval(() => {
+        if (this.removerStartTime === undefined || this.timeout === "never") {
+          return;
+        }
+        this.timeLeftPercent = 100 - ((Date.now() - this.removerStartTime) / this.timeout) * 100;
+      }, 1000 / 60);
+      this.removerTimeout = window.setTimeout(() => this.remove(), this.timeout);
     }
   }
 
   stopRemoveTimeout() {
     if (this.removerTimeout !== undefined) {
+      this.removerStartTime = undefined;
+      this.timeLeftPercent = 100;
       window.clearTimeout(this.removerTimeout);
+      window.clearTimeout(this.timeLeftUpdaterInterval);
     }
   }
 }
@@ -133,9 +139,7 @@ export function pushNotification(notif: Notification): Notification {
   notif.startRemoveTimeout();
   notif.remove = () => {
     notif.stopRemoveTimeout();
-    notificationList.value = notificationList.value.filter(
-      (n) => n.key !== notif.key
-    );
+    notificationList.value = notificationList.value.filter((n) => n.key !== notif.key);
   };
   notificationList.value = [notif, ...notificationList.value];
   return notif;
@@ -156,7 +160,9 @@ export function reportError<TErr extends Error | Error[]>(e: TErr, context: stri
   }
   console.error(context, e);
   if (!(e instanceof SilentError)) {
-    pushNotification(new Notification(_(e.name), [context, e.message].join("\n").trim(), "error", 20_000));
+    pushNotification(
+      new Notification(_(e.name), [context, e.message].join("\n").trim(), "error", 20_000)
+    );
   }
   return e;
 }
@@ -208,8 +214,8 @@ export default {
             @mouseenter="notification.stopRemoveTimeout()"
             @mouseleave="notification.startRemoveTimeout()"
           >
-            <div class="p-4">
-              <div class="flex items-start">
+            <div>
+              <div class="flex items-start p-4">
                 <div class="flex-shrink-0" aria-hidden="true">
                   <ExclamationCircleIcon
                     v-if="notification.level === 'error'"
@@ -231,10 +237,7 @@ export default {
                     class="icon-error size-icon-lg"
                     aria-hidden="true"
                   />
-                  <InformationCircleIcon
-                    v-else
-                    class="icon-info size-icon-lg"
-                  />
+                  <InformationCircleIcon v-else class="icon-info size-icon-lg" />
                 </div>
                 <div class="ml-3 w-0 flex-1 pt-0.5">
                   <p class="text-sm font-medium">{{ notification.title }}</p>
@@ -242,20 +245,13 @@ export default {
                     class="mt-1 text-sm text-muted whitespace-pre-wrap"
                     v-html="notification.body"
                   ></p>
-                  <div
-                    v-if="notification.actions?.length"
-                    class="mt-3 flex space-x-7"
-                  >
+                  <div v-if="notification.actions?.length" class="mt-3 flex space-x-7">
                     <button
                       v-for="action in notification.actions"
                       :key="action.key"
                       @click="action.callback()"
                       class="rounded-md text-sm font-medium"
-                      :class="
-                        action.processing
-                          ? 'text-muted cursor-wait'
-                          : 'text-primary'
-                      "
+                      :class="action.processing ? 'text-muted cursor-wait' : 'text-primary'"
                       :disabled="action.processing"
                     >
                       {{ action.label }}
@@ -275,6 +271,13 @@ export default {
                     <XMarkIcon class="size-icon" aria-hidden="true" />
                   </button>
                 </div>
+              </div>
+              <div class="flex justify-end">
+                <div
+                  v-if="notification.timeout !== 'never'"
+                  class="border-t-4 border-default"
+                  :style="{ width: `${notification.timeLeftPercent}%` }"
+                />
               </div>
             </div>
           </div>

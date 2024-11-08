@@ -1,7 +1,7 @@
 import { Server } from "@/server";
 import type Cockpit from "cockpit";
 import { Result, ResultAsync, ok, err } from "neverthrow";
-import { ProcessError, NonZeroExit, UnknownHost, NotFound } from "@/errors";
+import { ProcessError, NonZeroExit, UnknownHost, NotFound, AuthenticationFailed } from "@/errors";
 import { Maybe } from "monet";
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: false });
@@ -157,14 +157,17 @@ export class Process extends ProcessBase {
               ex.exit_status === null ||
               ex.exit_status === undefined
             ) {
-              const desc = this.prefixMessage(ex.message);
               switch (ex.problem) {
                 case "unknown-host":
                   return reject(new UnknownHost(`${this.server.host!}: ${ex.message}`));
                 case "not-found":
-                  return reject(new NotFound(desc));
+                  return reject(new NotFound(this.prefixMessage(ex.message)));
+                case "authentication-failed":
+                  return reject(new AuthenticationFailed(`${this.server.host!}: ${ex.message}`));
                 default:
-                  return reject(new ProcessError(`${desc} (${ex.problem})`));
+                  return reject(
+                    new ProcessError(`${this.prefixMessage(ex.message)} (${ex.problem})`)
+                  );
               }
             }
             const exitedProcess = new ExitedProcess(

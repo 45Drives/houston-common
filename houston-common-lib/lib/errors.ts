@@ -33,6 +33,13 @@ export class NotFound extends ProcessError {
   }
 }
 
+export class AuthenticationFailed extends ProcessError {
+  constructor(...args: ConstructorParameters<typeof ProcessError>) {
+    super(...args);
+    this.name = "ProcessError (authentication failed)";
+  }
+}
+
 export class ValueError extends Error {
   constructor(...args: ConstructorParameters<typeof Error>) {
     super(...args);

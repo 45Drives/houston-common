@@ -3,18 +3,13 @@ export type ConfirmOptions = {
   header: string;
   body: string;
   dangerous?: boolean;
+  confirmButtonText?: string;
+  cancelButtonText?: string;
 };
 </script>
 
 <script setup lang="ts">
-import {
-  defineProps,
-  defineEmits,
-  computed,
-  ref,
-  watchEffect,
-  defineExpose,
-} from "vue";
+import { defineProps, defineEmits, computed, ref, watchEffect, defineExpose } from "vue";
 import { ResultAsync, okAsync, errAsync } from "neverthrow";
 import { type Action } from "@/composables/wrapActions";
 import CardContainer from "@/components/CardContainer.vue";
@@ -40,7 +35,9 @@ class Confirmation {
   constructor(
     public header: string,
     public body: string,
-    public dangerous: boolean
+    public dangerous: boolean,
+    public confirmButtonText: string,
+    public cancelButtonText: string
   ) {
     this.promise = new Promise((r) => {
       this.resolve = r;
@@ -75,6 +72,8 @@ const resolveCurrent = (value: boolean) => {
 const headerText = ref<string>("");
 const bodyText = ref<string>("");
 const isDangerous = ref<boolean>(false);
+const confirmButtonText = ref<string>("");
+const cancelButtonText = ref<string>("");
 watchEffect(() => {
   if (currentConfirmation.value === undefined) {
     return;
@@ -82,13 +81,17 @@ watchEffect(() => {
   headerText.value = currentConfirmation.value.header;
   bodyText.value = currentConfirmation.value.body;
   isDangerous.value = currentConfirmation.value.dangerous;
+  confirmButtonText.value = currentConfirmation.value.confirmButtonText;
+  cancelButtonText.value = currentConfirmation.value.cancelButtonText;
 });
 
 const confirm = (options: ConfirmOptions): ResultAsync<boolean, never> => {
   const confirmation = new Confirmation(
     options.header,
     options.body,
-    options.dangerous ?? false
+    options.dangerous ?? false,
+    options.confirmButtonText ?? _("Confirm"),
+    options.cancelButtonText ?? _("Cancel")
   );
   pushConfirmation(confirmation);
   return ResultAsync.fromSafePromise(confirmation.promise);
@@ -99,9 +102,7 @@ const assertConfirm = <T,>(
   resultIfConfirmed?: T
 ): ResultAsync<ValueElseUndefiend<T>, CancelledByUser> => {
   return confirm(options).andThen((confirmed) =>
-    confirmed
-      ? okAsync(resultIfConfirmed as any)
-      : errAsync(new CancelledByUser(options.header))
+    confirmed ? okAsync(resultIfConfirmed as any) : errAsync(new CancelledByUser(options.header))
   );
 };
 
@@ -118,10 +119,7 @@ defineExpose({
         {{ headerText }}
       </template>
       <div class="flex flex-row items-center gap-2">
-        <ExclamationCircleIcon
-          v-if="isDangerous"
-          class="size-icon-xl icon-danger shrink-0"
-        />
+        <ExclamationCircleIcon v-if="isDangerous" class="size-icon-xl icon-danger shrink-0" />
         <div class="grow overflow-x-auto whitespace-pre-wrap">
           {{ bodyText }}
         </div>
@@ -129,14 +127,14 @@ defineExpose({
       <template #footer>
         <div class="button-group-row justify-end grow">
           <button class="btn btn-secondary" @click="resolveCurrent(false)">
-            {{ _("Cancel") }}
+            {{ cancelButtonText }}
           </button>
           <button
             class="btn"
             :class="isDangerous ? 'btn-danger' : 'btn-primary'"
             @click="resolveCurrent(true)"
           >
-            {{ _("Confirm") }}
+            {{ confirmButtonText }}
           </button>
         </div>
       </template>

@@ -1,13 +1,5 @@
 <script setup lang="ts">
-import {
-  defineModel,
-  onMounted,
-  ref,
-  computed,
-  onUnmounted,
-  defineProps,
-  watchEffect,
-} from "vue";
+import { defineModel, onMounted, ref, computed, onUnmounted, defineProps, watchEffect } from "vue";
 import { ChevronUpIcon } from "@heroicons/vue/20/solid";
 
 const props = withDefaults(
@@ -26,9 +18,7 @@ const props = withDefaults(
 const show = defineModel<boolean>("show", { default: false });
 
 const wrapperElement = ref<InstanceType<typeof HTMLDivElement> | null>(null);
-const internalWrapperElement = ref<InstanceType<typeof HTMLDivElement> | null>(
-  null
-);
+const internalWrapperElement = ref<InstanceType<typeof HTMLDivElement> | null>(null);
 
 const internalHeight = ref(0);
 
@@ -38,8 +28,10 @@ const elementHeight = computed<number>(() => {
 });
 
 const observer = new ResizeObserver((entries) => {
-  entries.forEach((entry) => {
-    internalHeight.value = entry.contentRect.height;
+  requestAnimationFrame(() => {
+    for (const entry of entries) {
+      internalHeight.value = entry.contentRect.height;
+    }
   });
 });
 
@@ -102,10 +94,7 @@ onUnmounted(() => {
         'max-height': `${elementHeight}px`,
         'transition-duration': `${transitionDuration}ms`,
       }"
-      :class="[
-        show ? 'ease-out' : 'ease-in',
-        `transition-[max-height] overflow-y-hidden w-full`,
-      ]"
+      :class="[show ? 'ease-out' : 'ease-in', `transition-[max-height] overflow-y-hidden w-full`]"
     >
       <div ref="internalWrapperElement">
         <slot :visible="visible" :show="show" />

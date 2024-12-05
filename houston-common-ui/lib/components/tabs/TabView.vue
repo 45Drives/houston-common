@@ -1,19 +1,17 @@
 <script setup lang="ts">
-import { defineProps } from 'vue';
-import { type HoustonAppTabState } from "@/components/tabs";
+import { defineProps } from "vue";
+import { type HoustonAppTabEntry } from "@/components/tabs";
 
 const props = defineProps<{
-    state: HoustonAppTabState,
+  entries: HoustonAppTabEntry[];
+  index: number;
 }>();
-
-const currentTabIndex = props.state.index;
-const entries = props.state.entries;
 </script>
 
 <template>
-    <KeepAlive>
-        <component :is="entries[currentTabIndex].component" />
-    </KeepAlive>
+  <KeepAlive>
+    <component v-if="entries.length" :is="entries[index].component" :key="[index, entries.length]" />
+  </KeepAlive>
 </template>
 
 <style scoped>

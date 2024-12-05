@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, defineProps, watchEffect } from "vue";
+import { ref, defineProps, watchEffect, computed } from "vue";
 import HoustonHeader from "@/components/HoustonHeader.vue";
 import {
   defineHoustonAppTabState,
-  type HoustonAppTabEntrySpec,
+  type HoustonAppTabEntry,
   TabSelector,
   TabView,
 } from "@/components/tabs";
@@ -23,11 +23,14 @@ const props = defineProps<{
   appVersion: string;
   sourceURL?: string;
   issuesURL?: string;
-  tabs?: HoustonAppTabEntrySpec[];
+  tabs?: HoustonAppTabEntry[];
 }>();
 
-const tabState =
-  props.tabs !== undefined ? defineHoustonAppTabState(props.tabs) : null;
+const {
+  entries: tabEntries,
+  labels: tabLabels,
+  index: tabIndex,
+} = defineHoustonAppTabState(computed(() => props.tabs ?? []));
 
 const globalProcessingState = useGlobalProcessingState();
 
@@ -46,17 +49,14 @@ watchEffect(() => {
     :class="{ '!cursor-wait': globalProcessingState !== 0 }"
   >
     <HoustonHeader :moduleName="moduleName">
-      <template v-slot:header-left v-if="tabState">
-        <TabSelector :state="tabState" />
+      <template v-slot:header-left v-if="tabs">
+        <TabSelector :labels="tabLabels" v-model:index="tabIndex" />
       </template>
     </HoustonHeader>
     <div class="overflow-hidden grow basis-0 flex flex-col items-stretch">
-      <div
-        class="bg-well overflow-y-auto grow"
-        style="scrollbar-gutter: stable both-edges"
-      >
+      <div class="bg-well overflow-y-auto grow" style="scrollbar-gutter: stable both-edges">
         <slot>
-          <TabView v-if="tabState" :state="tabState" />
+          <TabView v-if="tabs" :entries="tabEntries" :index="tabIndex" />
         </slot>
       </div>
       <div class="grow-0 overflow-visible relative">
@@ -86,27 +86,17 @@ watchEffect(() => {
                     </a>
                     for Houston UI (Cockpit)
                   </span>
-                  <a
-                    v-if="sourceURL"
-                    class="text-link"
-                    :href="sourceURL"
-                    target="_blank"
+                  <a v-if="sourceURL" class="text-link" :href="sourceURL" target="_blank"
                     >Source Code</a
                   >
-                  <a
-                    v-if="issuesURL"
-                    class="text-link"
-                    :href="issuesURL"
-                    target="_blank"
+                  <a v-if="issuesURL" class="text-link" :href="issuesURL" target="_blank"
                     >Issue Tracker</a
                   >
                 </div>
 
                 <template #footer>
                   <div class="button-group-row justify-end">
-                    <button @click="setShow(false)" class="btn btn-primary">
-                      Close
-                    </button>
+                    <button @click="setShow(false)" class="btn btn-primary">Close</button>
                   </div>
                 </template>
               </CardContainer>

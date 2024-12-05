@@ -16,32 +16,30 @@ If not, see <https://www.gnu.org/licenses/>.
 -->
 
 <script setup lang="ts">
-import { defineProps } from 'vue';
-import { type HoustonAppTabState } from "@/components/tabs";
+import { defineProps } from "vue";
 
 const props = defineProps<{
-    state: HoustonAppTabState,
+  labels: string[];
 }>();
 
-const currentTabIndex = props.state.index;
-const entries = props.state.entries;
+const index = defineModel<number>("index", { required: true });
 
-const switchTab = (newIndex: number) => {
-    if (newIndex >= 0 && newIndex < entries.length) {
-        currentTabIndex.value = newIndex;
-    }
-};
 </script>
 
 <template>
-    <div class="flex flex-row flex-nowrap items-stretch self-stretch gap-2">
-        <button
-            v-for="(entry, index) in entries"
-            :key="entry.key"
-            :class="['px-2 border-b-2 border-b-transparent hover:border-b-neutral-400 dark:hover:border-b-neutral-600 text-lg font-medium sm:pt-2', currentTabIndex === index ? '!border-b-red-700 dark:!border-b-red-800' : 'text-muted hover:text-default']"
-            @click="switchTab(index)"
-        >{{ entry.label }}</button>
-    </div>
+  <div class="flex flex-row flex-nowrap items-stretch self-stretch gap-2">
+    <button
+      v-for="(label, i) in labels"
+      :key="label"
+      :class="[
+        'px-2 border-b-2 border-b-transparent hover:border-b-neutral-400 dark:hover:border-b-neutral-600 text-lg font-medium sm:pt-2',
+        i === index ? '!border-b-red-700 dark:!border-b-red-800' : 'text-muted hover:text-default',
+      ]"
+      @click="index = i"
+    >
+      {{ label }}
+    </button>
+  </div>
 </template>
 
 <style scoped>

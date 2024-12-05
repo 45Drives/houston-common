@@ -10,7 +10,7 @@ defineProps<{
 
 <template>
   <span
-    class="relative overflow-visible inline-block z-50"
+    class="relative overflow-visible inline-block z-5"
     @click.stop="show = !show"
     @mouseenter="show = true"
     @mouseleave="show = false"

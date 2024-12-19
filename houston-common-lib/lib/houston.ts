@@ -1,5 +1,4 @@
-import { NotFound, ParsingError, ProcessError } from "@/errors";
-import { Command } from "@/process";
+import { ParsingError, ProcessError } from "@/errors";
 import { Server } from "@/server";
 import { RegexSnippets } from "@/syntax";
 import { safeJsonParse } from "@/utils";
@@ -34,6 +33,12 @@ export namespace _internal {
       }
       return ok(addrs);
     });
+
+  export const parseCorosyncConfNodeIps = (corosyncConf: string) =>
+    corosyncConf
+      .split(RegexSnippets.newlineSplitter)
+      .filter((line) => /^\s*ring0_addr\s*:\s*.+$/.test(line))
+      .map((ring0Addr) => ring0Addr.split(":")[1]!.trim());
 }
 
 export function getServerCluster(
@@ -69,24 +74,22 @@ export function getServerCluster(
           });
         });
       case "pcs":
-        return localServerResult.andThen((localServer) =>
-          localServer
-            .execute(
-              new Command(["pcs", "cluster", "config", "--output-format", "json"], {
-                superuser: "try",
-              })
-            )
-            .map((proc) => proc.getStdout())
-            .andThen(_internal.pcsNodesParseAddrs)
-            .map((hosts) => hosts.map((host) => getServer(host)))
-            .orElse((e) => {
-              if (e instanceof NotFound) {
-                console.warn("pcs command not found. Assuming single-server.");
-                return okAsync([okAsync<Server, ProcessError | ParsingError>(localServer)]);
-              }
-              return err(e);
-            })
-        );
+        return localServerResult.andThen((server) => {
+          const corosyncConfFile = new File(server, "/etc/corosync/corosync.conf");
+          return corosyncConfFile.exists().andThen((corosyncConfFileExists) => {
+            if (corosyncConfFileExists) {
+              return corosyncConfFile.read({ superuser: "try" }).map((confString) =>
+                _internal.parseCorosyncConfNodeIps(confString)
+                  .map((ip) => getServer(ip))
+              );
+            } else {
+              console.warn(
+                "getServerCluster('pcs'): File not found: /etc/corosync/corosync.conf. Assuming single-server."
+              );
+              return okAsync([okAsync<Server, ProcessError | ParsingError>(server)]);
+            }
+          });
+        });
     }
   };
 
@@ -104,10 +107,10 @@ export function getServerCluster(
               }
             )
           )
-          .filter((s): s is Server => s !== null) as [Server, ...Server[]]
+          .filter((s): s is Server => s !== null)
     )
     .andThen((servers) =>
-      servers.length > 0 ? ok(servers) : err(new ProcessError("No acessible servers in cluster."))
+      servers.length > 0 ? ok(servers as [Server, ...Server[]]) : err(new ProcessError("No acessible servers in cluster."))
     )
     .orElse((e) => {
       window.reportHoustonError(e, "Assuming single server:");

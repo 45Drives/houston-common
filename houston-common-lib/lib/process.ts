@@ -38,6 +38,12 @@ export class BashCommand extends Command {
   }
 }
 
+export class PythonCommand extends Command {
+  constructor(script: string, args: string[] = [], opts: CommandOptions = {}) {
+    super(["/usr/bin/env", "python3", "-c", script, ...args], opts);
+  }
+}
+
 export class ProcessBase {
   public readonly server: Server;
   public readonly command: Command;

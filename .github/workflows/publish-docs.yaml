@@ -16,7 +16,7 @@ jobs:
       name: "github-pages"
       url: "${{ steps.deployment.outputs.page_url }}"
 
-    runs-on: self-hosted
+    runs-on: deployinatorv1
     steps:
     - uses: actions/setup-node@v3
       with:

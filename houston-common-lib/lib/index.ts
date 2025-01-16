@@ -31,6 +31,9 @@ export * from "@/errors";
 export * from "@/download";
 export * from "@/upload";
 export * from "@/functional";
+export * from "@/unwrap";
+
+export * as legacy from "@/legacy";
 
 window.reportHoustonError ??= (e, ctx: string = "") => {
   console.error(ctx, e);

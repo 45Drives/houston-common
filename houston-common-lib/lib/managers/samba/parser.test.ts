@@ -1,4 +1,4 @@
-import { type KeyValueData } from "@45drives/houston-common-lib";
+import { type KeyValueData } from "@/syntax";
 import { SambaConfig, SambaGlobalConfig, SambaShareConfig } from "./types";
 import { ok } from "neverthrow";
 import { suite, test, expect } from "vitest";

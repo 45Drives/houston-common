@@ -36,6 +36,7 @@ findResult.match(
 
 // 3. or if whatever you are doing to the result also returns a Result, use .andThen instead of .map
 const rmResult = findResult.andThen((filePaths: string[]) =>
+  // this callback only runs if findResult was successful
   server.execute(new Command(["rm", ...filePaths]))
 );
 

@@ -4,6 +4,9 @@ Common library for Houston
 ## API Documentation
 https://45drives.github.io/houston-common/
 
+## Result/ResultAsync documentation from neverthrow
+https://github.com/supermacro/neverthrow
+
 ## Example
 ### Running command and processing output
 ```ts

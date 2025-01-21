@@ -5,7 +5,7 @@
 	"entryPoints": ["houston-common-lib", "houston-common-ui"],
 	"out": "docs",
     "includeVersion": false,
-	"readme": "none",
+	"readme": "README.md",
     "plugin": [
         "typedoc-umlclass",
         "typedoc-plugin-mdn-links",

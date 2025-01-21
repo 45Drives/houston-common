@@ -12,6 +12,8 @@ export * from "@/user";
 export * from "@/group";
 export * from "@/filesystem";
 
+export const server = new Server();
+
 export function getServer(host: string = "localhost"): ResultAsync<Server, ProcessError> {
   const server = new Server(host);
   return server.isAccessible().map(() => server);

@@ -32,6 +32,7 @@ export * from "@/download";
 export * from "@/upload";
 export * from "@/functional";
 export * from "@/unwrap";
+export * from "@/managers";
 
 export * as legacy from "@/legacy";
 

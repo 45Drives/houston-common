@@ -1,6 +1,6 @@
 import { KeyValueData } from "@/syntax";
 import { Maybe, None, Some } from "monet";
-import { Result } from "neverthrow";
+import { Result, ResultAsync, ok, err } from "neverthrow";
 
 export type ValueElseUndefiend<T> = T extends string | number | boolean | symbol | object
   ? T
@@ -201,3 +201,25 @@ export const safeJsonParse = <T = any>(...args: Parameters<typeof JSON.parse>) =
     (...args: Parameters<typeof JSON.parse>) => JSON.parse(...args) as Partial<T>,
     (e) => (e instanceof SyntaxError ? e : new SyntaxError(`${e}`))
   )(...args);
+
+export function runInSequence<T, E, Args extends any[]>(
+  ...args: Args
+): (fns: ReadonlyArray<(...args: Args) => ResultAsync<T, E>>) => ResultAsync<Array<T>, E> {
+  return (fns) => {
+    const run = async () => {
+      const okValues: Array<T> = [];
+
+      for (const fn of fns) {
+        const result = await fn(...args);
+        if (result.isErr()) {
+          return err(result.error);
+        }
+        okValues.push(result.value);
+      }
+
+      return ok(okValues);
+    };
+
+    return new ResultAsync(run());
+  };
+}

@@ -17,7 +17,7 @@ export class EasySetupConfigurator implements IEasySetupConfigurator {
 
   applyConfig(config: EasySetupConfig): ResultAsync<void, ProcessError> {
 
-    return this.applyZFSConfig(config)satisfies
+    return this.applyZFSConfig(config)
       .andThen(() => this.applySambaConfig(config));
   }
 

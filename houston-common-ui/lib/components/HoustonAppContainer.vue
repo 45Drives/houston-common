@@ -28,7 +28,7 @@ const props = defineProps<{
 }>();
 
 const {
-  entries: tabEntries,
+  currentComponent,
   labels: tabLabels,
   index: tabIndex,
 } = defineHoustonAppTabState(computed(() => props.tabs ?? []));
@@ -59,7 +59,7 @@ watchEffect(() => {
     >
       <div :class="['bg-well grow', (noScroll? '' : 'overflow-y-auto')]" style="scrollbar-gutter: stable both-edges">
         <slot>
-          <TabView v-if="tabs" :entries="tabEntries" :index="tabIndex" />
+          <TabView v-if="tabs" :currentComponent="currentComponent" />
         </slot>
       </div>
       <div class="grow-0 overflow-visible relative">

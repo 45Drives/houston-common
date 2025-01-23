@@ -48,7 +48,7 @@ export class Server {
     return this.execute(new Command(["true"]), true).map(() => true);
   }
 
-  getServerInfo(): ResultAsync<ServerInfo, ProcessError> {
+  getServerInfo(): ResultAsync<Partial<ServerInfo>, ProcessError | SyntaxError> {
     return new File(
       this,
       "/etc/45drives/server_info/server_info.json"

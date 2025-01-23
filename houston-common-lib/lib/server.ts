@@ -5,6 +5,33 @@ import { Group, LocalGroup, isLocalGroup } from "@/group";
 import { Directory, File } from "@/path";
 import { ParsingError, ProcessError, ValueError } from "@/errors";
 import { Download } from "@/download";
+import { safeJsonParse } from "./utils";
+
+export type ServerInfo = {
+  Motherboard: {
+    Manufacturer: string,
+    ["Product Name"]: string,
+    ["Serial Number"]: string
+  },
+  HBA:
+  ({
+    Model: string,
+    Adapter: string,
+    "Bus Address": string,
+    "Drive Connections": number,
+    "Kernel Driver": string,
+    "PCI Slot": number
+  })[],
+  Hybrid: boolean,
+  Serial: string,
+  Model: string,
+  "Alias Style": string,
+  "Chassis Size": string,
+  VM: boolean,
+  "Edit Mode": boolean,
+  "OS NAME": string,
+  "OS VERSION_ID": string
+}
 
 export class Server {
   public readonly host?: string;
@@ -19,6 +46,14 @@ export class Server {
 
   isAccessible(): ResultAsync<true, ProcessError> {
     return this.execute(new Command(["true"]), true).map(() => true);
+  }
+
+  getServerInfo(): ResultAsync<ServerInfo> {
+    return new File(
+      this,
+      "/etc/45drives/server_info/server_info.json"
+    ).read()
+      .andThen(safeJsonParse<ServerInfo>);
   }
 
   getHostname(cache: boolean = true): ResultAsync<string, ProcessError> {

@@ -21,7 +21,7 @@ export class EasySetupConfigurator implements IEasySetupConfigurator {
       .andThen(() => this.applySambaConfig(config));
   }
 
-  private applyZFSConfig(config: EasySetupConfig) {
+  private applyZFSConfig(_config: EasySetupConfig) {
     return okAsync({});
   }
 

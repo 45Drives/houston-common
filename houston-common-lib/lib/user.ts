@@ -3,41 +3,41 @@ import { Server } from "@/server";
 import { useSpawn, errorString } from '@/legacy/useSpawn';
 
 export type User = {
-  server: Server;
-  login?: string;
-  uid: number;
-  gid?: number;
-  name?: string;
-  home?: Directory;
-  shell?: File;
+	server: Server;
+	login?: string;
+	uid: number;
+	gid?: number;
+	name?: string;
+	home?: Directory;
+	shell?: File;
 };
 
 export type LocalUser = Required<User>;
 
 export function User(
-  server: Server,
-  login: string | undefined,
-  uid: number,
-  gid: number | undefined,
-  name: string | undefined,
-  home: Directory | undefined,
-  shell: File | undefined
+	server: Server,
+	login: string | undefined,
+	uid: number,
+	gid: number | undefined,
+	name: string | undefined,
+	home: Directory | undefined,
+	shell: File | undefined
 ): User {
-  return {
-    server,
-    login,
-    uid,
-    gid,
-    name,
-    home,
-    shell,
-  };
+	return {
+		server,
+		login,
+		uid,
+		gid,
+		name,
+		home,
+		shell,
+	};
 }
 
 export function isLocalUser(user: User): user is LocalUser {
-  return [user.login, user.gid, user.name, user.home, user.shell].every(
-    (prop) => prop !== undefined
-  );
+	return [user.login, user.gid, user.name, user.home, user.shell].every(
+		(prop) => prop !== undefined
+	);
 }
 
 /**
@@ -48,17 +48,17 @@ export function isLocalUser(user: User): user is LocalUser {
  * @returns {object} - Errors object, empty if valid.
  */
 export function validateNewUser(user: { username: string; groups?: string[] }, existingUsers: string[], existingGroups: string[]) {
-  const errors: Record<string, string> = {};
-  if (!user.username || user.username.length < 3) {
-    errors.username = 'Username must be at least 3 characters long.';
-  }
-  if (existingUsers.includes(user.username)) {
-    errors.username = 'This username already exists.';
-  }
-  if (user.groups?.some((group) => !existingGroups.includes(group))) {
-    errors.groups = 'Some groups are invalid.';
-  }
-  return errors;
+	const errors: Record<string, string> = {};
+	if (!user.username || user.username.length < 3) {
+		errors.username = 'Username must be at least 3 characters long.';
+	}
+	if (existingUsers.includes(user.username)) {
+		errors.username = 'This username already exists.';
+	}
+	if (user.groups?.some((group) => !existingGroups.includes(group))) {
+		errors.groups = 'Some groups are invalid.';
+	}
+	return errors;
 }
 
 /**
@@ -67,10 +67,10 @@ export function validateNewUser(user: { username: string; groups?: string[] }, e
  * @returns {object} - Default values (e.g., home directory, primary group).
  */
 export function getDefaultUserFields(username: string) {
-  return {
-    home: `/home/${username}`,
-    primaryGroup: username,
-  };
+	return {
+		home: `/home/${username}`,
+		primaryGroup: username,
+	};
 }
 
 /**
@@ -80,14 +80,14 @@ export function getDefaultUserFields(username: string) {
  * @returns {Promise<object>} - Success or error message.
  */
 export async function setPassword(username: string, password: string) {
-  try {
-    const state = useSpawn(['passwd', username], { superuser: 'try' });
-    state.proc.input(`${password}\n${password}\n`);
-    await state.promise();
-    return { success: true, message: `Password set for user ${username}.` };
-  } catch (error) {
-    throw new Error(`Failed to set password for user ${username}: ${errorString(error)}`);
-  }
+	try {
+		const state = useSpawn(['passwd', username], { superuser: 'try' });
+		state.proc.input(`${password}\n${password}\n`);
+		await state.promise();
+		return { success: true, message: `Password set for user ${username}.` };
+	} catch (error) {
+		throw new Error(`Failed to set password for user ${username}: ${errorString(error)}`);
+	}
 }
 
 /**
@@ -98,29 +98,66 @@ export async function setPassword(username: string, password: string) {
  * @returns {Promise<object>} - Success or error message.
  */
 export async function addUser(
-  user: { username: string; home?: string; shell?: string; groups?: string[]; password?: string },
-  existingUsers: string[],
-  existingGroups: string[]
+	user: { username: string; home?: string; shell?: string; groups?: string[]; password?: string },
+	existingUsers: string[],
+	existingGroups: string[]
 ) {
-  const errors = validateNewUser(user, existingUsers, existingGroups);
-  if (Object.keys(errors).length > 0) {
-    return { success: false, errors };
-  }
+	const errors = validateNewUser(user, existingUsers, existingGroups);
+	if (Object.keys(errors).length > 0) {
+		return { success: false, errors };
+	}
 
-  const defaults = getDefaultUserFields(user.username);
-  const argv = ['useradd', '-m', user.username];
-  argv.push('--home', user.home || defaults.home);
-  argv.push('--user-group');
-  if (user.shell) argv.push('-s', user.shell);
-  if (user.groups?.length) argv.push('--groups', user.groups.join(','));
+	const defaults = getDefaultUserFields(user.username);
+	const argv = ['useradd', '-m', user.username];
+	argv.push('--home', user.home || defaults.home);
+	argv.push('--user-group');
+	if (user.shell) argv.push('-s', user.shell);
+	if (user.groups?.length) argv.push('--groups', user.groups.join(','));
 
-  try {
-    await useSpawn(argv, { superuser: 'try' }).promise();
-    if (user.password) {
-      await setPassword(user.username, user.password);
-    }
-    return { success: true, message: `User ${user.username} added successfully.` };
-  } catch (error) {
-    throw new Error(`Failed to add user: ${errorString(error)}`);
-  }
+	try {
+		await useSpawn(argv, { superuser: 'try' }).promise();
+		if (user.password) {
+			await setPassword(user.username, user.password);
+		}
+		return { success: true, message: `User ${user.username} added successfully.` };
+	} catch (error) {
+		throw new Error(`Failed to add user: ${errorString(error)}`);
+	}
+}
+
+/**
+ * Fetches a list of system users.
+ * @returns {Promise<object[]>} - A list of user objects with details.
+ */
+export async function getUsers(): Promise<{ user: string; name: string; uid: number; currentLoggedIn: boolean }[]> {
+	try {
+		const currentLoggedInUser = (await cockpit.user()).name; // Get the current user
+		const state = useSpawn(['getent', 'passwd'], { superuser: 'try' });
+		const passwdOutput = (await state.promise()).stdout;
+
+		const users = passwdOutput!
+			.split('\n')
+			.map((record) => {
+				if (/^\s*$/.test(record)) return null; // Skip empty lines
+				const fields = record.split(':');
+				const uid = fields[2];
+				const uidInt = parseInt(uid || '', 10); // Ensure we handle undefined cases
+				if (isNaN(uidInt) || (uidInt < 1000 && uidInt !== 0)) return null; // Filter out system users
+
+				const user = fields[0] || ''; // Default to empty string if undefined
+				const name = fields[4] || user; // Use username if name field is empty
+
+				return {
+					user,
+					name,
+					uid: uidInt,
+					currentLoggedIn: user === currentLoggedInUser,
+				};
+			})
+			.filter((user): user is { user: string; name: string; uid: number; currentLoggedIn: boolean } => user !== null); // Type guard to filter out nulls
+			console.log('users:', users);
+		return users;
+	} catch (error) {
+		throw new Error(`Failed to fetch users: ${ errorString(error) }`);
+	}
 }

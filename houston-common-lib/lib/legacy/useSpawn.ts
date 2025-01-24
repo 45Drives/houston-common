@@ -99,7 +99,9 @@ export function useSpawn(
 ): SpawnState<string> | SpawnState<Uint8Array> {
   opts.superuser ??= "require";
   opts.err ??= stderr;
-  const state = {
+
+/*
+const state = {
     loading: true,
     argv: [...argv],
     proc: cockpit.spawn(argv, opts as any),
@@ -126,7 +128,43 @@ export function useSpawn(
     promise: () => state._promise,
     argvPretty: () => {
       return argv.map((token) => (/\s/.test(token) ? `"${token}"` : token)).join(" ");
-    },
+    }, 
+*/
+
+  // Initialize state as undefined to delay its definition
+  let state: SpawnState<string | Uint8Array>;
+
+  const _promise = new Promise<SpawnState<string | Uint8Array>>((resolve, reject) => {
+    const proc = cockpit.spawn(argv, opts as any);
+
+    proc
+      .then((_stdout, _stderr) => {
+        state.stdout = _stdout;
+        state.stderr = _stderr;
+        resolve(state);
+      })
+      .catch((ex, _stdout) => {
+        state.stdout = _stdout;
+        state.stderr = ex.message ?? ex.problem;
+        state.status = ex.exit_status ?? undefined;
+        reject(state);
+      })
+      .finally(() => {
+        state.loading = false;
+      });
+  });
+
+  state = {
+    loading: true,
+    argv: [...argv],
+    proc: cockpit.spawn(argv, opts as any),
+    stdout: undefined,
+    stderr: undefined,
+    status: undefined,
+    _promise,
+    promise: () => _promise,
+    argvPretty: () =>
+      argv.map((token) => (/\s/.test(token) ? `"${token}"` : token)).join(" "),
     errorStringHTML(fullArgv = false) {
       return (
         '<span class="font-mono text-sm whitespace-pre-wrap">' +
@@ -163,7 +201,7 @@ export function errorString(
  * @returns Error message Formatted as HTML for use in Notifications body
  */
 export function errorStringHTML(state: SpawnState<any> | { message: string; } | string | any): string {
-	if (typeof state === "string")
-		return `<span class="text-gray-500 font-mono text-sm whitespace-pre-wrap">${state}</span>`;
-	return (state.errorStringHTML?.() ?? (`<span class="text-gray-500 font-mono text-sm whitespace-pre-wrap">${state?.stderr ?? state?.message ?? JSON.stringify(state)}</span>`));
+  if (typeof state === "string")
+    return `<span class="text-gray-500 font-mono text-sm whitespace-pre-wrap">${state}</span>`;
+  return (state.errorStringHTML?.() ?? (`<span class="text-gray-500 font-mono text-sm whitespace-pre-wrap">${state?.stderr ?? state?.message ?? JSON.stringify(state)}</span>`));
 }

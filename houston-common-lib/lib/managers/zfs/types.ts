@@ -91,7 +91,7 @@ export interface PoolData extends basePoolData {
 	}
 	createFileSystem?: boolean;
 	fileSystem?: FileSystemData;
-	datasets?: any;
+	datasets?: any[];
 	errors?: string[];
 	statusCode: string | null;
 	statusDetail: string | null;

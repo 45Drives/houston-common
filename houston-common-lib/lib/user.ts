@@ -44,21 +44,16 @@ export function isLocalUser(user: User): user is LocalUser {
  * Validates user input for adding a new user.
  * @param {object} user - The user details to validate.
  * @param {string[]} existingUsers - A list of existing usernames.
- * @param {string[]} existingGroups - A list of existing group names.
  * @returns {object} - Errors object, empty if valid.
  */
-export function validateNewUser(user: { username: string; groups?: string[] }, existingUsers: string[], existingGroups: string[]) {
-	const errors: Record<string, string> = {};
-	if (!user.username || user.username.length < 3) {
-		errors.username = 'Username must be at least 3 characters long.';
+export function validateNewUser(userName: string , existingUsers: string[]) {
+	if (!userName) {
+		return 'Username is required.';
 	}
-	if (existingUsers.includes(user.username)) {
-		errors.username = 'This username already exists.';
+	if (existingUsers.includes(userName)) {
+		return `User ${userName} already exists.`;
 	}
-	if (user.groups?.some((group) => !existingGroups.includes(group))) {
-		errors.groups = 'Some groups are invalid.';
-	}
-	return errors;
+	return null;
 }
 
 /**
@@ -79,51 +74,129 @@ export function getDefaultUserFields(username: string) {
  * @param {string} password - The password to set.
  * @returns {Promise<object>} - Success or error message.
  */
-export async function setPassword(username: string, password: string) {
+// export async function setNewPassword(username: string, password: string) {
+// 	try {
+// 		const state = useSpawn(['passwd', username], { superuser: 'try' });
+// 		state.proc.input(`${password}\n${password}\n`);
+// 		await state.promise();
+// 		return { success: true, message: `Password set for user ${username}.` };
+// 	} catch (error) {
+// 		throw new Error(`Failed to set password for user ${username}: ${errorString(error)}`);
+// 	}
+// }
+
+// export async function setNewPassword(username: string, password: string) {
+// 	try {
+// 		const state = useSpawn(['chpasswd'], { superuser: 'try' });
+// 		state.proc.input(`${username}:${password}\n`);
+// 		await state.promise();
+// 		return { success: true, message: `Password set for user ${username}.` };
+// 	} catch (error) {
+// 		throw new Error(`Failed to set password for user ${username}: ${errorString(error)}`);
+// 	}
+// }
+
+// export async function setNewPassword(username: string, password: string) {
+// 	try {
+// 		const state = useSpawn(['passwd', username], { superuser: 'try' });
+
+// 		// Send the password for both prompts
+// 		state.proc.input(`${password}\n`);
+// 		state.proc.input(`${password}\n`);
+
+// 		// Wait for the process to complete
+// 		await state.promise();
+
+// 		return { success: true, message: `Password set for user ${username}.` };
+// 	} catch (error) {
+// 		throw new Error(`Failed to set password for user ${username}: ${errorString(error)}`);
+// 	}
+// }
+
+export async function setNewPassword(username: string, password: string) {
 	try {
 		const state = useSpawn(['passwd', username], { superuser: 'try' });
-		state.proc.input(`${password}\n${password}\n`);
-		await state.promise();
+
+		state.proc.input(`${password}\n`);
+		state.proc.input(`${password}\n`);
+
+		const result = await state.promise();
+		console.log('stdout:', result.stdout);
+		console.log('stderr:', result.stderr);
+
 		return { success: true, message: `Password set for user ${username}.` };
 	} catch (error) {
+		console.error('Error:', error);
 		throw new Error(`Failed to set password for user ${username}: ${errorString(error)}`);
 	}
 }
 
+
+
+/* export async function setNewPassword(username: string, password: string) {
+	console.log(`Attempting to set password for user: ${username}`);
+	try {
+		const state = useSpawn(['passwd', username], { superuser: 'try' });
+		console.log('Spawned process for setting password:', state);
+
+		state.proc.input(`${password}\n${password}\n`);
+		console.log('Password input sent to process.');
+
+		await state.promise();
+		console.log(`Password successfully set for user: ${username}`);
+
+		return { success: true, message: `Password set for user ${username}.` };
+	} catch (error) {
+		console.error(`Error setting password for user ${username}:`, error);
+		throw new Error(`Failed to set password for user ${username}: ${errorString(error)}`);
+	}
+} */
+
+
 /**
- * Adds a new user and optionally sets a password.
+ * Adds a new user.
  * @param {object} user - The user details.
  * @param {string[]} existingUsers - A list of existing usernames.
  * @param {string[]} existingGroups - A list of existing group names.
  * @returns {Promise<object>} - Success or error message.
  */
 export async function addUser(
-	user: { username: string; home?: string; shell?: string; groups?: string[]; password?: string },
+	user: {
+		user: string; home?: string; shell?: {
+			path: string, name: string, isShellObj: boolean, isCustom: boolean
+		};
+		groups?: string[]; password?: string, name?: string, primaryGroup?: string
+	},
 	existingUsers: string[],
-	existingGroups: string[]
 ) {
-	const errors = validateNewUser(user, existingUsers, existingGroups);
-	if (Object.keys(errors).length > 0) {
-		return { success: false, errors };
-	}
-
-	const defaults = getDefaultUserFields(user.username);
-	const argv = ['useradd', '-m', user.username];
-	argv.push('--home', user.home || defaults.home);
-	argv.push('--user-group');
-	if (user.shell) argv.push('-s', user.shell);
-	if (user.groups?.length) argv.push('--groups', user.groups.join(','));
-
 	try {
-		await useSpawn(argv, { superuser: 'try' }).promise();
-		if (user.password) {
-			await setPassword(user.username, user.password);
+		const validationError = validateNewUser(user.user, existingUsers);
+		if (validationError) {
+			console.warn("Validation error:", validationError);
+			return { success: false, error: validationError };
 		}
-		return { success: true, message: `User ${user.username} added successfully.` };
+
+		const defaults = getDefaultUserFields(user.user);
+		const argv = ['useradd', '-m'];
+
+		if (user.name) argv.push('--comment', user.name);
+		if (user.home) argv.push('--home', user.home || defaults.home);
+		argv.push('--user-group');
+		if (user.groups?.length) argv.push('--groups', user.groups.join(','));
+		if (user.shell) argv.push('-s', user.shell.path);
+		argv.push(user.user);
+
+		console.log("Executing useradd with arguments:", argv);
+
+		await useSpawn(argv, { superuser: 'try' }).promise();
+		console.log("User successfully added:", user.user);
+		return { success: true, message: `User ${user.user} added successfully.` };
 	} catch (error) {
-		throw new Error(`Failed to add user: ${errorString(error)}`);
+		console.error("Failed to add user:", user.user, error);
+		return { success: false, error: `Failed to add user '${user.user}': ${errorString(error)}` };
 	}
 }
+
 
 /**
  * Fetches a list of system users.
@@ -155,9 +228,48 @@ export async function getUsers(): Promise<{ user: string; name: string; uid: num
 				};
 			})
 			.filter((user): user is { user: string; name: string; uid: number; currentLoggedIn: boolean } => user !== null); // Type guard to filter out nulls
-			console.log('users:', users);
 		return users;
 	} catch (error) {
 		throw new Error(`Failed to fetch users: ${ errorString(error) }`);
 	}
 }
+
+// export async function getUsers(): Promise<{ user: string; name: string; uid: number; currentLoggedIn: boolean }[]> {
+// 	console.log("Fetching system users...");
+// 	try {
+// 		const currentLoggedInUser = (await cockpit.user()).name; // Get the current user
+// 		// console.log("Current logged-in user:", currentLoggedInUser);
+
+// 		const state = useSpawn(['getent', 'passwd'], { superuser: 'try' });
+// 		const passwdOutput = (await state.promise()).stdout;
+
+// 		// console.log("Raw passwd output:", passwdOutput);
+
+// 		const users = passwdOutput!
+// 			.split('\n')
+// 			.map((record) => {
+// 				if (/^\s*$/.test(record)) return null; // Skip empty lines
+// 				const fields = record.split(':');
+// 				const uid = fields[2];
+// 				const uidInt = parseInt(uid || '', 10); // Ensure we handle undefined cases
+// 				if (isNaN(uidInt) || (uidInt < 1000 && uidInt !== 0)) return null; // Filter out system users
+
+// 				const user = fields[0] || ''; // Default to empty string if undefined
+// 				const name = fields[4] || user; // Use username if name field is empty
+
+// 				return {
+// 					user,
+// 					name,
+// 					uid: uidInt,
+// 					currentLoggedIn: user === currentLoggedInUser,
+// 				};
+// 			})
+// 			.filter((user): user is { user: string; name: string; uid: number; currentLoggedIn: boolean } => user !== null); // Type guard to filter out nulls
+
+// 		console.log("Parsed user list:", users);
+// 		return users;
+// 	} catch (error) {
+// 		console.error("Failed to fetch users:", error);
+// 		throw new Error(`Failed to fetch users: ${errorString(error)}`);
+// 	}
+// }

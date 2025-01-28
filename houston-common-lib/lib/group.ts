@@ -35,12 +35,20 @@ export function isLocalGroup(group: Group): group is LocalGroup {
  * @returns {string | null} - An error message if invalid, otherwise `null`.
  */
 function validateNewGroup(groupName: string, existingGroups: string[]): string | null {
-	if (!groupName || groupName.length < 3) {
-		return 'Group name must be at least 3 characters long.';
+	if (!groupName || groupName.length > 32) {
+		return 'Group name is too long.';
 	}
 	if (existingGroups.includes(groupName)) {
 		return `Group '${groupName}' already exists.`;
 	}
+	if (!groupName) {
+		return 'Group name required.';
+	}
+	if (!/^[a-z_][a-z0-9_-]*[\$a-z0-9_-]?$/.test(groupName)) {
+		const invalidCharacters = [...(groupName.match(/^[^a-z_]|[^a-z0-9_-](?=.+)|[^\$a-z0-9_-]$/g) ?? [])];
+		return `Invalid character${invalidCharacters.length > 1 ? 's' : '' + invalidCharacters.filter((c, i, a) => a.indexOf(c) === i).map(char => `'${char}'`).join(', ')}`
+	} 
+
 	return null;
 }
 
@@ -51,13 +59,14 @@ function validateNewGroup(groupName: string, existingGroups: string[]): string |
  * @returns {Promise<object>} - Success or error message.
  */
 export async function createNewGroup(groupName: string, existingGroups: string[]) {
-	const validationError = validateNewGroup(groupName, existingGroups);
-	if (validationError) {
-		return { success: false, error: validationError };
-	}
-
 	try {
+		const validationError = validateNewGroup(groupName, existingGroups);
+		if (validationError) {
+			console.log('validation error');
+			return { success: false, error: validationError };
+		}
 		await useSpawn(['groupadd', groupName], { superuser: 'try' }).promise();
+		console.log('created new group');
 		return { success: true, message: `Group '${groupName}' created successfully.` };
 	} catch (error) {
 		throw new Error(`Failed to create group '${groupName}': ${errorString(error)}`);

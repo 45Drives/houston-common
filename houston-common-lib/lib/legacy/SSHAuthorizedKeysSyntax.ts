@@ -14,16 +14,17 @@
  * If not, see <https://www.gnu.org/licenses/>. 
  */
 
-import { useSpawn, errorString } from '@45drives/cockpit-helpers';
+import { useSpawn, errorString } from '.';
 
-async function getFingerprint(pubKey) {
+
+export async function getFingerprint(pubKey: string) {
 	let tmpFile, result;
 	try {
-		tmpFile = (await useSpawn(['mktemp'], { superuser: 'try' }).promise()).stdout.trim();
+		tmpFile = (await useSpawn(['mktemp'], { superuser: 'try' }).promise()).stdout!.trim();
 		const ddState = useSpawn(['dd', `of=${tmpFile}`], { superuser: 'try' });
 		ddState.proc.input(pubKey);
 		await ddState.promise();
-		result = (await useSpawn(['ssh-keygen', '-l', '-f', tmpFile], { superuser: 'try' }).promise()).stdout
+		result = (await useSpawn(['ssh-keygen', '-l', '-f', tmpFile], { superuser: 'try' }).promise()).stdout!
 			.split(' ')[1]
 	} catch (state) {
 		result = "Failed to get fingerprint: " + errorString(state);
@@ -52,7 +53,7 @@ async function getFingerprint(pubKey) {
  * @description
  * Syntax object for parsing/stringifying ~/.ssh/authorized_keys
  */
-const SSHAuthorizedKeysSyntax = {
+export const SSHAuthorizedKeysSyntax = {
 	/**
 	 * Parse text content of ~/.ssh/authorized_keys into array of objects
 	 * @memberof SSHAuthorizedKeysSyntax
@@ -60,12 +61,12 @@ const SSHAuthorizedKeysSyntax = {
 	 * @param {String} confText 
 	 * @returns {Promise<SSHAuthorizedKeyObj[]>}
 	 */
-	parse: async (string) => {
+	parse: async (string: string) => {
 		return (await Promise.all(string.split('\n')
 			.filter(line => !/^(\s*|\s*#.*)$/.test(line)) // remove empty lines and comments
 			.map(line => line.replace(/\s*#.*$/, '')) // remove end-of-line comments
 			.map(async (line) => {
-				const obj = {
+				const obj : any = {
 					pubKey: line,
 					fingerprint: await getFingerprint(line),
 				};
@@ -99,9 +100,9 @@ const SSHAuthorizedKeysSyntax = {
 	 * @param {SSHAuthorizedKeyObj[]} objs
 	 * @returns {String}
 	 */
-	stringify: (objs) => {
+	stringify: (objs: any) => {
 		return (
-			objs.map(obj => [
+			objs.map((obj: { options: any[]; algo: any; pubKey: any; comment: any; }) => [
 					obj.options?.join(',') ?? null,
 					obj.algo,
 					obj.pubKey,
@@ -113,7 +114,3 @@ const SSHAuthorizedKeysSyntax = {
 		) + '\n';
 	}
 };
-
-export {
-	SSHAuthorizedKeysSyntax,
-}

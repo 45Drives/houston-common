@@ -3,3 +3,4 @@ export * from "./samba/types";
 export * from "./samba/parser";
 export * from "./zfs/types";
 export * from "./zfs/pools";
+export * from "./easysetup/manager";

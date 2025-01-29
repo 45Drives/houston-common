@@ -1,9 +1,53 @@
-export interface basePoolData{
-	name: string;
-	vdevs: vDevData[];
+
+
+// export interface VDevDiskBase{
+// 	name: string;
+// 	capacity: string;
+// 	model: string;
+// 	guid: string;
+// 	type: string;
+// 	health: string;
+// 	stats: Record<string, any>;
+// 	path: string;
+// 	phy_path: string;
+// 	sd_path: string;
+// 	vdev_path: string;
+// 	serial: string;
+// 	temp: string;
+// 	powerOnCount: string;
+// 	powerOnHours: number;
+// 	rotationRate: number;
+// }
+
+
+export type DiskIdentifier = 'vdev_path' | 'phy_path' | 'sd_path';
+
+//object for disk
+// export interface VDevDisk extends VDevDiskBase{
+	
+// 	vDevName?: string;
+// 	poolName?: string;
+// 	identifier?: DiskIdentifier;
+// 	children?: ChildDiskData[];
+// 	vDevType?: 'data' | 'cache' | 'log' | 'dedup' | 'special' | 'spare';
+// 	errors?: string[];
+// 	hasPartitions?: boolean;
+// }
+
+export interface VDevDisk {
+	blockDev: string;
 }
+
+export type VDevType = 
+'single' | 'mirror' |
+ 'data' | 'cache' | 'log' | 'dedup' | 'special' | 'spare';
+export interface VDevBase {
+	type:  'data' | 'cache' | 'log' | 'dedup' | 'special' | 'spare';
+	disks: VDevDisk[];
+}
+
 //object for vdev
-export interface vDevData extends basevDevData {
+export interface VDev extends VDevBase {
 	name: string;
 	// type: 'disk' | 'mirror' | 'raidz1' | 'raidz2' | 'raidz3' | 'cache' | 'log' | 'dedup' | 'special' | 'spare';
 	status: string;
@@ -23,45 +67,29 @@ export interface vDevData extends basevDevData {
 	path?: string;
 }
 
-export interface basevDevData{
-	type: string;
-	disks: DiskData[];
+export interface ZPoolBase {
+	name: string;
+	vdevs: VDev[];
+}
 
-}
-export interface baseDiskData{
-	name: string;
-	capacity: string;
-	model: string;
-	guid: string;
-	type: string;
-	health: string;
-	stats: Record<string, any>;
-	path: string;
-	phy_path: string;
-	sd_path: string;
-	vdev_path: string;
-	serial: string;
-	temp: string;
-	powerOnCount: string;
-	powerOnHours: number;
-	rotationRate: number;
-}
-//pool object for creating new pool command
-export interface newPoolData {
-	name: string;
-	vdevs: newVDevData[];
-	autoexpand: string;
-	autoreplace: string;
-	autotrim: string;
-	compression: string;
-	recordsize: number;
-	sectorsize: number;
-	dedup: string;
+export interface ZPoolOptions {
+	autoexpand?: string;
+	autoreplace?: string;
+	autotrim?: string;
+	compression?: string;
+	recordsize?: number;
+	sectorsize?: number;
+	dedup?: string;
 	forceCreate?: boolean;
-	refreservationPercent: number;
+	refreservationPercent?: number;
 }
 
-export interface PoolData extends basePoolData {
+export interface ZpoolCreateOptions extends ZPoolBase, ZPoolOptions {
+
+}
+
+
+export interface ZPool extends ZPoolBase {
 	status: string;
 	guid: string;
 	properties: {
@@ -124,21 +152,6 @@ export interface NewDataset {
 	recordsize: string;
 	quota: string;
 	readonly: string;
-}
-
-
-export type DiskIdentifier = 'vdev_path' | 'phy_path' | 'sd_path';
-
-//object for disk
-export interface DiskData extends baseDiskData{
-	
-	vDevName?: string;
-	poolName?: string;
-	identifier?: DiskIdentifier;
-	children?: ChildDiskData[];
-	vDevType?: 'data' | 'cache' | 'log' | 'dedup' | 'special' | 'spare';
-	errors?: string[];
-	hasPartitions?: boolean;
 }
 
 export interface ChildDiskData {

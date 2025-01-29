@@ -1,6 +1,6 @@
 import { ref} from 'vue';
 import { legacy } from '@/index';
-import type { basePoolData, NewDataset, newPoolData,newVDevData, PoolData } from './types';
+import type { ZPoolBase, NewDataset, newPoolData,newVDevData, ZPool } from './types';
 //object for pool
 
 const {useSpawn, errorString} = legacy;
@@ -17,7 +17,7 @@ const newVDevData = ref<newVDevData>({
 
 
 //Function to run command to create new Pool
-export async function newPool(pool: basePoolData | newPoolData): Promise<any> {
+export async function newPool(pool: ZPoolBase | newPoolData): Promise<any> {
 	try {
 	  // Reset vdevs and pool disks
 	   newVDevs.value = [];
@@ -151,11 +151,11 @@ export async function newPool(pool: basePoolData | newPoolData): Promise<any> {
   }
   
   // Type guard to check if pool is newPoolData
-  function isNewPoolData(pool: basePoolData | newPoolData): pool is newPoolData {
+  function isNewPoolData(pool: ZPoolBase | newPoolData): pool is newPoolData {
 	return 'sectorsize' in pool && 'compression' in pool;
   }
 
-  export async function addVDev(pool:PoolData, vdev:newVDevData) {
+  export async function addVDev(pool:ZPool, vdev:newVDevData) {
     try {
       let cmdString = ['zpool', 'add'];
   

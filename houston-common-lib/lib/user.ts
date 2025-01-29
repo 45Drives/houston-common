@@ -74,84 +74,17 @@ export function getDefaultUserFields(username: string) {
  * @param {string} password - The password to set.
  * @returns {Promise<object>} - Success or error message.
  */
-// export async function setNewPassword(username: string, password: string) {
-// 	try {
-// 		const state = useSpawn(['passwd', username], { superuser: 'try' });
-// 		state.proc.input(`${password}\n${password}\n`);
-// 		await state.promise();
-// 		return { success: true, message: `Password set for user ${username}.` };
-// 	} catch (error) {
-// 		throw new Error(`Failed to set password for user ${username}: ${errorString(error)}`);
-// 	}
-// }
-
-// export async function setNewPassword(username: string, password: string) {
-// 	try {
-// 		const state = useSpawn(['chpasswd'], { superuser: 'try' });
-// 		state.proc.input(`${username}:${password}\n`);
-// 		await state.promise();
-// 		return { success: true, message: `Password set for user ${username}.` };
-// 	} catch (error) {
-// 		throw new Error(`Failed to set password for user ${username}: ${errorString(error)}`);
-// 	}
-// }
-
-// export async function setNewPassword(username: string, password: string) {
-// 	try {
-// 		const state = useSpawn(['passwd', username], { superuser: 'try' });
-
-// 		// Send the password for both prompts
-// 		state.proc.input(`${password}\n`);
-// 		state.proc.input(`${password}\n`);
-
-// 		// Wait for the process to complete
-// 		await state.promise();
-
-// 		return { success: true, message: `Password set for user ${username}.` };
-// 	} catch (error) {
-// 		throw new Error(`Failed to set password for user ${username}: ${errorString(error)}`);
-// 	}
-// }
-
 export async function setNewPassword(username: string, password: string) {
 	try {
-		const state = useSpawn(['passwd', username], { superuser: 'try' });
-
-		state.proc.input(`${password}\n`);
-		state.proc.input(`${password}\n`);
-
-		const result = await state.promise();
-		console.log('stdout:', result.stdout);
-		console.log('stderr:', result.stderr);
-
+		// const state = useSpawn(['passwd', username], { superuser: 'try' });
+		// state.proc.input(`${password}\n${password}\n`);
+		// await state.promise();
+		await useSpawn(['bash', '-c', `echo -e "${password}\n${password}" | passwd ${username}`], { superuser: 'try' }).promise();
 		return { success: true, message: `Password set for user ${username}.` };
 	} catch (error) {
-		console.error('Error:', error);
 		throw new Error(`Failed to set password for user ${username}: ${errorString(error)}`);
 	}
 }
-
-
-
-/* export async function setNewPassword(username: string, password: string) {
-	console.log(`Attempting to set password for user: ${username}`);
-	try {
-		const state = useSpawn(['passwd', username], { superuser: 'try' });
-		console.log('Spawned process for setting password:', state);
-
-		state.proc.input(`${password}\n${password}\n`);
-		console.log('Password input sent to process.');
-
-		await state.promise();
-		console.log(`Password successfully set for user: ${username}`);
-
-		return { success: true, message: `Password set for user ${username}.` };
-	} catch (error) {
-		console.error(`Error setting password for user ${username}:`, error);
-		throw new Error(`Failed to set password for user ${username}: ${errorString(error)}`);
-	}
-} */
-
 
 /**
  * Adds a new user.
@@ -186,10 +119,10 @@ export async function addUser(
 		if (user.shell) argv.push('-s', user.shell.path);
 		argv.push(user.user);
 
-		console.log("Executing useradd with arguments:", argv);
+		// console.log("Executing useradd with arguments:", argv);
 
 		await useSpawn(argv, { superuser: 'try' }).promise();
-		console.log("User successfully added:", user.user);
+		// console.log("User successfully added:", user.user);
 		return { success: true, message: `User ${user.user} added successfully.` };
 	} catch (error) {
 		console.error("Failed to add user:", user.user, error);
@@ -233,43 +166,3 @@ export async function getUsers(): Promise<{ user: string; name: string; uid: num
 		throw new Error(`Failed to fetch users: ${ errorString(error) }`);
 	}
 }
-
-// export async function getUsers(): Promise<{ user: string; name: string; uid: number; currentLoggedIn: boolean }[]> {
-// 	console.log("Fetching system users...");
-// 	try {
-// 		const currentLoggedInUser = (await cockpit.user()).name; // Get the current user
-// 		// console.log("Current logged-in user:", currentLoggedInUser);
-
-// 		const state = useSpawn(['getent', 'passwd'], { superuser: 'try' });
-// 		const passwdOutput = (await state.promise()).stdout;
-
-// 		// console.log("Raw passwd output:", passwdOutput);
-
-// 		const users = passwdOutput!
-// 			.split('\n')
-// 			.map((record) => {
-// 				if (/^\s*$/.test(record)) return null; // Skip empty lines
-// 				const fields = record.split(':');
-// 				const uid = fields[2];
-// 				const uidInt = parseInt(uid || '', 10); // Ensure we handle undefined cases
-// 				if (isNaN(uidInt) || (uidInt < 1000 && uidInt !== 0)) return null; // Filter out system users
-
-// 				const user = fields[0] || ''; // Default to empty string if undefined
-// 				const name = fields[4] || user; // Use username if name field is empty
-
-// 				return {
-// 					user,
-// 					name,
-// 					uid: uidInt,
-// 					currentLoggedIn: user === currentLoggedInUser,
-// 				};
-// 			})
-// 			.filter((user): user is { user: string; name: string; uid: number; currentLoggedIn: boolean } => user !== null); // Type guard to filter out nulls
-
-// 		console.log("Parsed user list:", users);
-// 		return users;
-// 	} catch (error) {
-// 		console.error("Failed to fetch users:", error);
-// 		throw new Error(`Failed to fetch users: ${errorString(error)}`);
-// 	}
-// }

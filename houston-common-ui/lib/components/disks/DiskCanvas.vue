@@ -13,31 +13,24 @@
 <script setup lang="ts">
 import { ref, inject, provide, watch, reactive, onMounted } from "vue";
 import P5HomeLabHL4 from "./P5HomeLabHL4.vue";
-import { Server } from "@45drives/houston-common-lib";
+import {fetchDiskInfo, fetchLsdev} from "../../composables/disks";
 
-const server = new Server();
-
-// **State Management**
 const serverModel = ref<string | null>(null);
 const currentDisk = ref<string>("");
 const lsdevState = ref<string>("");
 const lsdevJson = reactive<Record<string, any>>({});
 const diskInfo = reactive<Record<string, any>>({});
 
-// **Provide Injected State to Children**
 provide("currentDisk", currentDisk);
 provide("lsdevState", lsdevState);
 provide("lsdevJson", lsdevJson);
 provide("diskInfo", diskInfo);
 
-
-// **Initialization Function**
 const init = async () => {
-    lsdevJson.value = server.fetchLsdev();
-    diskInfo.value = server.fetchDiskInfo();
+    lsdevJson.value = fetchLsdev();
+    diskInfo.value = fetchDiskInfo();
 };
 
-// **Lifecycle Hook**
 onMounted(() => {
     init();
 });

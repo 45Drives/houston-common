@@ -131,11 +131,9 @@ export interface ZpoolCreateOptions {
   refreservationPercent?: number;
 }
 
-
 export interface ZPoolAddVDevOptions {
-	force?: boolean;
+  force?: boolean;
 }
-
 
 export interface ZPool extends ZPoolBase {
   status: string;
@@ -165,9 +163,9 @@ export interface ZPool extends ZPoolBase {
     altroot?: string;
     upgradable?: boolean;
   };
-  createFileSystem?: boolean;
-  fileSystem?: FileSystemData;
-  datasets?: any[];
+  // createFileSystem?: boolean;
+  fileSystem?: ZFSFileSystemInfo;
+  datasets?: Dataset[];
   errors?: string[];
   statusCode: string | null;
   statusDetail: string | null;
@@ -185,36 +183,59 @@ export interface ZPool extends ZPoolBase {
 //   forceAdd?: boolean;
 // }
 
-//dataset command data object
-export interface NewDataset {
+export interface DatasetBase {
   name: string;
-  parent: string;
-  encrypted: boolean;
+}
+
+export interface DatasetCreateOptions {
   encryption?: string;
-  atime: string;
-  casesensitivity: string;
-  compression: string;
-  dedup: string;
-  dnodesize: string;
-  xattr: string;
-  recordsize: string;
-  quota: string;
-  readonly: string;
+  atime?: string;
+  casesensitivity?: string;
+  compression?: string;
+  dedup?: string;
+  dnodesize?: string;
+  xattr?: string;
+  recordsize?: string;
+  quota?: string;
+  readonly?: string;
 }
 
-export interface ChildDiskData {
-  name: string;
-  guid: string;
-  path: string;
-  stats: Record<string, any>;
-  status: string;
-  type: string;
-  children?: [];
-  vDevType?: "data" | "cache" | "log" | "dedup" | "special" | "spare";
+export interface Dataset extends DatasetBase {
+  parent: ZPool | Dataset;
+  children: Dataset[];
+  fileSystem?: ZFSFileSystemInfo;
 }
 
-//object for filesystem
-export interface FileSystemData {
+// //dataset command data object
+// export interface NewDataset {
+//   name: string;
+//   parent: string;
+//   encrypted: boolean;
+//   encryption?: string;
+//   atime: string;
+//   casesensitivity: string;
+//   compression: string;
+//   dedup: string;
+//   dnodesize: string;
+//   xattr: string;
+//   recordsize: string;
+//   quota: string;
+//   readonly: string;
+// }
+
+// export interface ChildDiskData {
+//   name: string;
+//   guid: string;
+//   path: string;
+//   stats: Record<string, any>;
+//   status: string;
+//   type: string;
+//   children?: [];
+//   vDevType?: "data" | "cache" | "log" | "dedup" | "special" | "spare";
+// }
+
+// object for filesystem
+export interface ZFSFileSystemInfo {
   name: string;
   id: string;
   mountpoint: string;
@@ -258,8 +279,6 @@ export interface FileSystemData {
     };
     used: number;
   };
-  children?: FileSystemData[];
-  parentFS?: string;
 }
 
 //object for tracking pool scan (scrub/resilver) data

@@ -9,13 +9,19 @@ import {
   unwrap,
   CommandOptions,
   ZPoolAddVDevOptions,
+  DatasetCreateOptions,
+  Dataset,
 } from "@/index";
 
 export interface IZFSManager {
   createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<void>;
   destroyPool(name: string): Promise<void>;
-  getPools(): Promise<ZPool[]>;
   addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void>;
+  
+  // TODO:
+
+  getPools(): Promise<ZPool[]>;
+  addDataset(parent: ZPoolBase | Dataset, name: string, options: DatasetCreateOptions): Promise<void>;
 }
 
 export class ZFSManager implements IZFSManager {

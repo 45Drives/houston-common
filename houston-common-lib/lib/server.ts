@@ -55,8 +55,29 @@ export class Server {
     ).read()
       .andThen(safeJsonParse<ServerInfo>);
   }
-
   
+  private runCommandJson(command: string[], options: any = {}): ResultAsync<any, Error> {
+    const process = new Process(this, new Command(command, options));
+
+    return process.wait().andThen((exitedProcess) => {
+      if (exitedProcess.failed()) {
+        return ResultAsync.fromPromise(
+          Promise.reject(new Error(`Command failed: ${command.join(" ")}`)),
+          (e) => e as Error
+        );
+      }
+      return safeJsonParse(exitedProcess.getStdout());
+    });
+  }
+
+  public fetchLsdev(): ResultAsync<any, Error> {
+    return this.runCommandJson(["/opt/45drives/tools/lsdev", "--json"]);
+  }
+
+  public fetchDiskInfo(): ResultAsync<any, Error> {
+    return this.runCommandJson(["/public/scripts/disk_info"]);
+  }
+
   async getSystemImgPath(): Promise<string> {
     const serverInfo = await this.getServerInfo().unwrapOr(null);
     const model = serverInfo?.Model ?? ""

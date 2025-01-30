@@ -132,6 +132,11 @@ export interface ZpoolCreateOptions {
 }
 
 
+export interface ZPoolAddVDevOptions {
+	force?: boolean;
+}
+
+
 export interface ZPool extends ZPoolBase {
   status: string;
   guid: string;

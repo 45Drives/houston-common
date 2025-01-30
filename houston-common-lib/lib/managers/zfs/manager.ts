@@ -8,13 +8,14 @@ import {
   ValueError,
   unwrap,
   CommandOptions,
+  ZPoolAddVDevOptions,
 } from "@/index";
 
 export interface IZFSManager {
-  createPool(name: string, vdevs: VDevBase[], options: ZpoolCreateOptions): Promise<void>;
+  createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<void>;
   destroyPool(name: string): Promise<void>;
   getPools(): Promise<ZPool[]>;
-  addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], force?: boolean): Promise<void>;
+  addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void>;
 }
 
 export class ZFSManager implements IZFSManager {
@@ -64,8 +65,8 @@ export class ZFSManager implements IZFSManager {
       .flatMap((vdev) => this.formatVDevArgv(vdev));
   }
 
-  async createPool(name: string, vdevs: VDevBase[], options: ZpoolCreateOptions): Promise<void> {
-    const argv = ["zpool", "create"];
+  async createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<void> {
+    const argv = ["zpool", "create", pool.name];
 
     // set up pool properties
     const poolProps: string[] = [];
@@ -100,7 +101,7 @@ export class ZFSManager implements IZFSManager {
     if (options.forceCreate) argv.push("-f");
 
     // add in vdevs
-    argv.push(...this.formatVDevsArgv(vdevs));
+    argv.push(...this.formatVDevsArgv(pool.vdevs));
 
     console.log("****\ncmdstring:\n", ...argv, "\n****");
 
@@ -122,10 +123,10 @@ export class ZFSManager implements IZFSManager {
     return [];
   }
 
-  async addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], force: boolean = false): Promise<void> {
+  async addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void> {
     const argv = ["zpool", "add"];
 
-    if (force) argv.push("-f");
+    if (options.force) argv.push("-f");
 
     argv.push(pool.name);
 

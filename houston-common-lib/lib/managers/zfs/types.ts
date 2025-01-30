@@ -68,6 +68,7 @@ export type VDevType =
 export interface VDevBase {
   type: VDevType;
   disks: VDevDiskBase[];
+  isMirror?: boolean;
 }
 
 export interface VDev extends VDevBase {
@@ -89,10 +90,6 @@ export namespace VDev {
       if (allDisksAre(type)) return type;
     }
     return "Hybrid";
-  }
-
-  export function isMirror(vdev: VDevBase): boolean {
-	return vdev.type === "mirror";
   }
 }
 
@@ -122,7 +119,7 @@ export interface ZPoolBase {
   vdevs: VDevBase[];
 }
 
-export interface ZPoolOptions {
+export interface ZpoolCreateOptions {
   autoexpand?: string;
   autoreplace?: string;
   autotrim?: string;
@@ -134,7 +131,6 @@ export interface ZPoolOptions {
   refreservationPercent?: number;
 }
 
-export interface ZpoolCreateOptions extends ZPoolBase, ZPoolOptions {}
 
 export interface ZPool extends ZPoolBase {
   status: string;

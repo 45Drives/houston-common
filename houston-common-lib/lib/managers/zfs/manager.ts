@@ -1,23 +1,142 @@
-import { ZpoolCreateOptions, ZPool, Server, Command, ZPoolBase, VDevBase, VDev } from '@/index';
+import {
+  ZpoolCreateOptions,
+  ZPool,
+  Server,
+  Command,
+  ZPoolBase,
+  VDevBase,
+  ValueError,
+  unwrap,
+  CommandOptions,
+} from "@/index";
 
 export interface IZFSManager {
-    createPool(options: ZpoolCreateOptions): Promise<ZPool>;
-    getPools(): Promise<ZPool[]>;
-    addVDevToPool(pool:ZPoolBase, vdev: VDevBase): Promise<VDev>;
+  createPool(name: string, vdevs: VDevBase[], options: ZpoolCreateOptions): Promise<void>;
+  destroyPool(name: string): Promise<void>;
+  getPools(): Promise<ZPool[]>;
+  addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], force?: boolean): Promise<void>;
 }
 
 export class ZFSManager implements IZFSManager {
-    constructor(protected server: Server = new Server()) {}
+  private commandOptions: CommandOptions;
 
-    async createPool(options: ZpoolCreateOptions): Promise<ZPool> {
-        
-    }
+  constructor(protected server: Server = new Server()) {
+    this.commandOptions = { superuser: "try" };
+  }
 
-    async getPools(): Promise<ZPool[]> {
-        
+  /**
+   * Transform vdev into command args for zpool create or zpool add
+   * @param vdev
+   * @returns
+   */
+  private formatVDevArgv(vdev: VDevBase): string[] {
+    const args = [];
+    if (vdev.type !== "disk") {
+      args.push(vdev.type);
     }
+    if (vdev.isMirror) {
+      if (!["log", "special", "dedup"].includes(vdev.type)) {
+        throw new ValueError(`${vdev.type} vdev cannot be mirrored!`);
+      }
+      args.push("mirror");
+    }
+    args.push(...vdev.disks.map((disk) => disk.path));
+    return args;
+  }
 
-    async addVDevToPool(pool: ZPoolBase, vdev: VDevBase): Promise<VDev> {
-        
-    }
+  /**
+   * Transform array of vdevs into command args for zpool create or zpool add
+   * @param vdevs
+   * @returns
+   */
+  private formatVDevsArgv(vdevs: VDevBase[]): string[] {
+    return vdevs
+      .sort((a, b) => {
+        // ensure stripe vdevs come first since they have no type argument
+        if (a.type === b.type) {
+          return 0;
+        }
+        if (a.type === "disk") {
+          return -1;
+        }
+        return 1;
+      })
+      .flatMap((vdev) => this.formatVDevArgv(vdev));
+  }
+
+  async createPool(name: string, vdevs: VDevBase[], options: ZpoolCreateOptions): Promise<void> {
+    const argv = ["zpool", "create"];
+
+    // set up pool properties
+    const poolProps: string[] = [];
+
+    if (options.sectorsize !== undefined) poolProps.push(`ashift=${options.sectorsize}`);
+    if (options.autoexpand !== undefined) poolProps.push(`autoexpand=${options.autoexpand}`);
+    if (options.autoreplace !== undefined) poolProps.push(`autoreplace=${options.autoreplace}`);
+    if (options.autotrim !== undefined) poolProps.push(`autotrim=${options.autotrim}`);
+
+    // pool props are ['-o', 'prop=value']
+    argv.push(...poolProps.flatMap((prop) => ["-o", prop]));
+
+    // set up filesystem properties
+    const fsProps: string[] = [
+      "aclinherit=passthrough",
+      "acltype=posixacl",
+      "casesensitivity=sensitive",
+      "normalization=formD",
+      "sharenfs=off",
+      "sharesmb=off",
+      "utf8only=on",
+      "xattr=sa",
+    ];
+
+    if (options.compression !== undefined) fsProps.push(`compression=${options.compression}`);
+    if (options.recordsize !== undefined) fsProps.push(`recordsize=${options.recordsize}`);
+    if (options.dedup !== undefined) fsProps.push(`dedup=${options.dedup}`);
+
+    // fs props are ['-O', 'prop=value']
+    argv.push(...fsProps.flatMap((prop) => ["-O", prop]));
+
+    if (options.forceCreate) argv.push("-f");
+
+    // add in vdevs
+    argv.push(...this.formatVDevsArgv(vdevs));
+
+    console.log("****\ncmdstring:\n", ...argv, "\n****");
+
+    // using new process execution method instead of useSpawn
+    const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+
+    console.log(proc.getStdout());
+  }
+
+  async destroyPool(pool: ZPoolBase | string): Promise<void> {
+    const poolName = typeof pool === "string" ? pool : pool.name;
+    await unwrap(
+      this.server.execute(new Command(["zpool", "destroy", poolName], this.commandOptions))
+    );
+  }
+
+  async getPools(): Promise<ZPool[]> {
+    // TODO
+    return [];
+  }
+
+  async addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], force: boolean = false): Promise<void> {
+    const argv = ["zpool", "add"];
+
+    if (force) argv.push("-f");
+
+    argv.push(pool.name);
+
+    // add in vdevs
+    argv.push(...this.formatVDevsArgv(vdevs));
+
+    console.log("****\ncmdstring:\n", ...argv, "\n****");
+
+    // using new process execution method instead of useSpawn
+    const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+
+    console.log(proc.getStdout());
+  }
 }

@@ -1,39 +1,51 @@
 <template>
-    <div id="canvas-viewer" class="card inline-flex flex-col flex-auto bg-default h-full text-default">
-        <div class="card-header flex flex-row items-center">
-            <h3 class="text-header text-default">Disk Viewer</h3>
-        </div>
-        <div ref="canvasCardBody"
-            class="card-body flex-auto flex flex-col items-center content-center p-0 overflow-visible">
-            <P5HomeLabHL4 />
-        </div>
-    </div>
+  <img :src="driveBaysImage" alt="Drive bays" />
+  <!-- <div ref="canvasParent"></div> -->
 </template>
 
 <script setup lang="ts">
-import { ref, provide, reactive, onMounted } from "vue";
-import P5HomeLabHL4 from "./P5HomeLabHL4.vue";
-import { Disks } from "@45drives/houston-common-lib";
+import { ref, provide, reactive, onMounted, computed, watch, useTemplateRef } from "vue";
+import { Server, type DiskInfo } from "@45drives/houston-common-lib";
+import { lookupImages } from "@/img";
+// import * as PIXI from "pixijs";
 
-const serverModel = ref<string | null>(null);
-const currentDisk = ref<string>("");
-const lsdevState = ref<string>("");
-const lsdevJson = reactive<Record<string, any>>({});
-const diskInfo = reactive<Record<string, any>>({});
+const props = withDefaults(defineProps<{ server?: Server }>(), { server: () => new Server() });
 
-const { fetchLsdev, fetchDiskInfo } = Disks;
+const canvasParent = useTemplateRef<HTMLDivElement>("canvasParent");
 
-provide("currentDisk", currentDisk);
-provide("lsdevState", lsdevState);
-provide("lsdevJson", lsdevJson);
-provide("diskInfo", diskInfo);
+const modelNumber = ref("");
 
-const init = async () => {
-    lsdevJson.value = fetchLsdev();
-    diskInfo.value = fetchDiskInfo();
-};
+const diskInfo = ref<DiskInfo>();
 
-onMounted(() => {
-    init();
-});
+watch(
+  () => props.server,
+  (server) => {
+    server.getServerInfo().map((info) => {
+      modelNumber.value = info.Model ?? "";
+    });
+
+    server.getDiskInfo().map((d) => {
+      diskInfo.value = d as DiskInfo;
+    });
+  },
+  { immediate: true }
+);
+
+const serverGraphics = computed(() => lookupImages(modelNumber.value));
+
+const driveBaysImage = computed(() => serverGraphics.value.drivebay);
+
+
+// watch([diskInfo, serverGraphics], () => {
+//   if ([diskInfo.value, serverGraphics.value, canvasParent.value].some((v) => !v)) {
+//     return;
+//   }
+//   const bg = PIXI.Sprite.from(serverGraphics.value.drivebay);
+//   const app = new PIXI.Application<HTMLCanvasElement>({width: bg.width, height: bg.height});
+
+//   app.stage.addChild(bg);
+
+
+//   canvasParent.value!.appendChild(app.view);
+// });
 </script>

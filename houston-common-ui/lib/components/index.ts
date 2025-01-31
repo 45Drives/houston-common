@@ -29,3 +29,4 @@ export { default as ServerOverview } from "./ServerOverview.vue";
 export * from "./tabs";
 export * from "./modals";
 export * from "./disks";
+export * from "./wizard";

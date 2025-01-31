@@ -132,14 +132,38 @@ const state = {
 */
 
   // Initialize state as undefined to delay its definition
-  const state: SpawnState<string | Uint8Array> = {
+
+  let state: SpawnState<string | Uint8Array>;
+
+  const _promise = new Promise<SpawnState<string | Uint8Array>>((resolve, reject) => {
+    const proc = cockpit.spawn(argv, opts as any);
+
+    proc
+      .then((_stdout, _stderr) => {
+        state.stdout = _stdout;
+        state.stderr = _stderr;
+        resolve(state);
+      })
+      .catch((ex, _stdout) => {
+        state.stdout = _stdout;
+        state.stderr = ex.message ?? ex.problem;
+        state.status = ex.exit_status ?? undefined;
+        reject(state);
+      })
+      .finally(() => {
+        state.loading = false;
+      });
+  });
+
+  state = {
     loading: true,
     argv: [...argv],
-    proc: null as any, // Temporary placeholder for proc
+    proc: cockpit.spawn(argv, opts as any),
     stdout: undefined,
     stderr: undefined,
     status: undefined,
-    _promise: null as any, // Placeholder for _promise
+    _promise,
+
     promise: () => _promise,
     argvPretty: () =>
       argv.map((token) => (/\s/.test(token) ? `"${token}"` : token)).join(" "),
@@ -228,4 +252,5 @@ export function errorStringHTML(state: SpawnState<any> | { message: string; } | 
   if (typeof state === "string")
     return `<span class="text-gray-500 font-mono text-sm whitespace-pre-wrap">${state}</span>`;
   return (state.errorStringHTML?.() ?? (`<span class="text-gray-500 font-mono text-sm whitespace-pre-wrap">${state?.stderr ?? state?.message ?? JSON.stringify(state)}</span>`));
+
 }

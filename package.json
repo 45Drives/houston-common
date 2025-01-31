@@ -19,5 +19,8 @@
         "typedoc-umlclass": "^0.9.0",
         "typescript": "^5.4.5"
     },
-    "packageManager": "yarn@4.1.1"
+    "packageManager": "yarn@4.1.1",
+    "dependencies": {
+        "p5": "^1.11.3"
+    }
 }

@@ -62,6 +62,7 @@ __metadata:
     jsdom: "npm:^24.0.0"
     neverthrow: "npm:^6.2.1"
     npm-run-all2: "npm:^6.1.2"
+    p5: "npm:^1.4.1"
     postcss: "npm:^8.4.38"
     postcss-modules: "npm:^6.0.0"
     prettier: "npm:^3.2.5"
@@ -83,6 +84,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@45drives/houston-common@workspace:."
   dependencies:
+    p5: "npm:^1.11.3"
     typedoc: "npm:^0.25.13"
     typedoc-plugin-mdn-links: "npm:^3.1.25"
     typedoc-plugin-missing-exports: "npm:^2.2.0"
@@ -4776,6 +4778,13 @@ __metadata:
   dependencies:
     aggregate-error: "npm:^3.0.0"
   checksum: 10/7ba4a2b1e24c05e1fc14bbaea0fc6d85cf005ae7e9c9425d4575550f37e2e584b1af97bcde78eacd7559208f20995988d52881334db16cf77bc1bcf68e48ed7c
+  languageName: node
+  linkType: hard
+
+"p5@npm:^1.11.3, p5@npm:^1.4.1":
+  version: 1.11.3
+  resolution: "p5@npm:1.11.3"
+  checksum: 10/34a717e5537182c9e638fe03ed3f2e9784ce85ced5a2e74dced5e6708a7ab52d7e5ee4891f572b4e7d3307e3110518d047981cda91fb1027e5adafa0b9d832d7
   languageName: node
   linkType: hard
 

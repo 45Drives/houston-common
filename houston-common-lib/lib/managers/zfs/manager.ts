@@ -146,4 +146,38 @@ export class ZFSManager implements IZFSManager {
 
     console.log(proc.getStdout());
   }
+
+  async addDataset(parent: ZPoolBase | Dataset, name: string, options: DatasetCreateOptions): Promise<void> {
+    const argv = ["zfs", "create"];
+
+    // Construct dataset properties
+    const datasetProps: string[] = [];
+    if (options.atime !== undefined) datasetProps.push(`atime=${options.atime}`);
+    if (options.casesensitivity !== undefined) datasetProps.push(`casesensitivity=${options.casesensitivity}`);
+    if (options.compression !== undefined) datasetProps.push(`compression=${options.compression}`);
+    if (options.dedup !== undefined) datasetProps.push(`dedup=${options.dedup}`);
+    if (options.dnodesize !== undefined) datasetProps.push(`dnodesize=${options.dnodesize}`);
+    if (options.xattr !== undefined) datasetProps.push(`xattr=${options.xattr}`);
+    if (options.recordsize !== undefined) datasetProps.push(`recordsize=${options.recordsize}`);
+    if (options.readonly !== undefined) datasetProps.push(`readonly=${options.readonly}`);
+
+    if (options.quota !== undefined) {
+      datasetProps.push(`quota=${options.quota === "0" ? "none" : options.quota}`);
+    }
+
+    // Append properties to command arguments
+    argv.push(...datasetProps.flatMap((prop) => ["-o", prop]));
+
+    // Append dataset path
+    argv.push(`${parent.name}/${name}`);
+
+    console.log("****\ncmdstring:\n", ...argv, "\n****");
+
+    // Execute command
+    const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+
+    console.log(proc.getStdout());
+  }
 }
+
+

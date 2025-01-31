@@ -5,7 +5,7 @@
         </div>
         <div ref="canvasCardBody"
             class="card-body flex-auto flex flex-col items-center content-center p-0 overflow-visible">
-            <P5HomeLabHL4 v-if="serverModel" />
+            <P5HomeLabHL4 />
         </div>
     </div>
 </template>
@@ -37,4 +37,3 @@ onMounted(() => {
     init();
 });
 </script>
-

@@ -5,9 +5,10 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, inject } from "vue";
 import type { Ref } from "vue";
-import P5 from "p5";
 import loadingAnimation from "./loadingAnimation";
 import resizeHook from "./resizeHook";
+
+import P5 from "p5";
 
 interface DiskLocation {
   x: number;
@@ -144,6 +145,6 @@ function highlightCurrentDisk(p5: P5) {
 }
 
 onMounted(() => {
-  new P5(p5Script);
+  p5.then((p5) => new p5.default(p5Script));
 });
 </script>

@@ -5,6 +5,33 @@ import { Group, LocalGroup, isLocalGroup } from "@/group";
 import { Directory, File } from "@/path";
 import { ParsingError, ProcessError, ValueError } from "@/errors";
 import { Download } from "@/download";
+import { safeJsonParse } from "./utils";
+
+export type ServerInfo = {
+  Motherboard: {
+    Manufacturer: string,
+    ["Product Name"]: string,
+    ["Serial Number"]: string
+  },
+  HBA:
+  ({
+    Model: string,
+    Adapter: string,
+    "Bus Address": string,
+    "Drive Connections": number,
+    "Kernel Driver": string,
+    "PCI Slot": number
+  })[],
+  Hybrid: boolean,
+  Serial: string,
+  Model: string,
+  "Alias Style": string,
+  "Chassis Size": string,
+  VM: boolean,
+  "Edit Mode": boolean,
+  "OS NAME": string,
+  "OS VERSION_ID": string
+}
 
 export class Server {
   public readonly host?: string;
@@ -19,6 +46,67 @@ export class Server {
 
   isAccessible(): ResultAsync<true, ProcessError> {
     return this.execute(new Command(["true"]), true).map(() => true);
+  }
+
+  getServerInfo(): ResultAsync<Partial<ServerInfo>, ProcessError | SyntaxError> {
+    return new File(
+      this,
+      "/etc/45drives/server_info/server_info.json"
+    ).read()
+      .andThen(safeJsonParse<ServerInfo>);
+  }
+
+  async getSystemImgPath(): Promise<string> {
+    const serverInfo = await this.getServerInfo().unwrapOr(null);
+    const model = serverInfo?.Model ?? ""
+    
+    if (model == "" || model == "?") {
+      return "img/45dlogo.png";
+    }
+
+    const regExpModel =
+      /(Storinator|Stornado|HomeLab|Professional|Proxinator).*(HL15|HL4|HL8|PRO4|PRO8|PRO15|AV15|Q30|S45|XL60|2U|C8|MI4|F8X1|F8X2|F8X3|F2|VM8|VM16|VM32).*/;
+    const match = model.match(regExpModel);
+    const imgPathLookup: any = {
+      "Storinator": {
+        "AV15": "img/storinatorAV15.png",
+        "Q30": "img/storinatorQ30.png",
+        "S45": "img/storinatorS45.png",
+        "XL60": "img/storinatorXL60.png",
+        "C8": "img/storinatorC8.png",
+        "MI4": "img/storinatorMI4.png",
+        "F8X1": "img/F8X1.png",
+        "F8X2": "img/F8X2.png",
+        "F8X3": "img/F8X3.png"
+      },
+      "Stornado": {
+        "2U": "img/stornado2U.png",
+        "AV15": "img/stornadoAV15.png",
+        "F2": "img/stornadoF2.png"
+      },
+      "HomeLab": {
+        "HL15": "img/homelabHL15.png",
+        "HL4": "img/homelabHL4.png",
+        "HL8": "img/homelabHL8.png",
+      },
+      "Professional": {
+        "PRO15": "img/professionalPRO15.png",
+        "PRO4": "img/professionalPRO4.png",
+        "PRO8": "img/professionalPRO8.png",
+      },
+      "Proxinator":{
+        "VM8": "img/proxinator.png",
+        "VM16": "img/proxinator.png",
+        "VM32": "img/proxinator.png",
+      }
+    };
+
+    if(!match) return "img/45dlogo.png";
+    const m1 = match[1];
+    const m2 = match[2];
+    if (!m1 || !m2) return "img/45dlogo.png";
+    
+    return imgPathLookup[m1][m2];
   }
 
   getHostname(cache: boolean = true): ResultAsync<string, ProcessError> {

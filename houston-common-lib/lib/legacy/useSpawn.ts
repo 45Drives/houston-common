@@ -132,6 +132,7 @@ const state = {
 */
 
   // Initialize state as undefined to delay its definition
+
   let state: SpawnState<string | Uint8Array>;
 
   const _promise = new Promise<SpawnState<string | Uint8Array>>((resolve, reject) => {
@@ -162,6 +163,7 @@ const state = {
     stderr: undefined,
     status: undefined,
     _promise,
+
     promise: () => _promise,
     argvPretty: () =>
       argv.map((token) => (/\s/.test(token) ? `"${token}"` : token)).join(" "),
@@ -177,6 +179,52 @@ const state = {
       );
     },
   };
+  
+  const proc = cockpit.spawn(argv, opts as any);
+  const _promise = new Promise<SpawnState<string | Uint8Array>>((resolve, reject) => {
+    proc
+      .then((_stdout, _stderr) => {
+        state.stdout = _stdout;
+        state.stderr = _stderr;
+        state.status = 0;
+        state.loading = false;
+        resolve(state);
+      })
+      .catch((ex, _stdout) => {
+        state.stdout = _stdout;
+        state.stderr = ex.message ?? ex.problem;
+        state.status = ex.exit_status ?? -1;
+        state.loading = false;
+        reject(state);
+      });
+  });
+  
+  // Assign the proc and _promise to the state
+  state.proc = proc;
+  state._promise = _promise;
+  // state = {
+  //   loading: true,
+  //   argv: [...argv],
+  //   proc: cockpit.spawn(argv, opts as any),
+  //   stdout: undefined,
+  //   stderr: undefined,
+  //   status: undefined,
+  //   _promise,
+  //   promise: () => _promise,
+  //   argvPretty: () =>
+  //     argv.map((token) => (/\s/.test(token) ? `"${token}"` : token)).join(" "),
+  //   errorStringHTML(fullArgv = false) {
+  //     return (
+  //       '<span class="font-mono text-sm whitespace-pre-wrap">' +
+  //       `<span class="font-semibold">${this.argv[0]}: </span>` +
+  //       `<span>${errorString(this)} (${this.status})</span>` +
+  //       "</span>" +
+  //       (fullArgv
+  //         ? `<span class="text-gray-500 font-mono text-sm whitespace-pre-wrap">${this.argvPretty()}</span>`
+  //         : "")
+  //     );
+  //   },
+  // };
   if (opts.binary) return state as any as SpawnState<Uint8Array>;
   else return state as any as SpawnState<string>;
 }
@@ -204,4 +252,5 @@ export function errorStringHTML(state: SpawnState<any> | { message: string; } | 
   if (typeof state === "string")
     return `<span class="text-gray-500 font-mono text-sm whitespace-pre-wrap">${state}</span>`;
   return (state.errorStringHTML?.() ?? (`<span class="text-gray-500 font-mono text-sm whitespace-pre-wrap">${state?.stderr ?? state?.message ?? JSON.stringify(state)}</span>`));
+
 }

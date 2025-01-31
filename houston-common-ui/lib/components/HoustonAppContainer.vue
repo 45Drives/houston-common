@@ -24,10 +24,11 @@ const props = defineProps<{
   sourceURL?: string;
   issuesURL?: string;
   tabs?: HoustonAppTabEntry[];
+  noScroll?: boolean;
 }>();
 
 const {
-  entries: tabEntries,
+  currentComponent,
   labels: tabLabels,
   index: tabIndex,
 } = defineHoustonAppTabState(computed(() => props.tabs ?? []));
@@ -53,10 +54,12 @@ watchEffect(() => {
         <TabSelector :labels="tabLabels" v-model:index="tabIndex" />
       </template>
     </HoustonHeader>
-    <div class="overflow-hidden grow basis-0 flex flex-col items-stretch">
-      <div class="bg-well overflow-y-auto grow" style="scrollbar-gutter: stable both-edges">
+    <div 
+    :class="['grow basis-0 flex flex-col items-stretch', (noScroll? '' : 'overflow-y-auto')]"
+    >
+      <div :class="['bg-well grow', (noScroll? '' : 'overflow-y-auto')]" style="scrollbar-gutter: stable both-edges">
         <slot>
-          <TabView v-if="tabs" :entries="tabEntries" :index="tabIndex" />
+          <TabView v-if="tabs" :currentComponent="currentComponent" />
         </slot>
       </div>
       <div class="grow-0 overflow-visible relative">

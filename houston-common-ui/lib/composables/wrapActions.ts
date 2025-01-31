@@ -7,11 +7,11 @@ export type Action<TParams extends Array<any>, TOk, TErr extends Error> = (
   ..._: TParams
 ) => ResultAsync<TOk, TErr>;
 
-export type WrappedAction<
-  TParams extends Array<any>,
+export type WrappedAction<TParams extends Array<any>, TOk, TErr extends Error> = Action<
+  TParams,
   TOk,
-  TErr extends Error,
-> = Action<TParams, TOk, TErr> & {
+  TErr
+> & {
   /**
    * Tracks whether the action is executing
    */
@@ -23,11 +23,7 @@ export type WrappedActions<
     [action: string]: Action<any, any, any>;
   },
 > = {
-  [Prop in keyof Actions]: Actions[Prop] extends Action<
-    infer TParams,
-    infer TOk,
-    infer TErr
-  >
+  [Prop in keyof Actions]: Actions[Prop] extends Action<infer TParams, infer TOk, infer TErr>
     ? WrappedAction<TParams, TOk, TErr>
     : never;
 };
@@ -109,8 +105,15 @@ export const wrapActions = <
   actions: Actions
 ) =>
   Object.fromEntries(
-    Object.entries(actions).map(([funcName, func]) => [
-      funcName,
-      wrapAction(func),
-    ])
+    Object.entries(actions).map(([funcName, func]) => [funcName, wrapAction(func)])
   ) as WrappedActions<Actions>;
+
+export function wrapPromise<TParams extends Array<any>, TResult>(
+  func: (..._: TParams) => PromiseLike<TResult>
+): WrappedAction<TParams, TResult, Error> {
+  return wrapAction((...args: TParams) =>
+    ResultAsync.fromPromise(func(...args), (e) =>
+      e instanceof Error ? e : new Error(`unknown error: ${e}`)
+    )
+  );
+}

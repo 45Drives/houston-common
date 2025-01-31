@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { defineProps } from "vue";
+import { computed, defineProps, type Component } from "vue";
 import { type HoustonAppTabEntry } from "@/components/tabs";
 
 const props = defineProps<{
-  entries: HoustonAppTabEntry[];
-  index: number;
+  currentComponent?: Component
 }>();
 </script>
 
 <template>
   <KeepAlive>
-    <component v-if="entries.length" :is="entries[index].component" :key="[index, entries.length]" />
+    <component v-if="currentComponent" :is="currentComponent" :key="currentComponent.name" />
   </KeepAlive>
 </template>
 

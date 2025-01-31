@@ -34,6 +34,7 @@ export * from "@/functional";
 export * from "@/unwrap";
 export * from "@/managers";
 export * from "@/disks";
+export * from "@/user";
 
 export * as legacy from "@/legacy";
 

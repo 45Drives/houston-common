@@ -5,7 +5,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, inject } from "vue";
 import type { Ref } from "vue";
-// @ts-ignore
 import P5 from "p5";
 import loadingAnimation from "./loadingAnimation";
 import resizeHook from "./resizeHook";
@@ -21,29 +20,29 @@ interface DiskLocation {
 
 // Image assets with updated paths
 const assets = {
-  chassis: { path: "/public/img/disks-module/chassis/hl4-homelab.png", image: null },
+  chassis: { path: "img/disks-module/chassis/hl4-homelab.png", image: null },
   disks: {
     caddy: {
-      default: { path: "/public/img/disks-module/disks/caddy-generic.png", image: null },
-      micron5200: { path: "/public/img/disks-module/disks/caddy-micron.png", image: null },
-      micron5300: { path: "/public/img/disks-module/disks/caddy-micron-5300.png", image: null },
-      seagate: { path: "/public/img/disks-module/disks/caddy-seagate.png", image: null },
-      seagateSas: { path: "/public/img/disks-module/disks/caddy-seagate-sas.png", image: null },
-      loading: { path: "/public/img/disks-module/disks/caddy-loading.png", image: null },
-      empty: { path: "/public/img/disks-module/disks/empty-caddy.png", image: null },
+      default: { path: "img/disks-module/disks/caddy-generic.png", image: null },
+      micron5200: { path: "img/disks-module/disks/caddy-micron.png", image: null },
+      micron5300: { path: "img/disks-module/disks/caddy-micron-5300.png", image: null },
+      seagate: { path: "img/disks-module/disks/caddy-seagate.png", image: null },
+      seagateSas: { path: "img/disks-module/disks/caddy-seagate-sas.png", image: null },
+      loading: { path: "img/disks-module/disks/caddy-loading.png", image: null },
+      empty: { path: "img/disks-module/disks/empty-caddy.png", image: null },
     },
     ssd: {
-      loading: { path: "/public/img/disks-module/disks/ssd-loading.png", image: null },
-      default: { path: "/public/img/disks-module/disks/ssd-generic.png", image: null },
-      empty: { path: "/public/img/disks-module/disks/empty-ssd.png", image: null },
+      loading: { path: "img/disks-module/disks/ssd-loading.png", image: null },
+      default: { path: "img/disks-module/disks/ssd-generic.png", image: null },
+      empty: { path: "img/disks-module/disks/empty-ssd.png", image: null },
     },
     hdd: {
-      default: { path: "/public/img/disks-module/disks/hdd-generic.png", image: null },
-      seagateSt: { path: "/public/img/disks-module/disks/hdd-seagate-st.png", image: null },
-      seagate: { path: "/public/img/disks-module/disks/hdd-seagate.png", image: null },
-      toshiba: { path: "/public/img/disks-module/disks/hdd-toshiba.png", image: null },
-      loading: { path: "/public/img/disks-module/disks/hdd-loading.png", image: null },
-      empty: { path: "/public/img/disks-module/disks/empty-hdd.png", image: null },
+      default: { path: "img/disks-module/disks/hdd-generic.png", image: null },
+      seagateSt: { path: "img/disks-module/disks/hdd-seagate-st.png", image: null },
+      seagate: { path: "img/disks-module/disks/hdd-seagate.png", image: null },
+      toshiba: { path: "img/disks-module/disks/hdd-toshiba.png", image: null },
+      loading: { path: "img/disks-module/disks/hdd-loading.png", image: null },
+      empty: { path: "img/disks-module/disks/empty-hdd.png", image: null },
     },
   },
   loadingFlag: true,
@@ -113,7 +112,7 @@ const p5Script = (p5: P5) => {
   };
 
   p5.draw = () => {
-    p5.image(assets.chassis.image, 0, 0);
+    p5.image(assets.chassis.image!, 0, 0);
     diskLocations.forEach((loc) => {
       if (loc.occupied && loc.image) {
         p5.image(loc.image, loc.x, loc.y);

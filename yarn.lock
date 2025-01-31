@@ -48,6 +48,7 @@ __metadata:
     "@types/deep-equal": "npm:^1.0.4"
     "@types/jsdom": "npm:^21.1.6"
     "@types/node": "npm:^20.12.12"
+    "@types/p5": "npm:^1.7.6"
     "@types/uuid": "npm:^9"
     "@vitejs/plugin-vue": "npm:^5.0.4"
     "@vitejs/plugin-vue-jsx": "npm:^3.1.0"
@@ -1255,6 +1256,13 @@ __metadata:
   dependencies:
     undici-types: "npm:~5.26.4"
   checksum: 10/e3945da0a3017bdc1f88f15bdfb823f526b2a717bd58d4640082d6eb0bd2794b5c99bfb914b9e9324ec116dce36066990353ed1c777e8a7b0641f772575793c4
+  languageName: node
+  linkType: hard
+
+"@types/p5@npm:^1.7.6":
+  version: 1.7.6
+  resolution: "@types/p5@npm:1.7.6"
+  checksum: 10/9d5e9e08b479c86a8f741daa87f1789502b0aa506c140560a3f1a4b02d3ed4fd926c373f852caa7f03cee82773c0725425ca049134129d68e73c94a167071666
   languageName: node
   linkType: hard
 

@@ -56,7 +56,6 @@ export class Server {
       .andThen(safeJsonParse<ServerInfo>);
   }
 
-  
   async getSystemImgPath(): Promise<string> {
     const serverInfo = await this.getServerInfo().unwrapOr(null);
     const model = serverInfo?.Model ?? ""

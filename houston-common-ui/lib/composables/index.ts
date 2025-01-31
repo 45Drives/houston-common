@@ -9,4 +9,3 @@ export {
 } from "./globalModalConfirm";
 export * from "./computedResult";
 export * from "./validation";
-export * from "./disks";

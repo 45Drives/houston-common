@@ -1,5 +1,6 @@
 import { EasySetupConfig } from "./types";
 import { SambaConfParser, SambaManagerNet } from "@/index";
+import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
 
 export interface EasySetupProgress {
@@ -10,9 +11,10 @@ export interface EasySetupProgress {
 
 export class EasySetupConfigurator  {
   sambaManager: SambaManagerNet;
-
+  zfsManager: ZFSManager;
   constructor() {
     this.sambaManager = new SambaManagerNet();
+    this.zfsManager = new ZFSManager();
   }
 
   applyConfig(_config: EasySetupConfig, progressCallback: (progress: EasySetupProgress) => void) {
@@ -45,9 +47,19 @@ export class EasySetupConfigurator  {
     progressCallback({ message: "All Done", step: 3, total: 3 });
     */
   }
+
+  // private async applyZFSConfig(_config: EasySetupConfig) {
+  //   let zfsConfig = _config.zfsConfig;
+
+  //   const baseDisks = await this.zfsManager.getBaseDisks();
+
+  //   zfsConfig.pool.vdevs[0]!.disks = baseDisks;
+  //   await this.zfsManager.createPool(zfsConfig.pool, zfsConfig.poolOptions);
+  //   await this.zfsManager.addDataset(zfsConfig.pool, zfsConfig.dataset.name, zfsConfig.datasetOptions);
+    
+  // }
+
 /*
-  private applyZFSConfig(_config: EasySetupConfig) {
-  }
 
   private async applySambaConfig(config: EasySetupConfig) {
     await this.sambaManager.editGlobal(config.sambaConfig.global).unwrapOr(null);

@@ -11,15 +11,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, inject, provide, watch, reactive, onMounted } from "vue";
+import { ref, provide, reactive, onMounted } from "vue";
 import P5HomeLabHL4 from "./P5HomeLabHL4.vue";
-import {fetchDiskInfo, fetchLsdev} from "../../composables/disks";
+import { Disks } from "@45drives/houston-common-lib";
 
 const serverModel = ref<string | null>(null);
 const currentDisk = ref<string>("");
 const lsdevState = ref<string>("");
 const lsdevJson = reactive<Record<string, any>>({});
 const diskInfo = reactive<Record<string, any>>({});
+
+const { fetchLsdev, fetchDiskInfo } = Disks;
 
 provide("currentDisk", currentDisk);
 provide("lsdevState", lsdevState);

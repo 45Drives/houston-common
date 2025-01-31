@@ -11,17 +11,22 @@ import {
   ZPoolAddVDevOptions,
   DatasetCreateOptions,
   Dataset,
+  Disks,
+  VDevDiskBase,
+  VDevDisk
 } from "@/index";
 
 export interface IZFSManager {
   createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<void>;
   destroyPool(name: string): Promise<void>;
   addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void>;
-  
-  // TODO:
-
-  getPools(): Promise<ZPool[]>;
   addDataset(parent: ZPoolBase | Dataset, name: string, options: DatasetCreateOptions): Promise<void>;
+  getBaseDisks(): Promise<VDevDiskBase[]>;
+  getFullDisks(): Promise<VDevDiskBase[]>;
+  getDiskCapacity(path: string): Promise<string>;
+  // TODO:
+  getPools(): Promise<ZPool[]>;
+ 
 }
 
 export class ZFSManager implements IZFSManager {
@@ -127,6 +132,77 @@ export class ZFSManager implements IZFSManager {
   async getPools(): Promise<ZPool[]> {
     // TODO
     return [];
+  }
+
+
+  /**
+   * Fetches only the disk paths and returns them as VDevDiskBase[]
+   */
+  async getBaseDisks(): Promise<VDevDiskBase[]> {
+    const { fetchDiskInfo } = Disks;
+    return fetchDiskInfo()
+      .map((diskInfoData) =>
+        diskInfoData.rows.map((disk: any): VDevDiskBase => ({
+          path: disk["dev-by-path"],
+        }))
+      )
+      .unwrapOr([]);
+  }
+
+  /**
+   * Fetches full disk information by merging fetchLsdev() and fetchDiskInfo()
+   */
+  async getFullDisks(): Promise<VDevDisk[]> {
+    const { fetchDiskInfo, fetchLsdev } = Disks;
+    return Promise.all([
+      fetchLsdev().unwrapOr(() => ({ rows: [] })),
+      fetchDiskInfo().unwrapOr(() => ({ rows: [] })),
+    ])
+      .then(([lsdevData, diskInfoData]) => {
+        const lsdevRows = lsdevData.rows.flat(); // Flatten nested arrays in `lsdev`
+        const diskInfoRows = diskInfoData.rows;
+
+        return diskInfoRows.map((disk: any): VDevDisk => {
+          const matchingDisk = lsdevRows.find((lsdev: any) => lsdev.dev === disk.dev);
+
+          return {
+            path: disk["dev-by-path"],
+            name: matchingDisk?.["model-name"] || "Unknown",
+            capacity: matchingDisk?.capacity || "Unknown",
+            model: matchingDisk?.["model-name"] || "Unknown",
+            guid: matchingDisk?.serial || "Unknown",
+            type: (matchingDisk?.disk_type as "SSD" | "HDD" | "NVMe") || "HDD",
+            health: matchingDisk?.health || "Unknown",
+            stats: {},
+            phy_path: disk["dev-by-path"],
+            sd_path: disk.dev,
+            vdev_path: disk["dev-by-path"],
+            serial: matchingDisk?.serial || "Unknown",
+            temp: matchingDisk?.["temp-c"] || "N/A",
+            powerOnCount: matchingDisk?.["power-cycle-count"] || "0",
+            powerOnHours: matchingDisk?.["power-on-time"] || 0,
+            rotationRate: matchingDisk?.["rotation-rate"] || 0,
+          };
+        });
+      })
+      .catch((error) => {
+        console.error("Error fetching full disks:", error);
+        return [];
+      });
+  }
+
+  /**
+   * Fetches the capacity of a specific disk given its path
+   */
+  async getDiskCapacity(path: string): Promise<string> {
+    const { fetchLsdev } = Disks;
+    return fetchLsdev()
+      .map((lsdevData) => {
+        const lsdevRows = lsdevData.rows.flat(); // Flatten nested arrays in `lsdev`
+        const disk = lsdevRows.find((lsdev: any) => lsdev["dev-by-path"] === path);
+        return disk?.capacity || "Unknown";
+      })
+      .unwrapOr("Unknown");
   }
 
   async addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void> {

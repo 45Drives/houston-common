@@ -134,9 +134,9 @@ const state = {
   // Initialize state as undefined to delay its definition
 
   let state: SpawnState<string | Uint8Array>;
+  const proc = cockpit.spawn(argv, opts as any);
 
   const _promise = new Promise<SpawnState<string | Uint8Array>>((resolve, reject) => {
-    const proc = cockpit.spawn(argv, opts as any);
 
     proc
       .then((_stdout, _stderr) => {
@@ -179,25 +179,7 @@ const state = {
       );
     },
   };
-  
-  const proc = cockpit.spawn(argv, opts as any);
-  const _promise = new Promise<SpawnState<string | Uint8Array>>((resolve, reject) => {
-    proc
-      .then((_stdout, _stderr) => {
-        state.stdout = _stdout;
-        state.stderr = _stderr;
-        state.status = 0;
-        state.loading = false;
-        resolve(state);
-      })
-      .catch((ex, _stdout) => {
-        state.stdout = _stdout;
-        state.stderr = ex.message ?? ex.problem;
-        state.status = ex.exit_status ?? -1;
-        state.loading = false;
-        reject(state);
-      });
-  });
+
   
   // Assign the proc and _promise to the state
   state.proc = proc;

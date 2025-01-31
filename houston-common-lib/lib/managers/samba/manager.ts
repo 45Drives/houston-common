@@ -11,7 +11,13 @@ import { File } from "@/path";
 
 import recommendedDefaultsConf from "./recommended-defaults.conf?raw";
 
-import { server as defaultServer } from "@/houston";
+import { server as defaultServer, server } from "@/houston";
+
+
+export interface AddUserResult {
+  success: boolean,
+  message: string
+}
 
 export interface ISambaManager {
   /**
@@ -116,6 +122,14 @@ export interface ISambaManager {
     oldName: string,
     newName: string
   ): ResultAsync<SambaShareConfig, ProcessError | ParsingError>;
+
+  /**
+   * Add samba user with specific passwd
+   * @param user 
+   * @param passwd 
+   */
+  setUserPassword(user: string, passwd: string): ResultAsync<void, ProcessError>;
+
 }
 
 export abstract class SambaManagerBase implements ISambaManager {
@@ -177,6 +191,12 @@ export abstract class SambaManagerBase implements ISambaManager {
   abstract exportConfig(): ResultAsync<string, ProcessError>;
 
   abstract importConfig(config: string): ResultAsync<this, ProcessError>;
+
+  
+  setUserPassword(user: string, passwd: string): ResultAsync<void, ProcessError> {
+    return server.execute(new Command(['bash', '-c', `echo -e "${passwd}" | smbpasswd -a -s ${user}`], { superuser: 'try' }))
+    .map(() => {});
+  }
 
   abstract addShare(
     share: SambaShareConfig

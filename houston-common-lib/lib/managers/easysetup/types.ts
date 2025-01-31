@@ -4,4 +4,6 @@ import { ZFSConfig } from "../zfs/types";
 export type EasySetupConfig = {
   zfsConfig: ZFSConfig
   sambaConfig: SambaConfig
+  smbUser: string
+  smbPass: string
 };

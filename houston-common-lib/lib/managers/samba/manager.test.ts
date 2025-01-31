@@ -5,6 +5,7 @@ import { SambaManagerBase } from "./manager";
 import { suite, test, expect } from "vitest";
 
 class SambaManagerTest extends SambaManagerBase {
+
   addShare(_: SambaShareConfig): ResultAsync<SambaShareConfig, ParsingError | ProcessError> {
     return errAsync(new Error());
   }

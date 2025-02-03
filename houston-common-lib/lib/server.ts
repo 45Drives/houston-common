@@ -8,6 +8,7 @@ import { Download } from "@/download";
 import { safeJsonParse } from "./utils";
 
 import DiskInfoPy from "@/scripts/disk_info.py?raw";
+import { lookupServerModel, ServerModel } from "@/serverModels";
 
 export type ServerInfo = {
   Motherboard: {
@@ -59,22 +60,34 @@ export class Server {
     return this.execute(new Command(["true"]), true).map(() => true);
   }
 
-  getServerInfo(): ResultAsync<Partial<ServerInfo>, ProcessError | SyntaxError> {
+  getServerInfo() {
     return new File(this, "/etc/45drives/server_info/server_info.json")
       .read()
-      .andThen(safeJsonParse<ServerInfo>);
+      .andThen(safeJsonParse<ServerInfo>)
+      .map((si) => si as ServerInfo);
   }
 
   getDiskInfo() {
     return this.execute(new PythonCommand(DiskInfoPy, [], { superuser: "try" }))
       .map((proc) => proc.getStdout())
-      .andThen(safeJsonParse<DiskInfo>);
+      .andThen(safeJsonParse<DiskInfo>)
+      .map((di) => di as DiskInfo);
   }
 
   getLsDev() {
     return this.execute(new Command(["/opt/45drives/tools/lsdev", "--json"], { superuser: "try" }))
       .map((proc) => proc.getStdout())
       .andThen(safeJsonParse<any>);
+  }
+
+  getServerModel(): ResultAsync<ServerModel, ProcessError | ParsingError> {
+    return this.getServerInfo().andThen((serverInfo) => {
+      const model = lookupServerModel(serverInfo.Model);
+      if (!model) {
+        return err(new ParsingError(`Model lookup failed: ${serverInfo.Model}`));
+      }
+      return ok(model);
+    });
   }
 
   getHostname(cache: boolean = true): ResultAsync<string, ProcessError> {

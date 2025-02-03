@@ -35,6 +35,7 @@ export * from "@/unwrap";
 export * from "@/managers";
 export * from "@/disks";
 export * from "@/user";
+export * from "@/serverModels";
 
 export * as legacy from "@/legacy";
 

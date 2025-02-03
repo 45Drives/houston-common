@@ -2,6 +2,7 @@ import { EasySetupConfig } from "./types";
 import { SambaConfParser, SambaManagerNet, unwrap } from "@/index";
 import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
+import { okAsync } from "neverthrow";
 
 export interface EasySetupProgress {
   message: string,
@@ -18,13 +19,13 @@ export class EasySetupConfigurator {
     this.zfsManager = new ZFSManager();
   }
 
-  applyConfig(config: EasySetupConfig, progressCallback: (progress: EasySetupProgress) => void) {
-    if (false) {
+  async applyConfig(config: EasySetupConfig, progressCallback: (progress: EasySetupProgress) => void) {
+    if (true) {
       progressCallback({ message: "Initializing Storage", step: 1, total: 3 });
-      this.applyZFSConfig(config)
+      await this.applyZFSConfig(config)
 
       progressCallback({ message: "Setting Up Network Storage", step: 2, total: 3 });
-      this.applySambaConfig(config);
+      await this.applySambaConfig(config);
 
       progressCallback({ message: "All Done", step: 3, total: 3 });
     }
@@ -54,6 +55,8 @@ export class EasySetupConfigurator {
 
     const baseDisks = await this.zfsManager.getBaseDisks();
 
+    console.log("baseDisks:", baseDisks)
+
     zfsConfig.pool.vdevs[0]!.disks = baseDisks;
     await this.zfsManager.createPool(zfsConfig.pool, zfsConfig.poolOptions);
     await this.zfsManager.addDataset(zfsConfig.pool, zfsConfig.dataset.name, zfsConfig.datasetOptions);
@@ -65,6 +68,11 @@ export class EasySetupConfigurator {
     await this.sambaManager.setUserPassword(config.smbUser, config.smbPass);
 
     await unwrap(this.sambaManager.editGlobal(config.sambaConfig.global));
+
+    await unwrap(this.sambaManager.checkIfSambaConfIncludesRegistry("/etc/samba/smb.conf")
+      .andThen((includesRegistry) => includesRegistry ? okAsync({}) : this.sambaManager.patchSambaConfIncludeRegistry("/etc/samba/smb.conf"))
+    )
+
     const shareSamabaResults = config.sambaConfig.shares.map(share => this.sambaManager.addShare(share));
     for (let i = 0; i < shareSamabaResults.length; i++) {
       const shareSamabaResult = shareSamabaResults[i];

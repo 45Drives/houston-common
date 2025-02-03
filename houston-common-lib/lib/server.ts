@@ -66,9 +66,15 @@ export class Server {
   }
 
   getDiskInfo() {
-    return this.execute(new PythonCommand(DiskInfoPy))
+    return this.execute(new PythonCommand(DiskInfoPy, [], { superuser: "try" }))
       .map((proc) => proc.getStdout())
       .andThen(safeJsonParse<DiskInfo>);
+  }
+
+  getLsDev() {
+    return this.execute(new Command(["/opt/45drives/tools/lsdev", "--json"], { superuser: "try" }))
+      .map((proc) => proc.getStdout())
+      .andThen(safeJsonParse<any>);
   }
 
   getHostname(cache: boolean = true): ResultAsync<string, ProcessError> {

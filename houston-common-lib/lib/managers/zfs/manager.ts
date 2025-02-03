@@ -139,28 +139,27 @@ export class ZFSManager implements IZFSManager {
    * Fetches only the disk paths and returns them as VDevDiskBase[]
    */
   async getBaseDisks(): Promise<VDevDiskBase[]> {
-    const { fetchDiskInfo } = Disks;
-    return fetchDiskInfo()
-      .map((diskInfoData) =>
-        diskInfoData.rows.map((disk: any): VDevDiskBase => ({
-          path: disk["dev-by-path"],
-        }))
-      )
-      .unwrapOr([]);
+    return unwrap(
+      this.server.getDiskInfo()
+        .map((diskInfoData) =>
+          diskInfoData.rows!.map((disk: any): VDevDiskBase => ({
+            path: disk["dev-by-path"],
+          }))
+        )
+      );
   }
 
   /**
    * Fetches full disk information by merging fetchLsdev() and fetchDiskInfo()
    */
   async getFullDisks(): Promise<VDevDisk[]> {
-    const { fetchDiskInfo, fetchLsdev } = Disks;
     return Promise.all([
-      fetchLsdev().unwrapOr(() => ({ rows: [] })),
-      fetchDiskInfo().unwrapOr(() => ({ rows: [] })),
+      unwrap(this.server.getLsDev()),
+      unwrap(this.server.getDiskInfo()),
     ])
       .then(([lsdevData, diskInfoData]) => {
         const lsdevRows = lsdevData.rows.flat(); // Flatten nested arrays in `lsdev`
-        const diskInfoRows = diskInfoData.rows;
+        const diskInfoRows = diskInfoData.rows!;
 
         return diskInfoRows.map((disk: any): VDevDisk => {
           const matchingDisk = lsdevRows.find((lsdev: any) => lsdev.dev === disk.dev);

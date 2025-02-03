@@ -15,11 +15,11 @@
         "recordsize": 131072,
         "sectorsize": 12,
         "dedup": "off",
-        "forceCreate": false,
+        "forceCreate": true,
         "refreservationPercent": 10
     },
     "dataset": {
-        "name": "tank/backup"
+        "name": "backup"
     },
     "datasetOptions": {
         "compression": "lz4",

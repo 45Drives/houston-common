@@ -10,7 +10,4 @@ export namespace Disks {
         return runCommandJson(["/opt/45drives/tools/lsdev", "--json"]);
     }
 
-    export function fetchDiskInfo(): ResultAsync<any, Error> {
-        return runCommandJson(["/public/scripts/disk_info"]);
-    }
 }

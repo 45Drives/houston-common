@@ -194,8 +194,12 @@ export abstract class SambaManagerBase implements ISambaManager {
 
   
   setUserPassword(user: string, passwd: string): ResultAsync<void, ProcessError> {
-    return server.execute(new Command(['bash', '-c', `echo -e "${passwd}" | smbpasswd -a -s ${user}`], { superuser: 'try' }))
-    .map(() => {});
+    const proc = server.spawnProcess(new Command(['smbpasswd', '-a', '-s', user], { superuser: 'try' }));
+    proc.write(`${passwd}\n${passwd}\n`);
+    
+    return proc.wait().map(() => {});
+    // return server.execute(new Command(['bash', '-c', `echo -e "${passwd}\n${passwd}\n" | smbpasswd -a -s ${user}`], { superuser: 'try' }))
+    // .map(() => {});
   }
 
   abstract addShare(
@@ -330,6 +334,8 @@ export class SambaManagerNet extends SambaManagerBase implements ISambaManager {
   }
 
   addShare(share: SambaShareConfig) {
+    console.log("addshare:", share)
+
     return SambaShareParser(share.name)
       .unapply(share)
       .asyncAndThen((shareParams) =>

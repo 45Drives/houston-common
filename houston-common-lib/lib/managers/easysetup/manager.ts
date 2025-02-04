@@ -20,7 +20,7 @@ export class EasySetupConfigurator {
   }
 
   async applyConfig(config: EasySetupConfig, progressCallback: (progress: EasySetupProgress) => void) {
-    if (true) {
+    if (false) {
       progressCallback({ message: "Initializing Storage", step: 1, total: 3 });
       await this.applyZFSConfig(config)
 

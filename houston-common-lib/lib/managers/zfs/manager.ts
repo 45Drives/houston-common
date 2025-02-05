@@ -13,7 +13,8 @@ import {
   Dataset,
   Disks,
   VDevDiskBase,
-  VDevDisk
+  VDevDisk,
+  ZPoolDestroyOptions
 } from "@/index";
 
 export interface IZFSManager {
@@ -122,10 +123,18 @@ export class ZFSManager implements IZFSManager {
     console.log(proc.getStdout());
   }
 
-  async destroyPool(pool: ZPoolBase | string): Promise<void> {
+  async destroyPool(pool: ZPoolBase | string, options: ZPoolDestroyOptions = {}): Promise<void> {
     const poolName = typeof pool === "string" ? pool : pool.name;
+    const argv = ["zpool", "destroy"]
+
+    if (options.force) {
+      argv.push("-f");
+    }
+    
+    argv.push(poolName);
+
     await unwrap(
-      this.server.execute(new Command(["zpool", "destroy", poolName], this.commandOptions))
+      this.server.execute(new Command(argv, this.commandOptions))
     );
   }
 

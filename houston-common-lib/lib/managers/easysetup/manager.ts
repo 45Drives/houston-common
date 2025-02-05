@@ -20,19 +20,23 @@ export class EasySetupConfigurator {
   }
 
   async applyConfig(config: EasySetupConfig, progressCallback: (progress: EasySetupProgress) => void) {
-    if (false) {
+    if (true) {
       try {
-        progressCallback({ message: "Initializing Storage", step: 1, total: 3 });
+
+        progressCallback({ message: "Initializing Storage", step: 1, total: 4 });
+        await this.deleteZFSPoolAndSMBShares(config);
+
+        progressCallback({ message: "Setting up Storage Configuration", step: 2, total: 4 });
         await this.applyZFSConfig(config)
-  
-        progressCallback({ message: "Setting Up Network Storage", step: 2, total: 3 });
+
+        progressCallback({ message: "Setting Up Network Storage", step: 3, total: 4 });
         await this.applySambaConfig(config);
-  
-        progressCallback({ message: "All Done", step: 3, total: 3 });
+
+        progressCallback({ message: "All Done", step: 4, total: 4 });
 
       } catch (error: any) {
         console.error("Error in setupStorage:", error);
-        progressCallback({ message: `Error: ${error.message}`, step: -1, total: 3 });
+        progressCallback({ message: `Error: ${error.message}`, step: -1, total: 4 });
       }
     }
     else {
@@ -53,6 +57,14 @@ export class EasySetupConfigurator {
           clearInterval(stepInterval)
         }
       }, 2000)
+    }
+  }
+
+  private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
+    await this.zfsManager.destroyPool(config.zfsConfig.pool, { force: true });
+
+    for (let share of config.sambaConfig.shares) {
+      await this.sambaManager.removeShare(share);
     }
   }
 

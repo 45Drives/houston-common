@@ -223,3 +223,88 @@ export function runInSequence<T, E, Args extends any[]>(
     return new ResultAsync(run());
   };
 }
+
+// Converts a size (TiB, GiB, etc.) to bytes for calculation
+export function convertToBytes(sizeString: string): number {
+  // Extract the numeric value and unit from the string
+  const regex = /([\d.]+)\s?(B|KiB|MiB|GiB|TiB|PiB|EiB)/i;
+  const match = sizeString.match(regex);
+
+  if (!match) {
+    console.error(`Invalid size format: ${sizeString}`);
+    return 0; // Return 0 if the format is incorrect
+  }
+
+  const size = parseFloat(match[1]!); // Numeric part
+  const unit = match[2]!.toUpperCase(); // Unit part
+
+  // Define conversion factors to bytes
+  const unitMultipliers: Record<string, number> = {
+    "B": 1,
+    "KIB": 1024,
+    "MIB": 1024 ** 2,
+    "GIB": 1024 ** 3,
+    "TIB": 1024 ** 4,
+    "PIB": 1024 ** 5,
+    "EIB": 1024 ** 6,
+  };
+
+  return size * (unitMultipliers[unit] || 1);
+}
+
+
+// Converts bytes back to the best-fitting unit (B, KiB, MiB, GiB, TiB, PiB, EiB)
+export function formatCapacity(sizeInBytes: number): string {
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
+  let index = 0;
+
+  let size = sizeInBytes;
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024;
+    index++;
+  }
+
+  return `${size.toFixed(2)} ${units[index]}`;
+}
+
+
+export function convertBinarySizeToDecimal(sizeString: string): string {
+  // Extract number and unit (supports cases like "10.91TiB" or "200 GiB")
+  const regex = /([\d.]+)\s?(B|KiB|MiB|GiB|TiB|PiB|EiB)/i;
+  const match = sizeString.match(regex);
+
+  if (!match) {
+    console.error(`Invalid size format: ${sizeString}`);
+    return "Invalid size";
+  }
+
+  const sizeBinary = parseFloat(match[1]!); // Numeric part
+  const unitBinary = match[2]!.toUpperCase(); // Unit part
+
+  // Binary (IEC) to Decimal (SI) conversion factor
+  const binaryToDecimalFactor = 1.09951
+
+  const unitMapping: Record<string, string> = {
+    "KIB": "KB",
+    "MIB": "MB",
+    "GIB": "GB",
+    "TIB": "TB",
+    "PIB": "PB",
+    "EIB": "EB",
+  };
+
+  // Convert Binary IEC → Decimal SI
+  let sizeDecimal = sizeBinary;
+  let unitDecimal = unitMapping[unitBinary] || unitBinary; // Use decimal unit if available
+
+  if (unitBinary in unitMapping) {
+    sizeDecimal *= binaryToDecimalFactor; // Use multiplication instead of division
+  }
+
+  // Round to the nearest whole number if TB or larger
+  if (unitDecimal === "TB" || unitDecimal === "PB" || unitDecimal === "EB") {
+    sizeDecimal = Math.round(sizeDecimal);
+  }
+
+  return `${sizeDecimal.toFixed(2)} ${unitDecimal}`;
+}

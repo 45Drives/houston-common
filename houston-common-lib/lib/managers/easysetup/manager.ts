@@ -20,8 +20,7 @@ export class EasySetupConfigurator {
   }
 
   async applyConfig(config: EasySetupConfig, progressCallback: (progress: EasySetupProgress) => void) {
-<<<<<<< HEAD
-    if (true) {
+    if (false) {
       try {
         progressCallback({ message: "Initializing Storage", step: 1, total: 3 });
         await this.applyZFSConfig(config)
@@ -35,16 +34,6 @@ export class EasySetupConfigurator {
         console.error("Error in setupStorage:", error);
         progressCallback({ message: `Error: ${error.message}`, step: -1, total: 3 });
       }
-=======
-    if (false) {
-      progressCallback({ message: "Initializing Storage", step: 1, total: 3 });
-      await this.applyZFSConfig(config)
-
-      progressCallback({ message: "Setting Up Network Storage", step: 2, total: 3 });
-      await this.applySambaConfig(config);
-
-      progressCallback({ message: "All Done", step: 3, total: 3 });
->>>>>>> 5f1eda83304ec397af166a3fdee74019dc6bac6c
     }
     else {
       /**

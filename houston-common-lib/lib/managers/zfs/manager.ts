@@ -10,7 +10,6 @@ import {
   CommandOptions,
   ZPoolAddVDevOptions,
   DatasetCreateOptions,
-  Dataset,
   Disks,
   VDevDiskBase,
   VDevDisk,
@@ -22,7 +21,7 @@ export interface IZFSManager {
   createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<void>;
   destroyPool(name: string): Promise<void>;
   addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void>;
-  addDataset(parent: ZPoolBase | Dataset, name: string, options: DatasetCreateOptions): Promise<void>;
+  addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<void>;
   getBaseDisks(): Promise<VDevDiskBase[]>;
   getFullDisks(): Promise<VDevDiskBase[]>;
   getDiskCapacity(path: string): Promise<string>;
@@ -233,7 +232,7 @@ export class ZFSManager implements IZFSManager {
     console.log(proc.getStdout());
   }
 
-  async addDataset(parent: ZPoolBase | Dataset, name: string, options: DatasetCreateOptions): Promise<void> {
+  async addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<void> {
     const argv = ["zfs", "create"];
 
     // Construct dataset properties
@@ -255,7 +254,7 @@ export class ZFSManager implements IZFSManager {
     argv.push(...datasetProps.flatMap((prop) => ["-o", prop]));
 
     // Append dataset path
-    argv.push(`${parent.name}/${name}`);
+    argv.push(`${parent}/${name}`);
 
     console.log("****\ncmdstring:\n", ...argv, "\n****");
 

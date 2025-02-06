@@ -68,6 +68,7 @@ export interface ZPool extends ZPoolBase {
   scan?: PoolScanObject;
   diskIdentifier?: DiskIdentifier;
   errorCount: number;
+  createFileSystem?: boolean;
 }
 
 export type DiskIdentifier = "vdev_path" | "phy_path" | "sd_path";
@@ -92,6 +93,7 @@ export interface VDevDisk extends VDevDiskBase {
   powerOnCount: string;
   powerOnHours: number;
   rotationRate: number;
+  hasPartitions?: boolean;
 }
 
 export type VDevType =
@@ -110,6 +112,8 @@ export interface VDevBase {
   type: VDevType;
   disks: VDevDiskBase[];
   isMirror?: boolean;
+  diskIdentifier?: DiskIdentifier;
+
 }
 
 export interface VDev extends VDevBase {
@@ -201,6 +205,8 @@ export interface ZFSFileSystemInfo {
     };
     used: number;
   };
+  parentFS?: string;
+  children?: ZFSFileSystemInfo[];
 }
 
 //object for tracking pool scan (scrub/resilver) data

@@ -7,7 +7,8 @@ export interface ZFSConfig {
 
 export interface ZPoolBase {
   name: string;
-  vdevs: VDevBase[];
+  // vdevs: VDevBase[];
+  vdevs: VDev[];
 }
 
 export interface ZpoolCreateOptions {
@@ -20,6 +21,8 @@ export interface ZpoolCreateOptions {
   dedup?: string;
   forceCreate?: boolean;
   refreservationPercent?: number;
+  createFileSystem?: boolean;
+  readOnly?: boolean;
 }
 
 export interface ZPoolAddVDevOptions {
@@ -73,30 +76,63 @@ export interface ZPool extends ZPoolBase {
 
 export type DiskIdentifier = "vdev_path" | "phy_path" | "sd_path";
 
-export interface VDevDiskBase {
-  path: string;
+// export interface VDevDiskBase {
+//   path: string;
+// }
+
+// export interface VDevDisk extends VDevDiskBase {
+//   name: string;
+//   capacity: string;
+//   model: string;
+//   guid: string;
+//   // type: "SSD" | "HDD" | "NVMe";
+//   type: string;
+//   health: string;
+//   stats: Record<string, any>;
+//   phy_path: string;
+//   sd_path: string;
+//   vdev_path: string;
+//   serial: string;
+//   temp: string;
+//   powerOnCount: string;
+//   powerOnHours: number;
+//   rotationRate: number;
+//   hasPartitions?: boolean;
+//   errors?: string[];
+//   vDevName?: string;
+//   poolName?: string;
+//   vDevType?: string;
+// }
+
+export interface VDevDisk {
+  path: string; // Previously in VDevDiskBase
+  name?: string;
+  capacity?: string;
+  model?: string;
+  guid?: string;
+  // type?: "SSD" | "HDD" | "NVMe" | "Unknown"; // Optional to allow flexibility
+  type?: string;
+  health?: string;
+  stats?: Record<string, any>;
+  phy_path?: string;
+  sd_path?: string;
+  vdev_path?: string;
+  serial?: string;
+  temp?: string;
+  powerOnCount?: string;
+  powerOnHours?: number;
+  rotationRate?: number;
+  hasPartitions?: boolean;
+  errors?: string[];
+  vDevName?: string;
+  poolName?: string;
+  vDevType?: string;
+  children?: VDevDisk[];
 }
 
-export interface VDevDisk extends VDevDiskBase {
-  name: string;
-  capacity: string;
-  model: string;
-  guid: string;
-  type: "SSD" | "HDD" | "NVMe";
-  health: string;
-  stats: Record<string, any>;
-  phy_path: string;
-  sd_path: string;
-  vdev_path: string;
-  serial: string;
-  temp: string;
-  powerOnCount: string;
-  powerOnHours: number;
-  rotationRate: number;
-  hasPartitions?: boolean;
-}
 
 export type VDevType =
+  | "data"
   | "disk"
   | "mirror"
   | "raidz1"
@@ -108,24 +144,50 @@ export type VDevType =
   | "special"
   | "cache";
 
-export interface VDevBase {
-  type: VDevType;
-  disks: VDevDiskBase[];
+// export interface VDevBase {
+//   name?: string;
+//   type: VDevType;
+//   disks: VDevDiskBase[];
+//   isMirror?: boolean;
+//   diskIdentifier?: DiskIdentifier;
+//   selectedDisks?: string[];
+// }
+
+// export interface VDev extends VDevBase {
+//   name?: string;
+//   disks: VDevDisk[];
+//   guid: string;
+//   status: string;
+//   stats: {
+//     read_errors: number;
+//     write_errors: number;
+//     checksum_errors: number;
+//   };
+//   errors?: string[];
+//   path?: string;
+//   poolName?: string;
+//   diskType?: string;
+// }
+
+export interface VDev {
+  name?: string;
+  type: VDevType | string;
+  disks: VDevDisk[]; // Includes full disk details instead of VDevDiskBase[]
   isMirror?: boolean;
+  forceAdd?: ZPoolAddVDevOptions;
   diskIdentifier?: DiskIdentifier;
-
-}
-
-export interface VDev extends VDevBase {
-  disks: VDevDisk[];
-  guid: string;
-  status: string;
-  stats: {
+  selectedDisks?: string[];
+  guid?: string;
+  status?: string;
+  stats?: {
     read_errors: number;
     write_errors: number;
     checksum_errors: number;
   };
-  errors: string[];
+  errors?: string[];
+  path?: string;
+  poolName?: string;
+  diskType?: string;
 }
 
 export namespace VDev {
@@ -156,9 +218,11 @@ export interface DatasetCreateOptions {
 }
 
 export interface Dataset extends DatasetBase {
-  parent: ZPool | Dataset;
-  children: Dataset[];
+  // parent: ZPool | Dataset;
+  parent: string;
+  children?: Dataset[];
   fileSystem?: ZFSFileSystemInfo;
+  encrypted?: boolean;
 }
 
 export interface ZFSFileSystemInfo {

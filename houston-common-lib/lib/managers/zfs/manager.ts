@@ -4,14 +4,15 @@ import {
   Server,
   Command,
   ZPoolBase,
-  VDevBase,
+  // VDevBase,
+  VDev,
   ValueError,
   unwrap,
   CommandOptions,
   ZPoolAddVDevOptions,
   DatasetCreateOptions,
   Disks,
-  VDevDiskBase,
+  // VDevDiskBase,
   VDevDisk,
   ZPoolDestroyOptions,
   convertToBytes
@@ -20,10 +21,12 @@ import {
 export interface IZFSManager {
   createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<void>;
   destroyPool(name: string): Promise<void>;
-  addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void>;
+  // addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void>;
+  addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<void>;
   addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<void>;
-  getBaseDisks(): Promise<VDevDiskBase[]>;
-  getFullDisks(): Promise<VDevDiskBase[]>;
+  // getBaseDisks(): Promise<VDevDiskBase[]>;
+  getBaseDisks(): Promise<VDevDisk[]>;
+  getFullDisks(): Promise<VDevDisk[]>;
   getDiskCapacity(path: string): Promise<string>;
   // TODO:
   getPools(): Promise<ZPool[]>;
@@ -42,7 +45,8 @@ export class ZFSManager implements IZFSManager {
    * @param vdev
    * @returns
    */
-  private formatVDevArgv(vdev: VDevBase): string[] {
+  // private formatVDevArgv(vdev: VDevBase): string[] {
+  private formatVDevArgv(vdev: VDev): string[] {
     const args = [];
     if (vdev.type !== "disk") {
       args.push(vdev.type);
@@ -62,7 +66,8 @@ export class ZFSManager implements IZFSManager {
    * @param vdevs
    * @returns
    */
-  private formatVDevsArgv(vdevs: VDevBase[]): string[] {
+  // private formatVDevsArgv(vdevs: VDevBase[]): string[] {
+  private formatVDevsArgv(vdevs: VDev[]): string[] {
     return vdevs
       .sort((a, b) => {
         // ensure stripe vdevs come first since they have no type argument
@@ -147,15 +152,25 @@ export class ZFSManager implements IZFSManager {
   /**
    * Fetches only the disk paths and returns them as VDevDiskBase[]
    */
-  async getBaseDisks(): Promise<VDevDiskBase[]> {
+  // async getBaseDisks(): Promise<VDevDiskBase[]> {
+  //   return unwrap(
+  //     this.server.getDiskInfo()
+  //       .map((diskInfoData) =>
+  //         diskInfoData.rows!.map((disk: any): VDevDiskBase => ({
+  //           path: disk["dev"],
+  //         }))
+  //       )
+  //     );
+  // }
+  async getBaseDisks(): Promise<VDevDisk[]> {
     return unwrap(
       this.server.getDiskInfo()
         .map((diskInfoData) =>
-          diskInfoData.rows!.map((disk: any): VDevDiskBase => ({
+          diskInfoData.rows!.map((disk: any): VDevDisk => ({
             path: disk["dev"],
           }))
         )
-      );
+    );
   }
 
   /**
@@ -214,7 +229,8 @@ export class ZFSManager implements IZFSManager {
       .unwrapOr("Unknown");
   }
 
-  async addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void> {
+  // async addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void> {
+  async addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<void> {
     const argv = ["zpool", "add"];
 
     if (options.force) argv.push("-f");
@@ -266,8 +282,8 @@ export class ZFSManager implements IZFSManager {
 
   allDisksHaveSameCapacity(disks: VDevDisk[]): boolean {
     if (disks.length === 0) return false;
-    const firstCapacity = convertToBytes(disks[0]!.capacity);
-    return disks.every(disk => (convertToBytes(disk.capacity) === firstCapacity));
+    const firstCapacity = convertToBytes(disks[0]!.capacity!);
+    return disks.every(disk => (convertToBytes(disk.capacity!) === firstCapacity));
   }
 
   RAIDZResiliency: Record<string, number> = {

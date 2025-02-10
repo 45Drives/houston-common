@@ -35,14 +35,38 @@ export type ServerInfo = {
   "OS VERSION_ID": string;
 };
 
-export type DiskInfo = {
-  rows: {
-    "dev-by-path": string;
-    "bay-id": `${number}-${number}`;
-    occupied: boolean;
-    dev: string;
-    disk_type: "HDD" | "SSD";
-  }[];
+export type DiskInfo = (
+  | ({
+      "dev-by-path": string;
+      "bay-id": `${number}-${number}`;
+    } & {
+      occupied: true;
+      dev: string;
+      disk_type: "HDD" | "SSD";
+    })
+  | { occupied: false }
+)[];
+
+export type LSDevDisk = {
+  "dev-by-path": string;
+  "bay-id": string;
+  occupied: boolean;
+  dev: string;
+  partitions: number;
+  "model-family": string;
+  "model-name": string;
+  serial: string;
+  capacity: string;
+  "firm-ver": string;
+  "rotation-rate": number;
+  "start-stop-count": string;
+  "power-cycle-count": string;
+  "temp-c": string;
+  "current-pending-sector": string;
+  "offline-uncorrectable": string;
+  "power-on-time": string;
+  health: string;
+  disk_type: "HDD" | "SSD";
 };
 
 export class Server {
@@ -77,7 +101,8 @@ export class Server {
   getLsDev() {
     return this.execute(new Command(["/opt/45drives/tools/lsdev", "--json"], { superuser: "try" }))
       .map((proc) => proc.getStdout())
-      .andThen(safeJsonParse<any>);
+      .andThen(safeJsonParse<{ rows: LSDevDisk[][] }>)
+      .map((lsdev) => lsdev.rows?.flat() ?? []);
   }
 
   getServerModel(): ResultAsync<ServerModel, ProcessError | ParsingError> {

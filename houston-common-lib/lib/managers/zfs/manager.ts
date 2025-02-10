@@ -142,7 +142,7 @@ export class ZFSManager implements IZFSManager {
     return unwrap(
       this.server.getDiskInfo()
         .map((diskInfoData) =>
-          diskInfoData.rows!.map((disk: any): VDevDiskBase => ({
+          diskInfoData.map((disk: any): VDevDiskBase => ({
             path: disk["dev-by-path"],
           }))
         )
@@ -157,9 +157,7 @@ export class ZFSManager implements IZFSManager {
       unwrap(this.server.getLsDev()),
       unwrap(this.server.getDiskInfo()),
     ])
-      .then(([lsdevData, diskInfoData]) => {
-        const lsdevRows = lsdevData.rows.flat(); // Flatten nested arrays in `lsdev`
-        const diskInfoRows = diskInfoData.rows!;
+      .then(([lsdevRows, diskInfoRows]) => {
 
         return diskInfoRows.map((disk: any): VDevDisk => {
           const matchingDisk = lsdevRows.find((lsdev: any) => lsdev.dev === disk.dev);
@@ -179,7 +177,7 @@ export class ZFSManager implements IZFSManager {
             serial: matchingDisk?.serial || "Unknown",
             temp: matchingDisk?.["temp-c"] || "N/A",
             powerOnCount: matchingDisk?.["power-cycle-count"] || "0",
-            powerOnHours: matchingDisk?.["power-on-time"] || 0,
+            powerOnHours: parseInt(matchingDisk?.["power-on-time"] || "0"),
             rotationRate: matchingDisk?.["rotation-rate"] || 0,
           };
         });
@@ -254,5 +252,3 @@ export class ZFSManager implements IZFSManager {
     console.log(proc.getStdout());
   }
 }
-
-

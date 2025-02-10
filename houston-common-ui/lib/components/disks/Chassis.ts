@@ -6,7 +6,7 @@ import {
   imageModelLoader,
   type ModelLoader,
 } from "@/components/disks/ServerComponent";
-import { ValueError, type SlotType } from "@45drives/houston-common-lib";
+import { ValueError, type LSDevDisk, type SlotType } from "@45drives/houston-common-lib";
 
 import HL4ChassisImageURL from "./assets/hl4/drivebay.png";
 import { DriveSlot } from "@/components/disks/DriveSlot";
@@ -36,28 +36,28 @@ export class Chassis extends ServerComponent {
           "1-1",
           "HDD",
           (37 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,
-          (5 + 3 / 8) / 144 * 165 / 2 - (45 * (5 + 3 / 8)) / 144,
+          (((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,
           1
         ),
         SlotLocation(
           "1-2",
           "HDD",
           (69 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,
-          (5 + 3 / 8) / 144 * 165 / 2 - (45 * (5 + 3 / 8)) / 144,
+          (((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,
           1
         ),
         SlotLocation(
           "1-3",
           "HDD",
           (101 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,
-          (5 + 3 / 8) / 144 * 165 / 2 - (45 * (5 + 3 / 8)) / 144,
+          (((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,
           1
         ),
         SlotLocation(
           "1-4",
           "HDD",
           (133 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,
-          (5 + 3 / 8) / 144 * 165 / 2 - (45 * (5 + 3 / 8)) / 144,
+          (((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,
           1
         ),
       ],
@@ -89,14 +89,17 @@ export class Chassis extends ServerComponent {
       slot.rotation.x = slotLocation.rotation.x;
       slot.rotation.y = slotLocation.rotation.y;
       slot.rotation.z = slotLocation.rotation.z;
+      slot.addEventListener("selected", (e) => this.dispatchEvent(e));
+      slot.addEventListener("deselected", (e) => this.dispatchEvent(e));
       return slot;
     });
     this.add(...this.slots);
   }
 
-  setDiskSlotInfo(slots: { occupiedBy: SlotType | string | null }[]) {
+  setDiskSlotInfo(slots: LSDevDisk[]) {
     slots.map((slotInfo, index) => {
-      this.slots[index].occupiedBy = slotInfo.occupiedBy;
+      this.slots[index].occupiedBy = slotInfo.occupied ? slotInfo.disk_type : null;
+      this.slots[index].userData = slotInfo;
     });
   }
 }

@@ -5,16 +5,26 @@ THREE.Cache.enabled = true;
 
 export type ModelLoader = () => Promise<THREE.Object3D>;
 
+export type ServerComponentMouseEventTypes = "click" | "mouseenter" | "mouseleave";
+
+export type ServerComponentMouseEvent<Type extends ServerComponentMouseEventTypes> = Pick<
+  MouseEvent,
+  "altKey" | "button" | "buttons" | "ctrlKey" | "metaKey" | "shiftKey"
+> & {
+  type: Type;
+  ray: THREE.Ray;
+  point?: THREE.Vector3;
+};
+
 export type ServerComponentEventMap = {
-  click: MouseEvent;
-  dblclick: MouseEvent;
-  mouseenter: MouseEvent;
-  mouseleave: MouseEvent;
+  click: ServerComponentMouseEvent<"click">;
+  mouseenter: ServerComponentMouseEvent<"mouseenter">;
+  mouseleave: ServerComponentMouseEvent<"mouseleave">;
   selected: { component: ServerComponent };
   deselected: { component: ServerComponent };
 } & THREE.Object3DEventMap;
 
-export class ServerComponent extends THREE.Group<ServerComponentEventMap> {
+export class ServerComponent extends THREE.Object3D<ServerComponentEventMap> {
   loaded: Promise<boolean>;
 
   constructor(modelLoader?: ModelLoader) {
@@ -29,7 +39,7 @@ export class ServerComponent extends THREE.Group<ServerComponentEventMap> {
     }
   }
 
-  static isValidEvent(event: { type: string }): event is { type: keyof ServerComponentEventMap } {
+  static isValidEvent(event: { type: string }): event is { type: ServerComponentMouseEventTypes } {
     return ["click", "dblclick", "mouseenter", "mouseleave"].includes(event.type);
   }
 }
@@ -47,6 +57,8 @@ export function imageModelLoader(
   return () =>
     textureLoader.loadAsync(url).then((texture) => {
       texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = THREE.NearestFilter;
+      texture.generateMipmaps = false;
       const aspect = texture.image.width / texture.image.height;
       let { width, height } = size;
       if (width === undefined && height === undefined) {
@@ -71,22 +83,20 @@ export class SelectionHighlight extends THREE.Mesh {
     transparent: true,
     opacity: 0.25,
   });
-  constructor(object: THREE.Object3D) {
+  constructor() {
     super();
     this.material = SelectionHighlight.material;
-    this.resizeTo(object);
   }
 
-  resizeTo(object: THREE.Object3D) {
+  resizeTo(object: THREE.Object3D, margin: number = 0.1) {
     const bound = new THREE.Box3().setFromObject(object);
     const size = new THREE.Vector3();
     const center = new THREE.Vector3();
     bound.getSize(size);
     bound.getCenter(center);
-    this.geometry = new THREE.BoxGeometry(size.x, size.y);
-    this.position.x = center.x;
-    this.position.y = center.y;
-    this.position.z = center.z;
+    this.geometry?.dispose();
+    this.geometry = new THREE.BoxGeometry(size.x + margin, size.y + margin, size.z + margin);
+    this.position.copy(center.sub(object.position));
   }
 }
 
@@ -97,15 +107,8 @@ export function Selectable<TBase extends Constructor<ServerComponent>>(Base: TBa
     _selectionHighlightBox: SelectionHighlight;
     constructor(...args: any[]) {
       super(...args);
-      this._selectionHighlightBox = new SelectionHighlight(this);
-      this.addEventListener("click", (event) => {
-        if (event.shiftKey) {
-          this.selected = true;
-        } else {
-          this.selected = !this.selected;
-        }
-        this.dispatchEvent({ type: this.selected ? "selected" : "deselected", component: this });
-      });
+      this._selectionHighlightBox = new SelectionHighlight();
+      this._selectionHighlightBox.resizeTo(this);
     }
 
     get selected(): boolean {
@@ -116,13 +119,17 @@ export function Selectable<TBase extends Constructor<ServerComponent>>(Base: TBa
       if (value === this._selected) {
         return;
       }
+      let eventType: "selected" | "deselected";
       if (value) {
         this._selectionHighlightBox.resizeTo(this);
         this.add(this._selectionHighlightBox);
+        eventType = "selected";
       } else {
         this.remove(this._selectionHighlightBox);
+        eventType = "deselected";
       }
       this._selected = value;
+      this.dispatchEvent({ type: eventType, component: this });
     }
   };
 }

@@ -23,6 +23,7 @@ export class DriveSlot extends Selectable(ServerComponent) {
   };
 
   private static material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+  private static hoverMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.2 });
 
   private occupiedBy_: SlotType | string | null = null;
 
@@ -35,13 +36,22 @@ export class DriveSlot extends Selectable(ServerComponent) {
     public slotId: string
   ) {
     super();
-    this.bounds = new THREE.Mesh(DriveSlot.slotTypeBoxLUT[this.slotType], DriveSlot.material);
+    this.bounds = new THREE.Mesh(
+      DriveSlot.slotTypeBoxLUT[this.slotType],
+      DriveSlot.material.clone()
+    );
     const boundsBox = new THREE.Box3().setFromObject(this.bounds);
     const boundsWidth = boundsBox.max.x - boundsBox.min.x;
     const boundsHeight = boundsBox.max.y - boundsBox.min.y;
     const boundsDepth = boundsBox.max.z - boundsBox.min.z;
     this.bounds.position.set(-boundsWidth / 2, -boundsHeight / 2, boundsDepth / 2);
     this.add(this.bounds);
+    this.addEventListener("mouseenter", () => {
+      this.bounds.material = DriveSlot.hoverMaterial;
+    });
+    this.addEventListener("mouseleave", () => {
+      this.bounds.material = DriveSlot.material;
+    });
   }
 
   set occupiedBy(type: SlotType | string | null) {

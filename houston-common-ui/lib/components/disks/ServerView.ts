@@ -1,7 +1,14 @@
 import { Chassis } from "@/components/disks/Chassis";
-import { ServerComponent } from "@/components/disks/ServerComponent";
-import type { SlotType } from "@45drives/houston-common-lib";
+import { MouseEventTranslator } from "@/components/disks/MouseEventTranslator";
+import {
+  ServerComponent,
+  type ServerComponentEventMap,
+  type ServerComponentMouseEvent,
+} from "@/components/disks/ServerComponent";
+import type { LSDevDisk, SlotType } from "@45drives/houston-common-lib";
 import * as THREE from "three";
+
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 function projectBox3ToCamera(box3: THREE.Box3, camera: THREE.Camera) {
   const points = [
@@ -30,45 +37,95 @@ function projectBox3ToCamera(box3: THREE.Box3, camera: THREE.Camera) {
   return new THREE.Box2(new THREE.Vector2(minX, minY), new THREE.Vector2(maxX, maxY));
 }
 
-export class ServerView {
+export class ServerView extends THREE.EventDispatcher<
+  ServerComponentEventMap & {
+    selectionchange: { type: "selectionchange"; components: ServerComponent[] };
+  }
+> {
   private renderer = new THREE.WebGLRenderer();
+  // private camera: THREE.Camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
   private camera: THREE.Camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
   private scene: THREE.Scene = new THREE.Scene();
-  private raycaster = new THREE.Raycaster();
-
-  private componentUnderCursor?: ServerComponent;
+  private controls = new OrbitControls(this.camera, this.renderer.domElement);
+  private mouseEventTranslator: MouseEventTranslator;
 
   private chassis: Chassis;
 
-  constructor(modelNumber: string) {
+  private resetCameraControlsTimeoutHandle?: number;
+  private static resetCameraControlsTimeout = 5000;
+
+  constructor(
+    modelNumber: string,
+    opts: {
+      enableSelection?: boolean;
+      enableRotate?: boolean;
+      enablePan?: boolean;
+      enableZoom?: boolean;
+    } = {}
+  ) {
+    super();
+    opts.enableSelection ??= false;
+    opts.enableRotate ??= false;
+    opts.enablePan ??= false;
+    opts.enableZoom ??= false;
+    this.mouseEventTranslator = new MouseEventTranslator(
+      this.renderer.domElement,
+      this.camera,
+      this.scene,
+      opts.enableSelection
+    );
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
-    this.camera.position.z = 5;
+    this.camera.position.z = 24;
+    this.controls.enableDamping = true;
+    this.controls.enablePan = opts.enablePan;
+    this.controls.enableZoom = opts.enableZoom;
+    this.controls.enableRotate = opts.enableRotate;
+    this.controls.enabled = true;
+    this.controls.mouseButtons = {
+      MIDDLE: THREE.MOUSE.ROTATE,
+      RIGHT: THREE.MOUSE.PAN,
+      LEFT: null,
+    };
+
+    this.controls.update();
+    this.controls.saveState();
+    this.renderer.domElement.addEventListener("mouseleave", () => {
+      window.clearTimeout(this.resetCameraControlsTimeoutHandle);
+      this.resetCameraControlsTimeoutHandle = window.setTimeout(() => {
+        this.controls.reset();
+        this.controls.update();
+      }, ServerView.resetCameraControlsTimeout);
+    });
+    this.renderer.domElement.addEventListener("mousemove", () => {
+      window.clearTimeout(this.resetCameraControlsTimeoutHandle);
+      this.resetCameraControlsTimeoutHandle = undefined;
+    });
 
     this.chassis = new Chassis(modelNumber);
     this.scene.add(this.chassis);
+
+    this.chassis.addEventListener("selected", (e) => {
+      this.dispatchEvent(e);
+    });
+    this.chassis.addEventListener("deselected", (e) => {
+      this.dispatchEvent(e);
+    });
+    this.mouseEventTranslator.addEventListener("selectionchange", (e) => this.dispatchEvent(e));
 
     this.chassis.loaded.then(() => {
       this.zoomFit();
     });
 
-    this.renderer.domElement.addEventListener("click", (event) => {
-      this.handleMouseEvent(event);
+    this.renderer.domElement.addEventListener("mousedown", (event) => {
+      this.mouseEventTranslator.translateMouseClick(event as MouseEvent & { type: "mousedown" });
     });
-    this.renderer.domElement.addEventListener("dblclick", (event) => {
-      this.handleMouseEvent(event);
+    this.renderer.domElement.addEventListener("mouseup", (event) => {
+      this.mouseEventTranslator.translateMouseClick(event as MouseEvent & { type: "mouseup" });
     });
     this.renderer.domElement.addEventListener("mousemove", (event) => {
-      this.handleMouseEvent(event);
+      this.mouseEventTranslator.translateMouseOver(event as MouseEvent & { type: "mousemove" });
     });
-  }
-
-  getBoundingClientRect() {
-    return this.renderer.domElement.getBoundingClientRect();
-  }
-
-  getCamera() {
-    return this.camera;
   }
 
   start(parent?: HTMLElement | null) {
@@ -107,6 +164,8 @@ export class ServerView {
       this.camera.bottom = -height / 2;
 
       this.camera.updateProjectionMatrix();
+
+      this.controls.update();
     } else {
       throw new Error("not implemented");
     }
@@ -116,46 +175,52 @@ export class ServerView {
     this.scene.background = bg;
   }
 
-  setDiskSlotInfo(slots: { occupiedBy: SlotType | string | null }[]) {
+  setDiskSlotInfo(slots: LSDevDisk[]) {
     this.chassis.setDiskSlotInfo(slots);
   }
 
+  set enableControls(value: boolean) {
+    this.controls.enabled = value;
+  }
+  get enableControls() {
+    return this.controls.enabled;
+  }
+
+  set enableSelection(value: boolean) {
+    this.mouseEventTranslator.enableSelection = value;
+  }
+  get enableSelection() {
+    return this.mouseEventTranslator.enableSelection;
+  }
+
+  set enableRotate(value: boolean) {
+    this.controls.enableRotate = value;
+  }
+  get enableRotate() {
+    return this.controls.enableRotate;
+  }
+
+  set enablePan(value: boolean) {
+    this.controls.enablePan = value;
+  }
+  get enablePan() {
+    return this.controls.enablePan;
+  }
+
+  set enableZoom(value: boolean) {
+    this.controls.enableZoom = value;
+  }
+  get enableZoom() {
+    return this.controls.enableZoom;
+  }
+
+  getSelectedComponents() {
+    return this.scene.getObjectsByProperty("selected", true);
+  }
+
   private animate() {
+    this.controls.update();
+    this.mouseEventTranslator.animate();
     this.renderer.render(this.scene, this.camera);
-  }
-
-  private normalizedMouseEventCoords(event: MouseEvent): THREE.Vector2 {
-    const canvasRect = this.renderer.domElement.getBoundingClientRect();
-    return new THREE.Vector2(
-      ((event.clientX - canvasRect.left) / canvasRect.width) * 2 - 1,
-      -((event.clientY - canvasRect.top) / canvasRect.height) * 2 + 1
-    );
-  }
-
-  private getMouseEventInterstions(event: MouseEvent): THREE.Intersection[] {
-    this.raycaster.setFromCamera(this.normalizedMouseEventCoords(event), this.camera);
-    return this.raycaster.intersectObjects(this.scene.children);
-  }
-
-  private handleMouseEvent(event: MouseEvent) {
-    const intersections = this.getMouseEventInterstions(event).filter(
-      (i): i is THREE.Intersection & { object: ServerComponent } =>
-        i.object instanceof ServerComponent
-    );
-
-    const obj = intersections[0]?.object as ServerComponent | undefined;
-
-    if (event.type === "mousemove") {
-      if (obj === this.componentUnderCursor) {
-        return;
-      }
-      this.componentUnderCursor?.dispatchEvent({ ...event, type: "mouseleave" });
-      obj?.dispatchEvent({ ...event, type: "mouseenter" });
-      this.componentUnderCursor = obj;
-    }
-
-    if (obj && ServerComponent.isValidEvent(event)) {
-      obj.dispatchEvent(event);
-    }
   }
 }

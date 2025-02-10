@@ -20,10 +20,10 @@ import {
 } from "@/index";
 
 export interface IZFSManager {
-  createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<void>;
+  createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<ExitedProcess>;
   destroyPool(name: string): Promise<void>;
   // addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void>;
-  addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<void>;
+  addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<ExitedProcess>;
   addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<ExitedProcess>;
   // getBaseDisks(): Promise<VDevDiskBase[]>;
   getBaseDisks(): Promise<VDevDisk[]>;
@@ -83,7 +83,7 @@ export class ZFSManager implements IZFSManager {
       .flatMap((vdev) => this.formatVDevArgv(vdev));
   }
 
-  async createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<void> {
+  async createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<ExitedProcess> {
     const argv = ["zpool", "create", pool.name];
 
     // set up pool properties
@@ -124,9 +124,15 @@ export class ZFSManager implements IZFSManager {
     console.log("****\ncmdstring:\n", ...argv, "\n****");
 
     // using new process execution method instead of useSpawn
-    const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
-
-    console.log(proc.getStdout());
+    // console.log(proc.getStdout());
+    try {
+      const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+      console.log("Command output:", proc.getStdout());
+      return proc;  // Return the process result
+    } catch (error) {
+      console.error("Error executing command:", error);
+      throw error; // Ensure caller catches the error
+    }
   }
 
   async destroyPool(pool: ZPoolBase | string, options: ZPoolDestroyOptions = {}): Promise<void> {
@@ -231,7 +237,7 @@ export class ZFSManager implements IZFSManager {
   }
 
   // async addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void> {
-  async addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<void> {
+  async addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<ExitedProcess> {
     const argv = ["zpool", "add"];
 
     if (options.force) argv.push("-f");
@@ -244,9 +250,15 @@ export class ZFSManager implements IZFSManager {
     console.log("****\ncmdstring:\n", ...argv, "\n****");
 
     // using new process execution method instead of useSpawn
-    const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
 
-    console.log(proc.getStdout());
+    try {
+      const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+      console.log("Command output:", proc.getStdout());
+      return proc;  // Return the process result
+    } catch (error) {
+      console.error("Error executing command:", error);
+      throw error; // Ensure caller catches the error
+    }
   }
 
   // async addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<void> {

@@ -15,7 +15,8 @@ import {
   // VDevDiskBase,
   VDevDisk,
   ZPoolDestroyOptions,
-  convertToBytes
+  convertToBytes,
+  ExitedProcess
 } from "@/index";
 
 export interface IZFSManager {
@@ -23,7 +24,7 @@ export interface IZFSManager {
   destroyPool(name: string): Promise<void>;
   // addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void>;
   addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<void>;
-  addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<void>;
+  addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<ExitedProcess>;
   // getBaseDisks(): Promise<VDevDiskBase[]>;
   getBaseDisks(): Promise<VDevDisk[]>;
   getFullDisks(): Promise<VDevDisk[]>;
@@ -248,11 +249,41 @@ export class ZFSManager implements IZFSManager {
     console.log(proc.getStdout());
   }
 
-  async addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<void> {
-    const argv = ["zfs", "create"];
+  // async addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<void> {
+  //   const argv = ["zfs", "create"];
 
-    // Construct dataset properties
+  //   // Construct dataset properties
+  //   const datasetProps: string[] = [];
+  //   if (options.atime !== undefined) datasetProps.push(`atime=${options.atime}`);
+  //   if (options.casesensitivity !== undefined) datasetProps.push(`casesensitivity=${options.casesensitivity}`);
+  //   if (options.compression !== undefined) datasetProps.push(`compression=${options.compression}`);
+  //   if (options.dedup !== undefined) datasetProps.push(`dedup=${options.dedup}`);
+  //   if (options.dnodesize !== undefined) datasetProps.push(`dnodesize=${options.dnodesize}`);
+  //   if (options.xattr !== undefined) datasetProps.push(`xattr=${options.xattr}`);
+  //   if (options.recordsize !== undefined) datasetProps.push(`recordsize=${options.recordsize}`);
+  //   if (options.readonly !== undefined) datasetProps.push(`readonly=${options.readonly}`);
+
+  //   if (options.quota !== undefined) {
+  //     datasetProps.push(`quota=${options.quota === "0" ? "none" : options.quota}`);
+  //   }
+
+  //   // Append properties to command arguments
+  //   argv.push(...datasetProps.flatMap((prop) => ["-o", prop]));
+
+  //   // Append dataset path
+  //   argv.push(`${parent}/${name}`);
+
+  //   console.log("****\ncmdstring:\n", ...argv, "\n****");
+
+  //   // Execute command
+  //   const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+
+  //   console.log(proc.getStdout());
+  // }
+  async addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<ExitedProcess> {
+    const argv = ["zfs", "create"];
     const datasetProps: string[] = [];
+
     if (options.atime !== undefined) datasetProps.push(`atime=${options.atime}`);
     if (options.casesensitivity !== undefined) datasetProps.push(`casesensitivity=${options.casesensitivity}`);
     if (options.compression !== undefined) datasetProps.push(`compression=${options.compression}`);
@@ -261,24 +292,25 @@ export class ZFSManager implements IZFSManager {
     if (options.xattr !== undefined) datasetProps.push(`xattr=${options.xattr}`);
     if (options.recordsize !== undefined) datasetProps.push(`recordsize=${options.recordsize}`);
     if (options.readonly !== undefined) datasetProps.push(`readonly=${options.readonly}`);
-
     if (options.quota !== undefined) {
-      datasetProps.push(`quota=${options.quota === "0" ? "none" : options.quota}`);
+        datasetProps.push(`quota=${options.quota === "0" ? "none" : options.quota}`);
     }
 
-    // Append properties to command arguments
     argv.push(...datasetProps.flatMap((prop) => ["-o", prop]));
-
-    // Append dataset path
     argv.push(`${parent}/${name}`);
 
     console.log("****\ncmdstring:\n", ...argv, "\n****");
 
-    // Execute command
-    const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+    try {
+        const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+        console.log("Command output:", proc.getStdout());
+        return proc;  // Return the process result
+    } catch (error) {
+        console.error("Error executing command:", error);
+        throw error; // Ensure caller catches the error
+    }
+}
 
-    console.log(proc.getStdout());
-  }
 
   allDisksHaveSameCapacity(disks: VDevDisk[]): boolean {
     if (disks.length === 0) return false;

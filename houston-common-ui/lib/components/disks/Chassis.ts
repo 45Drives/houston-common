@@ -1,15 +1,21 @@
 import * as THREE from "three";
 
 import {
+  lazyModelLoader,
   ServerComponent,
   gltfModelLoader,
   imageModelLoader,
+  loadImageModel,
   type ModelLoader,
-} from "@/components/disks/ServerComponent";
-import { ValueError, type LSDevDisk, type SlotType } from "@45drives/houston-common-lib";
+} from "./ServerComponent";
+import {
+  ValueError,
+  type DriveSlot,
+  type LSDevDisk,
+  type SlotType,
+} from "@45drives/houston-common-lib";
 
-import HL4ChassisImageURL from "./assets/hl4/drivebay.png";
-import { DriveSlot } from "@/components/disks/DriveSlot";
+import { DriveSlotComponent } from "@/components/disks/DriveSlot";
 
 type SlotLocation = { id: string; type: SlotType; location: THREE.Vector3; rotation: THREE.Euler };
 
@@ -27,10 +33,12 @@ function SlotLocation(
 }
 
 export class Chassis extends ServerComponent {
-  protected static modelNumberLUT: { re: RegExp; model: ModelLoader; slots: SlotLocation[] }[] = [
+  protected static modelNumberLUT: { re: RegExp; modelLoader: ModelLoader; slots: SlotLocation[] }[] = [
     {
       re: /^HomeLab-HL4/,
-      model: imageModelLoader(HL4ChassisImageURL, { width: 5 + 3 / 8 }),
+      modelLoader: lazyModelLoader(() =>
+        loadImageModel(import("./assets/hl4/drivebay.png"), { width: 5 + 3 / 8 })
+      ),
       slots: [
         SlotLocation(
           "1-1",
@@ -64,25 +72,25 @@ export class Chassis extends ServerComponent {
     },
   ];
 
-  static lookupModel(modelNumber: string): { model: ModelLoader; slots: SlotLocation[] } | null {
-    for (const { re, model, slots } of this.modelNumberLUT) {
+  static lookupModel(modelNumber: string): { modelLoader: ModelLoader; slots: SlotLocation[] } | null {
+    for (const { re, modelLoader, slots } of this.modelNumberLUT) {
       if (re.test(modelNumber)) {
-        return { model, slots };
+        return { modelLoader, slots };
       }
     }
     return null;
   }
 
-  private slots: DriveSlot[];
+  private slots: DriveSlotComponent[];
 
   constructor(public modelNumber: string) {
     const lookupResult = Chassis.lookupModel(modelNumber);
     if (!lookupResult) {
       throw new ValueError(`Failed to lookup model number: ${modelNumber}`);
     }
-    super(lookupResult.model);
+    super(lookupResult.modelLoader);
     this.slots = lookupResult.slots.map((slotLocation) => {
-      const slot = new DriveSlot(slotLocation.type, slotLocation.id);
+      const slot = new DriveSlotComponent(slotLocation.type, slotLocation.id);
       slot.position.x = slotLocation.location.x;
       slot.position.y = slotLocation.location.y;
       slot.position.z = slotLocation.location.z;
@@ -96,10 +104,13 @@ export class Chassis extends ServerComponent {
     this.add(...this.slots);
   }
 
-  setDiskSlotInfo(slots: LSDevDisk[]) {
-    slots.map((slotInfo, index) => {
-      this.slots[index].occupiedBy = slotInfo.occupied ? slotInfo.disk_type : null;
-      this.slots[index].userData = slotInfo;
+  setDriveSlotInfo(slots: DriveSlot[]) {
+    slots.forEach((slotInfo) => {
+      const slot = this.slots.find((slot) => slot.userData.slotId === slotInfo.slotId);
+      if (!slot) {
+        throw new ValueError(`Invalid slot ID: ${slotInfo.slotId}`);
+      }
+      slot.setSlotInfo(slotInfo);
     });
   }
 }

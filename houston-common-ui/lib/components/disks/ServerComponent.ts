@@ -50,11 +50,11 @@ export function gltfModelLoader(url: string): ModelLoader {
 }
 
 const textureLoader = new THREE.TextureLoader();
-export function imageModelLoader(
-  url: string,
+export function loadImageModel(
+  imp: Promise<typeof import("*.png") | typeof import("*.jpg") | typeof import("*.svg")>,
   size: { width?: number; height?: number } = {}
-): ModelLoader {
-  return () =>
+) {
+  return imp.then(({ default: url }) =>
     textureLoader.loadAsync(url).then((texture) => {
       texture.magFilter = THREE.NearestFilter;
       texture.minFilter = THREE.NearestFilter;
@@ -74,7 +74,20 @@ export function imageModelLoader(
         new THREE.PlaneGeometry(width, height),
         new THREE.MeshBasicMaterial({ map: texture })
       );
-    });
+    })
+  );
+}
+export function imageModelLoader(
+  imp: Promise<typeof import("*.png") | typeof import("*.jpg") | typeof import("*.svg")>,
+  size?: { width?: number; height?: number }
+): ModelLoader {
+  return () => loadImageModel(imp, size);
+}
+
+export function lazyModelLoader(loader: ModelLoader): ModelLoader {
+  let model: Promise<THREE.Object3D> | null = null;
+
+  return () => model ? model : (model = loader());
 }
 
 export class SelectionHighlight extends THREE.Mesh {

@@ -36,6 +36,7 @@ export * from "@/managers";
 export * from "@/disks";
 export * from "@/user";
 export * from "@/serverModels";
+export * from "@/liveDriveSlots"
 
 export * as legacy from "@/legacy";
 

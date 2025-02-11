@@ -1,16 +1,14 @@
 import {
   ServerComponent,
   Selectable,
-  imageModelLoader,
+  loadImageModel,
+  lazyModelLoader,
   type ModelLoader,
 } from "@/components/disks/ServerComponent";
-import type { SlotType } from "@45drives/houston-common-lib";
+import { ValueError, type DriveSlot, type SlotType } from "@45drives/houston-common-lib";
 import * as THREE from "three";
 
-import HDDImageURL from "./textures/hdd-generic.png";
-import SSDImageURL from "./textures/ssd-generic.png";
-
-export class DriveSlot extends Selectable(ServerComponent) {
+export class DriveSlotComponent extends Selectable(ServerComponent) {
   static slotTypeBoxLUT: Record<SlotType, THREE.BoxGeometry> = {
     HDD: new THREE.BoxGeometry(1, 4, 5.75),
     SSD_7mm: new THREE.BoxGeometry(7 / 25.4, 2.75, 4),
@@ -18,8 +16,11 @@ export class DriveSlot extends Selectable(ServerComponent) {
   };
 
   private static driveModelLUT: Record<SlotType | string, ModelLoader> = {
-    HDD: imageModelLoader(HDDImageURL, { width: 1, height: 4 }),
-    SSD: imageModelLoader(SSDImageURL, { width: 7 / 25.4, height: 2.75 }),
+    HDD: lazyModelLoader(() => loadImageModel(import("./textures/hdd-generic.png"), { width: 1, height: 4 })),
+    SSD_7mm: lazyModelLoader(() =>
+      loadImageModel(import("./textures/ssd-generic.png"), { width: 7 / 25.4, height: 2.75 })),
+    SSD_15mm: lazyModelLoader(() =>
+      loadImageModel(import("./textures/ssd-generic.png"), { width: 15 / 25.4, height: 2.75 })),
   };
 
   private static material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
@@ -31,14 +32,17 @@ export class DriveSlot extends Selectable(ServerComponent) {
 
   private bounds: THREE.Mesh;
 
+  public userData: DriveSlot;
+
   constructor(
     public slotType: SlotType,
-    public slotId: string
+    slotId: string
   ) {
     super();
+    this.userData = { slotId };
     this.bounds = new THREE.Mesh(
-      DriveSlot.slotTypeBoxLUT[this.slotType],
-      DriveSlot.material.clone()
+      DriveSlotComponent.slotTypeBoxLUT[this.slotType],
+      DriveSlotComponent.material.clone()
     );
     const boundsBox = new THREE.Box3().setFromObject(this.bounds);
     const boundsWidth = boundsBox.max.x - boundsBox.min.x;
@@ -47,32 +51,38 @@ export class DriveSlot extends Selectable(ServerComponent) {
     this.bounds.position.set(-boundsWidth / 2, -boundsHeight / 2, boundsDepth / 2);
     this.add(this.bounds);
     this.addEventListener("mouseenter", () => {
-      this.bounds.material = DriveSlot.hoverMaterial;
+      this.bounds.material = DriveSlotComponent.hoverMaterial;
     });
     this.addEventListener("mouseleave", () => {
-      this.bounds.material = DriveSlot.material;
+      this.bounds.material = DriveSlotComponent.material;
     });
   }
 
-  set occupiedBy(type: SlotType | string | null) {
-    this.occupiedBy_ = type;
-    if (type === null) {
+  setSlotInfo(slotInfo: DriveSlot) {
+    if (slotInfo.slotId !== this.userData.slotId) {
+      throw new ValueError(
+        `Slot ID mismatch! mine: ${this.userData.slotId}, yours: ${slotInfo.slotId}`
+      );
+    }
+    this.userData.drive = slotInfo.drive;
+    const drive = this.userData.drive;
+    if (!drive) {
       if (this.diskModel) {
         this.bounds.remove(this.diskModel);
         delete this.diskModel;
       }
       return;
     }
-    const model = (DriveSlot.driveModelLUT[type] ?? DriveSlot.driveModelLUT.HDD)();
-    model.then((model) => {
-      this.diskModel = model;
-      this.bounds.add(model);
+    const modelLoader = (
+      DriveSlotComponent.driveModelLUT[drive.model] ??
+      DriveSlotComponent.driveModelLUT[this.slotType]
+    );
+    modelLoader().then((model) => {
+      this.diskModel = model.clone();
+      this.bounds.clear();
+      this.bounds.add(this.diskModel);
     });
-  }
-
-  get occupiedBy() {
-    return this.occupiedBy_;
   }
 }
 
-Object.values(DriveSlot.slotTypeBoxLUT).map((box) => box.computeBoundingBox());
+Object.values(DriveSlotComponent.slotTypeBoxLUT).map((box) => box.computeBoundingBox());

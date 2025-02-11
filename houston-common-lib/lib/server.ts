@@ -10,6 +10,8 @@ import { safeJsonParse } from "./utils";
 import DiskInfoPy from "@/scripts/disk_info.py?raw";
 import { lookupServerModel, ServerModel } from "@/serverModels";
 
+import { DriveSlot, startLiveDriveSlotsWatcher } from "@/liveDriveSlots";
+
 export type ServerInfo = {
   Motherboard: {
     Manufacturer: string;
@@ -89,6 +91,10 @@ export class Server {
       .read()
       .andThen(safeJsonParse<ServerInfo>)
       .map((si) => si as ServerInfo);
+  }
+
+  setupLiveDriveSlotInfo(setter: (slots: DriveSlot[]) => void) {
+    return startLiveDriveSlotsWatcher(this, setter);
   }
 
   getDiskInfo() {

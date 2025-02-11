@@ -5,7 +5,12 @@ import {
   type ServerComponentEventMap,
   type ServerComponentMouseEvent,
 } from "@/components/disks/ServerComponent";
-import type { LSDevDisk, SlotType } from "@45drives/houston-common-lib";
+import {
+  Server,
+  unwrap,
+  type DriveSlot,
+  type LiveDriveSlotsHandle,
+} from "@45drives/houston-common-lib";
 import * as THREE from "three";
 
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -49,13 +54,15 @@ export class ServerView extends THREE.EventDispatcher<
   private controls = new OrbitControls(this.camera, this.renderer.domElement);
   private mouseEventTranslator: MouseEventTranslator;
 
-  private chassis: Chassis;
+  private chassis: Promise<Chassis>;
 
   private resetCameraControlsTimeoutHandle?: number;
   private static resetCameraControlsTimeout = 5000;
 
+  private slotInfoWatchHandle?: LiveDriveSlotsHandle;
+
   constructor(
-    modelNumber: string,
+    public readonly server: Server,
     opts: {
       enableSelection?: boolean;
       enableRotate?: boolean;
@@ -102,20 +109,23 @@ export class ServerView extends THREE.EventDispatcher<
       this.resetCameraControlsTimeoutHandle = undefined;
     });
 
-    this.chassis = new Chassis(modelNumber);
-    this.scene.add(this.chassis);
+    this.chassis = unwrap(this.server.getServerModel()).then(
+      (modelNumber) => new Chassis(modelNumber.modelNumber)
+    );
+    this.chassis.then((chassis) => {
+      this.scene.add(chassis);
+      chassis.addEventListener("selected", (e) => {
+        this.dispatchEvent(e);
+      });
+      chassis.addEventListener("deselected", (e) => {
+        this.dispatchEvent(e);
+      });
+      chassis.loaded.then(() => {
+        this.zoomFit();
+      });
+    });
 
-    this.chassis.addEventListener("selected", (e) => {
-      this.dispatchEvent(e);
-    });
-    this.chassis.addEventListener("deselected", (e) => {
-      this.dispatchEvent(e);
-    });
     this.mouseEventTranslator.addEventListener("selectionchange", (e) => this.dispatchEvent(e));
-
-    this.chassis.loaded.then(() => {
-      this.zoomFit();
-    });
 
     this.renderer.domElement.addEventListener("mousedown", (event) => {
       this.mouseEventTranslator.translateMouseClick(event as MouseEvent & { type: "mousedown" });
@@ -131,16 +141,20 @@ export class ServerView extends THREE.EventDispatcher<
   start(parent?: HTMLElement | null) {
     this.renderer.setAnimationLoop(() => this.animate());
     parent?.appendChild(this.renderer.domElement);
+    this.slotInfoWatchHandle = this.server.setupLiveDriveSlotInfo((slotInfo) =>
+      this.setDriveSlotInfo(slotInfo)
+    );
   }
 
   stop(parent?: HTMLElement | null) {
     parent?.removeChild(this.renderer.domElement);
     this.renderer.setAnimationLoop(null);
+    this.slotInfoWatchHandle?.stop();
   }
 
-  zoomFit() {
+  async zoomFit() {
     const aspect = this.renderer.domElement.width / this.renderer.domElement.height;
-    const chassisBounds = new THREE.Box3().setFromObject(this.chassis);
+    const chassisBounds = new THREE.Box3().setFromObject(await this.chassis);
 
     const projectedBounds = projectBox3ToCamera(chassisBounds, this.camera);
 
@@ -175,8 +189,8 @@ export class ServerView extends THREE.EventDispatcher<
     this.scene.background = bg;
   }
 
-  setDiskSlotInfo(slots: LSDevDisk[]) {
-    this.chassis.setDiskSlotInfo(slots);
+  async setDriveSlotInfo(slots: DriveSlot[]) {
+    (await this.chassis).setDriveSlotInfo(slots);
   }
 
   set enableControls(value: boolean) {

@@ -1,5 +1,5 @@
 import { EasySetupConfig } from "./types";
-import { SambaConfParser, SambaManagerNet, unwrap } from "@/index";
+import { Command, SambaConfParser, SambaManagerNet, server, unwrap } from "@/index";
 import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
@@ -23,16 +23,19 @@ export class EasySetupConfigurator {
     if (true) {
       try {
 
-        progressCallback({ message: "Initializing Storage", step: 1, total: 4 });
+        progressCallback({ message: "Initializing Storage", step: 1, total: 5 });
         await this.deleteZFSPoolAndSMBShares(config);
-
-        progressCallback({ message: "Setting up Storage Configuration", step: 2, total: 4 });
+        
+        progressCallback({ message: "Updating Server Name", step: 2, total: 5 });
+        await this.updateHostname(config);
+        
+        progressCallback({ message: "Setting up Storage Configuration", step: 3, total: 5 });
         await this.applyZFSConfig(config)
 
-        progressCallback({ message: "Setting Up Network Storage", step: 3, total: 4 });
+        progressCallback({ message: "Setting Up Network Storage", step: 4, total: 5 });
         await this.applySambaConfig(config);
 
-        progressCallback({ message: "All Done", step: 4, total: 4 });
+        progressCallback({ message: "All Done", step: 5, total: 5 });
 
       } catch (error: any) {
         console.error("Error in setupStorage:", error);
@@ -60,12 +63,28 @@ export class EasySetupConfigurator {
     }
   }
 
+  private async updateHostname(config: EasySetupConfig) {
+    //server.setHostname("")
+    await unwrap(server.execute(new Command(["systemctl", "restart", "avahi-daemon"]), true))
+  }
+
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
-    await this.zfsManager.destroyPool(config.zfsConfig.pool, { force: true });
+    try {
+
+      await this.zfsManager.destroyPool(config.zfsConfig.pool, { force: true });
+    } catch (error) {
+      console.log(error);
+    }
 
     for (let share of config.sambaConfig.shares) {
-      await this.sambaManager.removeShare(share);
+      try {
+
+        await this.sambaManager.removeShare(share);
+      } catch (error) {
+        console.log(error)
+      }
     }
+
   }
 
   private async applyZFSConfig(_config: EasySetupConfig) {

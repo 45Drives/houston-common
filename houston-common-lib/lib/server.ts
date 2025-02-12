@@ -86,6 +86,14 @@ export class Server {
     return okAsync(this.hostname);
   }
 
+  setHostname(hostname: string): ResultAsync<null, ProcessError> {
+    if (this.hostname === undefined || this.hostname !== hostname) {
+      return this.execute(new Command(["hostnamectl", "set-hostname", hostname]), true)
+        .map(() => null);
+    }
+    return okAsync(null);
+  }
+
   getIpAddress(cache: boolean = true): ResultAsync<string, ProcessError | ParsingError> {
     if (this.ipAddress === undefined || cache === false) {
       const target = "1.1.1.1";

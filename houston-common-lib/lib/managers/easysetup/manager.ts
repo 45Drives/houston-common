@@ -23,23 +23,27 @@ export class EasySetupConfigurator {
     if (true) {
       try {
 
-        progressCallback({ message: "Initializing Storage", step: 1, total: 5 });
+        const total = 6;
+        progressCallback({ message: "Initializing Storage", step: 1, total });
         await this.deleteZFSPoolAndSMBShares(config);
-        
-        progressCallback({ message: "Updating Server Name", step: 2, total: 5 });
+
+        progressCallback({ message: "Updating Server Name", step: 2, total });
         await this.updateHostname(config);
-        
-        progressCallback({ message: "Setting up Storage Configuration", step: 3, total: 5 });
+
+        progressCallback({ message: "Create User", step: 3, total });
+        await this.createUser(config);
+
+        progressCallback({ message: "Setting up Storage Configuration", step: 4, total });
         await this.applyZFSConfig(config)
 
-        progressCallback({ message: "Setting Up Network Storage", step: 4, total: 5 });
+        progressCallback({ message: "Setting Up Network Storage", step: 5, total });
         await this.applySambaConfig(config);
 
-        progressCallback({ message: "All Done", step: 5, total: 5 });
+        progressCallback({ message: "All Done", step: 6, total });
 
       } catch (error: any) {
         console.error("Error in setupStorage:", error);
-        progressCallback({ message: `Error: ${error.message}`, step: -1, total: 4 });
+        progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });
       }
     }
     else {
@@ -61,6 +65,11 @@ export class EasySetupConfigurator {
         }
       }, 2000)
     }
+  }
+
+  private async createUser(config: EasySetupConfig) {
+    await unwrap(server.execute(new Command(["echo", config.smbPass, "|", "-S", "useradd", "-m", "-s", "/bin/bash", config.smbUser]), true))
+    await unwrap(server.execute(new Command(["usermod", "-aG", "sudo", config.smbUser]), true))
   }
 
   private async updateHostname(config: EasySetupConfig) {

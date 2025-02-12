@@ -6,4 +6,6 @@ export type EasySetupConfig = {
   sambaConfig: SambaConfig
   smbUser: string
   smbPass: string
+  srvrName: string
+  folderName: string
 };

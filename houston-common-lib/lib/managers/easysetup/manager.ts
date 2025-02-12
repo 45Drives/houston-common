@@ -73,8 +73,8 @@ export class EasySetupConfigurator {
     await unwrap(server.execute(new Command(["echo", `\"${config.smbUser}${config.smbPass}\"`, "|", "chpasswd"]), true))
   }
 
-  private async updateHostname(config: EasySetupConfig) {
-    //server.setHostname("")
+  private async updateHostname(_config: EasySetupConfig) {
+    //server.setHostname(config.hostname)
     await unwrap(server.execute(new Command(["systemctl", "restart", "avahi-daemon"]), true))
   }
 

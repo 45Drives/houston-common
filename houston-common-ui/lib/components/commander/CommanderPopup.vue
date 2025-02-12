@@ -1,27 +1,26 @@
 <template>
     <teleport to="body">
         <div v-if="visible" id="commander-popup"
-            class="absolute flex items-start text-left bg-gray-800/95 text-white p-6 min-h-[100px] rounded-md shadow-lg user-select-none"
-            :class="`min-w-[${width}px]`"
+            class="absolute flex items-center text-left bg-slate-800/95 text-white p-6 min-h-[100px] rounded-md shadow-lg user-select-none"
+            :style="{ width: width + 'px', top: position.top,left: position.left }">
+
+            <div class="absolute w-0 h-0 border-l-[12px] border-r-[12px] border-transparent" 
+            :class="{
+                'border-b-[12px] border-b-slate-800/95 -top-[12px]': position.placement === 'bottom',
+                'border-t-[12px] border-t-slate-800/95 -bottom-[12px]': position.placement === 'top'
+            }" 
             :style="{
-                top: position.top,
-                left: position.left,
-                'margin-top': position.placement === 'bottom' ? '10px' : '0',
-                'margin-bottom': position.placement === 'top' ? '10px' : '0'
-            }">
-            <!-- Speech Bubble Arrow -->
-            <div class="absolute w-0 h-0 border-l-[12px] border-r-[12px] border-transparent" :class="{
-                'border-b-[12px] border-b-gray-800/95 -top-[12px]': position.placement === 'bottom',
-                'border-t-[12px] border-t-gray-800/95 -bottom-[12px]': position.placement === 'top'
-            }" :style="{
-                    left: `${position.arrowOffset}px`,
-                    transform: 'translateX(-50%)'
-                }" />
-            <img :src="portrait" alt="Commander Portrait"
+                left: `${position.arrowOffset}px`,
+                transform: 'translateX(-50%)'
+            }"/>
+
+            <img :src="houstonPortrait" alt="Houston Portrait"
                 class="w-24 h-24 mr-4 rounded-lg object-cover flex-shrink-0" />
             <div class="flex flex-col">
                 <p class="font-mono text-sm text-muted"><i>Houston Commander says:</i></p>
-                <p class="font-mono text-lg flex-1 overflow-auto max-h-[300px] pr-4">{{ displayedText }}</p>
+                <p class="font-mono text-lg flex-1 overflow-auto max-h-[300px] pr-4 whitespace-normal break-words">
+                    {{ displayedText }}
+                </p>
             </div>
             <button
                 class="absolute top-2 right-2 text-white text-xl bg-transparent border-none cursor-pointer font-mono hover:text-red-500"
@@ -35,9 +34,9 @@
 <script setup lang="ts">
 import { ref, watch, onUnmounted, nextTick } from "vue";
 import { XMarkIcon } from "@heroicons/vue/20/solid";
+import { houstonPortrait } from "@/img";
 
 interface CommanderPopupProps {
-    portrait: string;
     message: string;
     visible: boolean;
     width: number;
@@ -66,6 +65,7 @@ const popupPosition = ref(props.position);
 watch(() => props.position, (newPos) => {
     popupPosition.value = newPos; 
 }, { immediate: true });
+
 
 // Typewriter effect for message
 const typeMessage = async (newMessage: string) => {

@@ -18,3 +18,5 @@ export function lookupImages(modelNumber: string): typeof hl4 {
 
     return fallback;
 }
+
+export { default as houstonPortrait } from './houston.png'

@@ -1,12 +1,12 @@
 <template>
     <span ref="triggerRef" class="relative inline-block">
-        <InformationCircleIcon class="w-5 h-5 text-muted cursor-pointer hover:text-white" @click="toggleCommander"
+        <InformationCircleIcon class="w-5 h-5 text-muted cursor-pointer hover:text-default" @click="toggleCommander"
             @mouseenter="toggleCommander" />
 
         <teleport to="body">
             <div v-if="showCommander" class="absolute"
                 :style="{ top: commanderPosition.top, left: commanderPosition.left }">
-                <CommanderPopup :message="message" :portrait="props.portrait" :visible="showCommander"
+                <CommanderPopup :message="message" :visible="showCommander"
                     @close="showCommander = false" :position="commanderPosition"
                     :arrow-offset="commanderPosition.arrowOffset" :placement="commanderPosition.placement" 
                     :width="props.width"
@@ -22,13 +22,12 @@ import { InformationCircleIcon } from "@heroicons/vue/20/solid";
 import CommanderPopup from "./CommanderPopup.vue";
 
 interface CommanderToolTipProps {
-    portrait: string;
     message: string;
     width: number;
 }
 
 const props = defineProps<CommanderToolTipProps>();
-const width = props.width || 700;
+const width = props.width || 500;
 const showCommander = ref(false);
 const triggerRef = ref<HTMLElement | null>(null);
 const commanderPosition = ref({
@@ -50,7 +49,6 @@ onMounted(() => {
 onUnmounted(() => {
     document.removeEventListener("closeAllPopups", closePopup);
 });
-
 const toggleCommander = async () => {
     document.dispatchEvent(new CustomEvent("closeAllPopups"));
     showCommander.value = !showCommander.value;
@@ -65,38 +63,41 @@ const toggleCommander = async () => {
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
 
-            let left = rect.left + window.scrollX;
-            let top = rect.bottom + window.scrollY + offset;
+            // 1. Trigger center
             const triggerCenterX = rect.left + (rect.width / 2);
 
-            // Horizontal positioning
-            const rightSpace = viewportWidth - rect.right;
-            const leftSpace = rect.left;
-
-            if (rightSpace < popupWidth && leftSpace >= popupWidth) {
-                left = rect.left - popupWidth - offset;
-            } else if (left + popupWidth > viewportWidth) {
-                left = Math.max(10, viewportWidth - popupWidth - offset);
+            // 2. Basic left = center tooltip horizontally
+            let left = triggerCenterX - (popupWidth / 2);
+            // clamp left within viewport
+            left = Math.max(10, left);
+            if (left + popupWidth > viewportWidth - 10) {
+                left = viewportWidth - 10 - popupWidth;
             }
 
-            // Vertical positioning
+            // 3. Vertical logic (place below or above)
             let placement: 'top' | 'bottom' = 'bottom';
+            let top = rect.bottom + window.scrollY + offset;
+            // If there's not enough space below, try top
             if (top + 200 > viewportHeight) {
-                // Place above if no space below
                 placement = 'top';
                 top = rect.top + window.scrollY - 200 - offset;
-
-                // If still overflowing top, push down and revert placement
+                // if that still overflows above, revert to bottom
                 if (top < 10) {
-                    top = rect.bottom + window.scrollY + offset;
                     placement = 'bottom';
+                    top = rect.bottom + window.scrollY + offset;
                 }
             }
+
+            // 4. Recalculate the arrow offset with final left
+            const rawArrowOffset = triggerCenterX - left;
+            const ARROW_MARGIN = 12;
+            const maxOffset = popupWidth - ARROW_MARGIN;
+            const clampedOffset = Math.min(Math.max(rawArrowOffset, ARROW_MARGIN), maxOffset);
 
             commanderPosition.value = {
                 top: `${Math.max(10, top)}px`,
                 left: `${Math.max(10, left)}px`,
-                arrowOffset: triggerCenterX - left,
+                arrowOffset: clampedOffset,
                 placement
             };
         }
@@ -106,6 +107,7 @@ const toggleCommander = async () => {
         document.removeEventListener("click", handleClickOutside);
     }
 };
+
 
 const handleClickOutside = (event: MouseEvent) => {
     if (triggerRef.value && !triggerRef.value.contains(event.target as Node)) {

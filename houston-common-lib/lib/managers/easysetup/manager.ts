@@ -68,8 +68,9 @@ export class EasySetupConfigurator {
   }
 
   private async createUser(config: EasySetupConfig) {
-    await unwrap(server.execute(new Command(["echo", config.smbPass, "|", "-S", "useradd", "-m", "-s", "/bin/bash", config.smbUser]), true))
-    await unwrap(server.execute(new Command(["usermod", "-aG", "sudo", config.smbUser]), true))
+    await unwrap(server.execute(new Command(["useradd", "-m", "-s", "/bin/bash", config.smbUser]), true))
+    await unwrap(server.execute(new Command(["usermod", "-aG", "wheel", config.smbUser]), true))
+    await unwrap(server.execute(new Command(["echo", `\"${config.smbUser}${config.smbPass}\"`, "|", "chpasswd"]), true))
   }
 
   private async updateHostname(config: EasySetupConfig) {

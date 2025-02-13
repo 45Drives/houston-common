@@ -24,22 +24,22 @@ export class EasySetupConfigurator {
       try {
 
         const total = 6;
-        progressCallback({ message: "Initializing Storage", step: 1, total });
+        progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
+
         await this.deleteZFSPoolAndSMBShares(config);
+        progressCallback({ message: "Made sure your server is good to continue", step: 2, total });
 
-        progressCallback({ message: "Updating Server Name", step: 2, total });
         await this.updateHostname(config);
+        progressCallback({ message: "Updated Server Name", step: 3, total });
 
-        progressCallback({ message: "Create User", step: 3, total });
         await this.createUser(config);
+        progressCallback({ message: "Created your User", step: 4, total });
 
-        progressCallback({ message: "Setting up Storage Configuration", step: 4, total });
         await this.applyZFSConfig(config)
+        progressCallback({ message: "Drive Configuration done", step: 5, total });
 
-        progressCallback({ message: "Setting Up Network Storage", step: 5, total });
         await this.applySambaConfig(config);
-
-        progressCallback({ message: "All Done", step: 6, total });
+        progressCallback({ message: "Network configured", step: 6, total });
 
       } catch (error: any) {
         console.error("Error in setupStorage:", error);
@@ -68,9 +68,22 @@ export class EasySetupConfigurator {
   }
 
   private async createUser(config: EasySetupConfig) {
-    await unwrap(server.execute(new Command(["useradd", "-m", "-s", "/bin/bash", config.smbUser!]), true))
-    await unwrap(server.execute(new Command(["usermod", "-aG", "wheel", config.smbUser!]), true))
-    await unwrap(server.execute(new Command(["echo", `\"${config.smbUser}${config.smbPass}\"`, "|", "chpasswd"]), true))
+    if (!config.smbUser || !config.smbPass) {
+      throw new Error("user and password not set in config");
+    }
+    try {
+      
+      await unwrap(server.execute(new Command(["useradd", "-m", "-s", "/bin/bash", config.smbUser]), true))
+    } catch (error) {
+    }
+    try {
+      await unwrap(server.execute(new Command(["usermod", "-aG", "wheel", config.smbUser]), true))
+    } catch (error) {
+    }
+    try {
+      await unwrap(server.execute(new Command(["echo", `\"${config.smbUser}${config.smbPass}\"`, "|", "chpasswd"]), true))
+    } catch (error) {
+    }
   }
 
   private async updateHostname(_config: EasySetupConfig) {
@@ -100,9 +113,11 @@ export class EasySetupConfigurator {
   private async applyZFSConfig(_config: EasySetupConfig) {
     let zfsConfig = _config.zfsConfig;
 
-    const baseDisks = await this.zfsManager.getBaseDisks();
-
+    let baseDisks = await this.zfsManager.getBaseDisks();
     console.log("baseDisks:", baseDisks)
+
+    baseDisks = baseDisks.filter(b => b.path.trim().length > 0); 
+    console.log('baseDisks filtered', baseDisks);
 
     zfsConfig!.pool.vdevs[0]!.disks = baseDisks;
     await this.zfsManager.createPool(zfsConfig!.pool, zfsConfig!.poolOptions);

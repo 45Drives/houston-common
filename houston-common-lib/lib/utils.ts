@@ -223,3 +223,18 @@ export function runInSequence<T, E, Args extends any[]>(
     return new ResultAsync(run());
   };
 }
+
+export function formatBytes(bytes: number, units: "si" | "binary" | "both"): string {
+  if (units === "both") {
+    return `${formatBytes(bytes, "si")} (${formatBytes(bytes, "binary")})`;
+  }
+  const lut = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+
+  const base = units === "si" ? 1000 : 1024;
+
+  const exp = Math.min(Math.max(0, Math.floor(Math.log(bytes) / Math.log(base))), lut.length - 1);
+
+  const factor = Math.pow(base, exp);
+
+  return `${(bytes / factor).toPrecision(4)} ${units === "si" ? lut[exp]?.replace("i", "") : lut[exp]}`;
+}

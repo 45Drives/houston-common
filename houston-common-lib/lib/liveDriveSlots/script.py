@@ -1,12 +1,42 @@
 #!/usr/bin/env python3
 
-import pyudev
-import json
-import re
+from functools import partial
+import pyudev, json, re, subprocess
 
+AUTO_REFRESH_TIME = 10
 
 def get_smart_info(device: pyudev.Device) -> dict:
-    return None
+    smart_info = {}
+    child = subprocess.Popen(
+        ["smartctl", "-a", device.device_node, "--json"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
+    )
+    stdout, stderr = child.communicate(timeout=5)
+    ret = child.wait()
+    if ret & 2: # failed to open
+        return None
+    smart_json = json.loads(stdout)
+
+    smart_info["modelFamily"] = smart_json["model_family"] if "model_family" in smart_json else "?"
+    if "temperature" in smart_json and "current" in smart_json["temperature"]:
+        smart_info["temperature"] = smart_json["temperature"]["current"]
+    if "power_on_time" in smart_json and "hours" in smart_json["power_on_time"]:
+        smart_info["powerOnHours"] = smart_json["power_on_time"]["hours"]
+    if "power_cycle_count" in smart_json:
+        smart_info["powerCycleCount"] = smart_json["power_cycle_count"]
+    if "ata_smart_attributes" in smart_json:
+        table = smart_json["ata_smart_attributes"]["table"]
+        def get_attr(name, fallback) -> str: 
+            return next(iter([attr["raw"]["string"] for attr in table if attr["name"] == name]), fallback)
+        smart_info["startStopCount"] = int(get_attr("Start_Stop_Count", -1))
+        if "powerOnHours" not in smart_info:
+            smart_info["powerOnHours"] = int(get_attr("Power_On_Hours", -1))
+        if "powerCycleCount" not in smart_info:
+            smart_info["powerCycleCount"] =int(get_attr("Power_Cycle_Count", -1))
+        if "temperature" not in smart_info:
+            smart_info["temperature"] = int(get_attr("Temperature_Celsius", -1))
+    smart_info["health"] = "OK" if "smart_status" in smart_json.keys() and smart_json["smart_status"]["passed"]  else "POOR"
+    return smart_info
 
 
 def get_drive(device: pyudev.Device) -> dict:
@@ -45,20 +75,22 @@ def monitor_changes(udev_ctx: pyudev.Context):
 
     udev_monitor.filter_by("block", "disk")
 
-    for device in iter(udev_monitor.poll, None):
-        slot = {}
-
-        if "SLOT_NAME" in device:
-            slot["slotId"] = device["SLOT_NAME"]
-        elif "ID_VDEV" in device:
-            slot["slotId"] = device["ID_VDEV"]
-        else:
-            continue
-
-        if device.action == "remove":
-            handle_remove(device, slot)
-        elif device.action in ["add", "change"]:
-            handle_add_or_change(device, slot)
+    while True:
+        for device in iter(partial(udev_monitor.poll, AUTO_REFRESH_TIME), None):
+            slot = {}
+    
+            if "SLOT_NAME" in device:
+                slot["slotId"] = device["SLOT_NAME"]
+            elif "ID_VDEV" in device:
+                slot["slotId"] = device["ID_VDEV"]
+            else:
+                continue
+    
+            if device.action == "remove":
+                handle_remove(device, slot)
+            elif device.action in ["add", "change"]:
+                handle_add_or_change(device, slot)
+        report_initial(udev_ctx)
 
 
 def report_initial(udev_ctx: pyudev.Context):

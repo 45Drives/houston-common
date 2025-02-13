@@ -1,3 +1,5 @@
+import { formatBytes } from "@/utils";
+
 export type DriveSlot = {
   slotId: string;
   drive: Drive | null;
@@ -62,8 +64,7 @@ function formatTemperature(tempC: number): string {
 
 export namespace DriveSlot {
   export function formatProperties(
-    slot: DriveSlot | DriveSlot[],
-    base2?: boolean
+    slot: DriveSlot | DriveSlot[]
   ): { label: string; value: string }[] {
     if (Array.isArray(slot)) {
       if (slot.length === 0) {
@@ -76,9 +77,9 @@ export namespace DriveSlot {
         { label: "Drive Slot", value: "Multiple selected" },
         {
           label: "Capacity",
-          value: cockpit.format_bytes(
+          value: formatBytes(
             slot.reduce((sum, s) => sum + (s.drive?.capacity ?? 0), 0),
-            { base2 }
+            "both"
           ),
         },
       ];
@@ -93,7 +94,7 @@ export namespace DriveSlot {
         { label: "Model Name", value: slot.drive.model },
         { label: "Serial", value: slot.drive.serial },
         { label: "Firmware Version", value: slot.drive.firmwareVersion },
-        { label: "Capacity", value: cockpit.format_bytes(slot.drive.capacity, { base2 }) },
+        { label: "Capacity", value: formatBytes(slot.drive.capacity, "both") },
         { label: "Partition Count", value: slot.drive.partitionCount.toString() }
       );
       if (slot.drive.rotationRate) {

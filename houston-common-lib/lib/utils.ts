@@ -308,3 +308,14 @@ export function convertBinarySizeToDecimal(sizeString: string): string {
 
   return `${sizeDecimal.toFixed(2)} ${unitDecimal}`;
 }
+
+export function hasProp<T, TPartial extends Partial<T>, PropName extends keyof TPartial>(
+  obj: TPartial,
+  prop: PropName
+): obj is TPartial & Pick<{ [PropName in keyof TPartial]-?: TPartial[PropName] }, PropName> {
+  return obj[prop] !== undefined;
+}
+
+export function assertProp<T, TPartial extends Partial<T>, PropName extends keyof TPartial>(prop: PropName) {
+  return (partial: TPartial) => hasProp(partial, prop) ? ok(partial) : err(new TypeError(`missing property: ${String(prop)}`));
+}

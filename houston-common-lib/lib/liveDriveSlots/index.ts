@@ -1,7 +1,7 @@
 export * from "./types";
 
-import type { DriveSlot, LiveDriveSlotsHandle } from "@/liveDriveSlots/types";
-import { PythonCommand } from "@/process";
+import { DriveSlot, LiveDriveSlotsHandle } from "@/liveDriveSlots/types";
+import { Process, PythonCommand } from "@/process";
 import script from "./script.py?raw";
 import { Server } from "@/server";
 
@@ -17,21 +17,26 @@ type LiveDriveSlotsMessageDriveAdded = {
   slot: DriveSlot;
 };
 
+type LiveDriveSlotsCtx = {
+  proc: Process;
+  slots: DriveSlot[];
+};
+
 type LiveDriveSlotsMessage = LiveDriveSlotsMessageAllSlots | LiveDriveSlotsMessageDriveAdded;
 
-function onStream(output: string, slots: DriveSlot[], setter: (slots: DriveSlot[]) => void) {
+function onStream(output: string, ctx: LiveDriveSlotsCtx, setter: (slots: DriveSlot[]) => void) {
   try {
     const message = JSON.parse(output) as LiveDriveSlotsMessage;
 
     switch (message.type) {
       case "reportAll":
-        slots = message.slots;
-        setter([...slots]);
+        ctx.slots = message.slots;
+        setter([...ctx.slots]);
         break;
       case "change":
         const slot = message.slot;
-        slots = slots.map((s) => s.slotId === slot.slotId ? slot : s);
-        setter([...slots]);
+        ctx.slots = ctx.slots.map((s) => (s.slotId === slot.slotId ? slot : s));
+        setter([...ctx.slots]);
         break;
       default:
         throw new TypeError(`Unknown LiveDriveSlotsMessage type: ${(message as any).type}`);
@@ -45,11 +50,13 @@ export function startLiveDriveSlotsWatcher(
   server: Server,
   setter: (slots: DriveSlot[]) => void
 ): LiveDriveSlotsHandle {
-  const proc = server.spawnProcess(liveDriveSlotsCommand);
-  const slots: DriveSlot[] = [];
-  proc.stream((output) => onStream(output, slots, setter));
+  const ctx: LiveDriveSlotsCtx = {
+    proc: server.spawnProcess(liveDriveSlotsCommand),
+    slots: [],
+  };
+  ctx.proc.stream((output) => onStream(output, ctx, setter));
 
   return {
-    stop: () => proc.terminate(),
+    stop: () => ctx.proc.terminate(),
   };
 }

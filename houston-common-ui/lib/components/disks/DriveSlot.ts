@@ -16,19 +16,23 @@ export class DriveSlotComponent extends Selectable(ServerComponent) {
   };
 
   private static driveModelLUT: Record<SlotType | string, ModelLoader> = {
-    HDD: lazyModelLoader(() => loadImageModel(import("./textures/hdd-generic.png"), { width: 1, height: 4 })),
+    HDD: lazyModelLoader(() =>
+      loadImageModel(import("./textures/hdd-generic.png"), { width: 1, height: 4 })
+    ),
     SSD_7mm: lazyModelLoader(() =>
-      loadImageModel(import("./textures/ssd-generic.png"), { width: 7 / 25.4, height: 2.75 })),
+      loadImageModel(import("./textures/ssd-generic.png"), { width: 7 / 25.4, height: 2.75 })
+    ),
     SSD_15mm: lazyModelLoader(() =>
-      loadImageModel(import("./textures/ssd-generic.png"), { width: 15 / 25.4, height: 2.75 })),
+      loadImageModel(import("./textures/ssd-generic.png"), { width: 15 / 25.4, height: 2.75 })
+    ),
   };
 
   private static material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
   private static hoverMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.2 });
 
-  private occupiedBy_: SlotType | string | null = null;
+  // private occupiedBy_: SlotType | string | null = null;
 
-  private diskModel?: THREE.Object3D;
+  // private diskModel?: THREE.Object3D;
 
   private bounds: THREE.Mesh;
 
@@ -39,7 +43,7 @@ export class DriveSlotComponent extends Selectable(ServerComponent) {
     slotId: string
   ) {
     super();
-    this.userData = { slotId };
+    this.userData = { slotId, drive: null };
     this.bounds = new THREE.Mesh(
       DriveSlotComponent.slotTypeBoxLUT[this.slotType],
       DriveSlotComponent.material.clone()
@@ -64,24 +68,18 @@ export class DriveSlotComponent extends Selectable(ServerComponent) {
         `Slot ID mismatch! mine: ${this.userData.slotId}, yours: ${slotInfo.slotId}`
       );
     }
-    this.userData.drive = slotInfo.drive;
+    this.userData = slotInfo;
     const drive = this.userData.drive;
     if (!drive) {
-      if (this.diskModel) {
-        this.bounds.remove(this.diskModel);
-        delete this.diskModel;
-      }
-      return;
-    }
-    const modelLoader = (
-      DriveSlotComponent.driveModelLUT[drive.model] ??
-      DriveSlotComponent.driveModelLUT[this.slotType]
-    );
-    modelLoader().then((model) => {
-      this.diskModel = model.clone();
       this.bounds.clear();
-      this.bounds.add(this.diskModel);
-    });
+    } else {
+      const modelLoader =
+        DriveSlotComponent.driveModelLUT[drive.model] ??
+        DriveSlotComponent.driveModelLUT[this.slotType];
+      modelLoader().then((model) => {
+        this.bounds.add(model.clone());
+      });
+    }
   }
 }
 

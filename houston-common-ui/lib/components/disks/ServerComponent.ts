@@ -87,7 +87,7 @@ export function imageModelLoader(
 export function lazyModelLoader(loader: ModelLoader): ModelLoader {
   let model: Promise<THREE.Object3D> | null = null;
 
-  return () => model ? model : (model = loader());
+  return () => (model ? model : (model = loader()));
 }
 
 export class SelectionHighlight extends THREE.Mesh {

@@ -15,6 +15,8 @@ import * as THREE from "three";
 
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
+import { LAYER_DEFAULT, LAYER_NO_SELECT } from "./constants";
+
 function projectBox3ToCamera(box3: THREE.Box3, camera: THREE.Camera) {
   const points = [
     new THREE.Vector3(box3.min.x, box3.min.y, box3.min.z),
@@ -45,6 +47,7 @@ function projectBox3ToCamera(box3: THREE.Box3, camera: THREE.Camera) {
 export class ServerView extends THREE.EventDispatcher<
   ServerComponentEventMap & {
     selectionchange: { type: "selectionchange"; components: ServerComponent[] };
+    driveslotchange: { type: "driveslotchange"; slots: DriveSlot[] };
   }
 > {
   private renderer = new THREE.WebGLRenderer();
@@ -61,6 +64,8 @@ export class ServerView extends THREE.EventDispatcher<
 
   private slotInfoWatchHandle?: LiveDriveSlotsHandle;
 
+  private resizeObserver: ResizeObserver;
+
   constructor(
     public readonly server: Server,
     opts: {
@@ -75,15 +80,34 @@ export class ServerView extends THREE.EventDispatcher<
     opts.enableRotate ??= false;
     opts.enablePan ??= false;
     opts.enableZoom ??= false;
-    this.mouseEventTranslator = new MouseEventTranslator(
-      this.renderer.domElement,
-      this.camera,
-      this.scene,
-      opts.enableSelection
-    );
+
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
+    this.renderer.domElement.addEventListener("mouseleave", () => {
+      window.clearTimeout(this.resetCameraControlsTimeoutHandle);
+      this.resetCameraControlsTimeoutHandle = window.setTimeout(() => {
+        this.controls.reset();
+        this.controls.update();
+        this.zoomFit();
+      }, ServerView.resetCameraControlsTimeout);
+    });
+    this.renderer.domElement.addEventListener("mousemove", () => {
+      window.clearTimeout(this.resetCameraControlsTimeoutHandle);
+      this.resetCameraControlsTimeoutHandle = undefined;
+    });
+    this.renderer.domElement.addEventListener("mousedown", (event) => {
+      this.mouseEventTranslator.translateMouseClick(event as MouseEvent & { type: "mousedown" });
+    });
+    this.renderer.domElement.addEventListener("mouseup", (event) => {
+      this.mouseEventTranslator.translateMouseClick(event as MouseEvent & { type: "mouseup" });
+    });
+    this.renderer.domElement.addEventListener("mousemove", (event) => {
+      this.mouseEventTranslator.translateMouseOver(event as MouseEvent & { type: "mousemove" });
+    });
+
     this.camera.position.z = 24;
+    this.camera.layers.enable(LAYER_DEFAULT);
+    this.camera.layers.enable(LAYER_NO_SELECT);
     this.controls.enableDamping = true;
     this.controls.enablePan = opts.enablePan;
     this.controls.enableZoom = opts.enableZoom;
@@ -94,20 +118,8 @@ export class ServerView extends THREE.EventDispatcher<
       RIGHT: THREE.MOUSE.PAN,
       LEFT: null,
     };
-
     this.controls.update();
     this.controls.saveState();
-    this.renderer.domElement.addEventListener("mouseleave", () => {
-      window.clearTimeout(this.resetCameraControlsTimeoutHandle);
-      this.resetCameraControlsTimeoutHandle = window.setTimeout(() => {
-        this.controls.reset();
-        this.controls.update();
-      }, ServerView.resetCameraControlsTimeout);
-    });
-    this.renderer.domElement.addEventListener("mousemove", () => {
-      window.clearTimeout(this.resetCameraControlsTimeoutHandle);
-      this.resetCameraControlsTimeoutHandle = undefined;
-    });
 
     this.chassis = unwrap(this.server.getServerModel()).then(
       (modelNumber) => new Chassis(modelNumber.modelNumber)
@@ -120,69 +132,103 @@ export class ServerView extends THREE.EventDispatcher<
       chassis.addEventListener("deselected", (e) => {
         this.dispatchEvent(e);
       });
-      chassis.loaded.then(() => {
-        this.zoomFit();
-      });
     });
 
+    this.mouseEventTranslator = new MouseEventTranslator(
+      this.renderer.domElement,
+      this.camera,
+      this.scene,
+      opts.enableSelection
+    );
     this.mouseEventTranslator.addEventListener("selectionchange", (e) => this.dispatchEvent(e));
 
-    this.renderer.domElement.addEventListener("mousedown", (event) => {
-      this.mouseEventTranslator.translateMouseClick(event as MouseEvent & { type: "mousedown" });
-    });
-    this.renderer.domElement.addEventListener("mouseup", (event) => {
-      this.mouseEventTranslator.translateMouseClick(event as MouseEvent & { type: "mouseup" });
-    });
-    this.renderer.domElement.addEventListener("mousemove", (event) => {
-      this.mouseEventTranslator.translateMouseOver(event as MouseEvent & { type: "mousemove" });
+    this.resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        this.fixCameraAspect(entry.contentRect.width, entry.contentRect.height);
+
+        this.chassis
+          .then((chassis) => chassis.loaded)
+          .then(() => {
+            this.zoomFit();
+          });
+      }
     });
   }
 
-  start(parent?: HTMLElement | null) {
+  async start(parent?: HTMLElement | null) {
     this.renderer.setAnimationLoop(() => this.animate());
     parent?.appendChild(this.renderer.domElement);
-    this.slotInfoWatchHandle = this.server.setupLiveDriveSlotInfo((slotInfo) =>
-      this.setDriveSlotInfo(slotInfo)
-    );
+    this.slotInfoWatchHandle = this.server.setupLiveDriveSlotInfo((slotInfo) => {
+      this.dispatchEvent({ type: "driveslotchange", slots: slotInfo });
+      this.setDriveSlotInfo(slotInfo);
+    });
+    this.resizeObserver.observe(this.renderer.domElement);
   }
 
   stop(parent?: HTMLElement | null) {
     parent?.removeChild(this.renderer.domElement);
     this.renderer.setAnimationLoop(null);
     this.slotInfoWatchHandle?.stop();
+    this.resizeObserver.unobserve(this.renderer.domElement);
   }
 
-  async zoomFit() {
-    const aspect = this.renderer.domElement.width / this.renderer.domElement.height;
-    const chassisBounds = new THREE.Box3().setFromObject(await this.chassis);
+  private fixCameraAspect(elementWidth: number, elementHeight: number) {
+    this.renderer.setSize(elementWidth, elementHeight, false);
 
-    const projectedBounds = projectBox3ToCamera(chassisBounds, this.camera);
-
+    const aspect = elementWidth / elementHeight;
     if (this.camera instanceof THREE.OrthographicCamera) {
       let width = this.camera.right - this.camera.left;
       let height = this.camera.top - this.camera.bottom;
 
       if (aspect >= 1) {
-        height = projectedBounds.max.y - projectedBounds.min.y;
         width = height * aspect;
       } else {
-        width = projectedBounds.max.x - projectedBounds.min.x;
         height = width / aspect;
       }
-
-      console.log("zoomFit size", width, height);
 
       this.camera.left = -width / 2;
       this.camera.right = width / 2;
       this.camera.top = height / 2;
       this.camera.bottom = -height / 2;
-
-      this.camera.updateProjectionMatrix();
-
-      this.controls.update();
+    } else if (this.camera instanceof THREE.PerspectiveCamera) {
+      this.camera.aspect = aspect;
     } else {
       throw new Error("not implemented");
     }
+
+    this.camera.updateProjectionMatrix();
+
+    this.controls.update();
+  }
+
+  async zoomFit(margin: number = 0.9) {
+    const chassisBounds = new THREE.Box3().setFromObject(
+      await this.chassis.then((chassis) => chassis.loaded).then(() => this.chassis)
+    );
+
+    if (this.camera instanceof THREE.OrthographicCamera) {
+      this.camera.zoom = 1;
+      this.camera.updateProjectionMatrix();
+    } else {
+      throw new Error("not implemented");
+    }
+
+    const projectedBounds = chassisBounds.clone().applyMatrix4(this.camera.projectionMatrix);
+    console.log("projected bounds:", projectedBounds);
+
+    const projectedSize = new THREE.Vector3();
+    projectedBounds.getSize(projectedSize);
+    console.log("projected size:", projectedSize);
+
+    if (this.camera instanceof THREE.OrthographicCamera) {
+      this.camera.zoom = 2 / Math.max(projectedSize.x, projectedSize.y);
+    } else {
+      throw new Error("not implemented");
+    }
+
+    this.camera.updateProjectionMatrix();
+
+    this.controls.update();
   }
 
   setBackground(bg: typeof this.scene.background) {
@@ -191,6 +237,10 @@ export class ServerView extends THREE.EventDispatcher<
 
   async setDriveSlotInfo(slots: DriveSlot[]) {
     (await this.chassis).setDriveSlotInfo(slots);
+    const selected = this.getSelectedComponents();
+    if (selected.length) {
+      this.dispatchEvent({ type: "selectionchange", components: selected });
+    }
   }
 
   set enableControls(value: boolean) {
@@ -229,7 +279,7 @@ export class ServerView extends THREE.EventDispatcher<
   }
 
   getSelectedComponents() {
-    return this.scene.getObjectsByProperty("selected", true);
+    return this.scene.getObjectsByProperty("selected", true) as ServerComponent[];
   }
 
   private animate() {

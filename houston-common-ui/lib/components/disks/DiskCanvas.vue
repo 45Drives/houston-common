@@ -1,15 +1,12 @@
 <template>
-  <!-- <img :src="driveBaysImage" alt="Drive bays" /> -->
   <div ref="canvasParent"></div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, useTemplateRef, onBeforeUnmount, watchEffect, shallowRef } from "vue";
+import { useTemplateRef, onBeforeUnmount, watchEffect } from "vue";
 import {
   Server,
   type DriveSlot,
-  type LSDevDisk,
-  type ServerModel,
 } from "@45drives/houston-common-lib";
 
 import * as THREE from "three";
@@ -41,12 +38,18 @@ const canvasParent = useTemplateRef<HTMLDivElement>("canvasParent");
 
 const serverView = new ServerView(props.server);
 
-const selectedDisks = defineModel<DriveSlot[]>("selectedDisks", { default: [] });
+const selectedDriveSlots = defineModel<DriveSlot[]>("selectedDriveSlots", { default: [] });
+
+const driveSlots = defineModel<DriveSlot[]>("driveSlots", { default: [] });
 
 serverView.addEventListener("selectionchange", (e) => {
-  selectedDisks.value = e.components
+  selectedDriveSlots.value = e.components
     .filter((c): c is DriveSlotComponent => c instanceof DriveSlotComponent)
     .map((driveSlot) => driveSlot.userData);
+});
+
+serverView.addEventListener("driveslotchange", (e) => {
+  driveSlots.value = [...e.slots];
 });
 
 watchEffect(() => {

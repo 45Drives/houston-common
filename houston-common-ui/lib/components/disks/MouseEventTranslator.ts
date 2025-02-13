@@ -6,28 +6,36 @@ import {
 } from "./ServerComponent";
 import * as THREE from "three";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { LAYER_NO_SELECT } from "./constants";
 
-export class SelectionBox extends THREE.LineSegments {
+export class SelectionBox extends LineSegments2 {
   constructor() {
-    const positions = new Float32Array(8 * 3);
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    // const positions = new Float32Array(8 * 3);
+    // const geometry = new THREE.BufferGeometry();
+    // geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const geometry = new LineSegmentsGeometry();
 
     super(
       geometry,
-      new THREE.LineBasicMaterial({
+      new LineMaterial({
         color: 0x00ff00,
         linewidth: 2,
       })
     );
+
+    this.hide();
+    this.layers.set(LAYER_NO_SELECT);
   }
+
   updateSelectionBox(
     camera: THREE.Camera,
     mouseDownCoordsNormalized: THREE.Vector2,
     currentMouseCoordsNormalized: THREE.Vector2,
     depth = -0.99
   ) {
-    const positions = this.geometry.attributes.position.array;
+    // const positions = this.geometry.attributes.position.array;
 
     // Convert NDC coordinates to world space at a fixed depth in front of the camera
     const corners = [
@@ -52,16 +60,18 @@ export class SelectionBox extends THREE.LineSegments {
       corners[3], // Top
       corners[3],
       corners[0], // Left
-    ];
+    ].flatMap((vec) => [vec.x, vec.y, vec.z]);
 
     // Update positions in geometry
-    for (let i = 0; i < edges.length; i++) {
-      positions[i * 3] = edges[i].x;
-      positions[i * 3 + 1] = edges[i].y;
-      positions[i * 3 + 2] = edges[i].z;
-    }
+    // for (let i = 0; i < edges.length; i++) {
+    //   positions[i * 3] = edges[i].x;
+    //   positions[i * 3 + 1] = edges[i].y;
+    //   positions[i * 3 + 2] = edges[i].z;
+    // }
 
-    this.geometry.attributes.position.needsUpdate = true;
+    this.geometry.setPositions(edges);
+
+    // this.geometry.attributes.position.needsUpdate = true;
     this.visible = true;
   }
 
@@ -113,6 +123,8 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
         this.mouseDownCoordsNormalized!,
         mouseCoords
       );
+    } else {
+      this.selectionBox.hide();
     }
     const intersection = this.getMouseEventIntersections(event, mouseCoords)[0] as
       | (THREE.Intersection & { object: ServerComponent })

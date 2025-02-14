@@ -115,3 +115,15 @@ export namespace DriveSlot {
     return props;
   }
 }
+
+export type GetDriveSlotsOpts = {
+  /**
+   * exclude empty slots, ensuring slot.drive is always non-null
+   * default: false
+   */
+  excludeEmpty?: boolean;
+};
+
+export type LiveDriveSlotsHandle = {
+  stop: () => void;
+};

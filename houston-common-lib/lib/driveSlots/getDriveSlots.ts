@@ -1,17 +1,9 @@
 import { Server } from "@/server";
 import { slotsCommand } from "./command";
-import { Drive, DriveSlot } from "./types";
+import { Drive, DriveSlot, GetDriveSlotsOpts } from "./types";
 import { ProcessError } from "@/errors";
 import { ResultAsync } from "neverthrow";
 import { safeJsonParse } from "@/utils";
-
-export type GetDriveSlotsOpts = {
-  /**
-   * exclude empty slots, ensuring slot.drive is always non-null
-   * default: false
-   */
-  excludeEmpty?: boolean;
-};
 
 export function getDriveSlots(
   server: Server,

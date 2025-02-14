@@ -17,7 +17,6 @@ import {
   GetDriveSlotsOpts,
   startLiveDriveSlotsWatcher,
   type Drive,
-  type SmartInfo,
 } from "@/driveSlots";
 
 export type ServerInfo = {

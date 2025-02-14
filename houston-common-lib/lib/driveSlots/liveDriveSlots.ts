@@ -1,5 +1,5 @@
-import { slotsCommand } from "@/driveSlots/command";
-import { DriveSlot } from "@/driveSlots/types";
+import { slotsCommand } from "./command";
+import { DriveSlot, LiveDriveSlotsHandle } from "./types";
 import { Process } from "@/process";
 import { Server } from "@/server";
 
@@ -42,10 +42,6 @@ function onStream(output: string, ctx: LiveDriveSlotsCtx, setter: (slots: DriveS
     if (e instanceof Error) window.reportHoustonError(e);
   }
 }
-
-export type LiveDriveSlotsHandle = {
-  stop: () => void;
-};
 
 export function startLiveDriveSlotsWatcher(
   server: Server,

@@ -152,7 +152,7 @@ export class ZFSManager implements IZFSManager {
     return unwrap(
       this.server.getDiskInfo()
         .map((diskInfoData) =>
-          diskInfoData.map((disk: any): VDevDiskBase => ({
+          diskInfoData.rows.map((disk: any): VDevDiskBase => ({
             path: disk["dev"],
           }))
         )
@@ -167,9 +167,9 @@ export class ZFSManager implements IZFSManager {
       unwrap(this.server.getLsDev()),
       unwrap(this.server.getDiskInfo()),
     ])
-      .then(([lsdevRows, diskInfoRows]) => {
+      .then(([lsdevRows, diskInfo]) => {
 
-        return diskInfoRows.map((disk: any): VDevDisk => {
+        return diskInfo.rows.map((disk: any): VDevDisk => {
           const matchingDisk = lsdevRows.find((lsdev: any) => lsdev.dev === disk.dev);
 
           return {

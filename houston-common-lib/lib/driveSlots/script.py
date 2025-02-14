@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
 
 from functools import partial
-import pyudev, json, re, subprocess
+import pyudev, json, re, subprocess, argparse
 
 AUTO_REFRESH_TIME = 10
+
 
 def get_smart_info(device: pyudev.Device) -> dict:
     smart_info = {}
     child = subprocess.Popen(
         ["smartctl", "-a", device.device_node, "--json"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
     )
     stdout, stderr = child.communicate(timeout=5)
     ret = child.wait()
-    if ret & 2: # failed to open
+    if ret & 2:  # failed to open
         return None
     smart_json = json.loads(stdout)
 
-    smart_info["modelFamily"] = smart_json["model_family"] if "model_family" in smart_json else "?"
+    smart_info["modelFamily"] = (
+        smart_json["model_family"] if "model_family" in smart_json else "?"
+    )
     if "temperature" in smart_json and "current" in smart_json["temperature"]:
         smart_info["temperature"] = smart_json["temperature"]["current"]
     if "power_on_time" in smart_json and "hours" in smart_json["power_on_time"]:
@@ -26,16 +31,25 @@ def get_smart_info(device: pyudev.Device) -> dict:
         smart_info["powerCycleCount"] = smart_json["power_cycle_count"]
     if "ata_smart_attributes" in smart_json:
         table = smart_json["ata_smart_attributes"]["table"]
-        def get_attr(name, fallback) -> str: 
-            return next(iter([attr["raw"]["string"] for attr in table if attr["name"] == name]), fallback)
+
+        def get_attr(name, fallback) -> str:
+            return next(
+                iter([attr["raw"]["string"] for attr in table if attr["name"] == name]),
+                fallback,
+            )
+
         smart_info["startStopCount"] = int(get_attr("Start_Stop_Count", -1))
         if "powerOnHours" not in smart_info:
             smart_info["powerOnHours"] = int(get_attr("Power_On_Hours", -1))
         if "powerCycleCount" not in smart_info:
-            smart_info["powerCycleCount"] =int(get_attr("Power_Cycle_Count", -1))
+            smart_info["powerCycleCount"] = int(get_attr("Power_Cycle_Count", -1))
         if "temperature" not in smart_info:
             smart_info["temperature"] = int(get_attr("Temperature_Celsius", -1))
-    smart_info["health"] = "OK" if "smart_status" in smart_json.keys() and smart_json["smart_status"]["passed"]  else "POOR"
+    smart_info["health"] = (
+        "OK"
+        if "smart_status" in smart_json.keys() and smart_json["smart_status"]["passed"]
+        else "POOR"
+    )
     return smart_info
 
 
@@ -78,14 +92,14 @@ def monitor_changes(udev_ctx: pyudev.Context):
     while True:
         for device in iter(partial(udev_monitor.poll, AUTO_REFRESH_TIME), None):
             slot = {}
-    
+
             if "SLOT_NAME" in device:
                 slot["slotId"] = device["SLOT_NAME"]
             elif "ID_VDEV" in device:
                 slot["slotId"] = device["ID_VDEV"]
             else:
                 continue
-    
+
             if device.action == "remove":
                 handle_remove(device, slot)
             elif device.action in ["add", "change"]:
@@ -93,7 +107,7 @@ def monitor_changes(udev_ctx: pyudev.Context):
         report_initial(udev_ctx)
 
 
-def report_initial(udev_ctx: pyudev.Context):
+def get_slots(udev_ctx: pyudev.Context):
     slotMap = {}
 
     with open("/etc/vdev_id.conf", "r") as vdev_id:
@@ -114,19 +128,29 @@ def report_initial(udev_ctx: pyudev.Context):
 
         slotMap[slotId] = get_drive(device)
 
+    return list(map(lambda x: {"slotId": x[0], "drive": x[1]}, slotMap.items()))
+
+
+def report_initial(udev_ctx: pyudev.Context):
     message = {
         "type": "reportAll",
-        "slots": list(map(lambda x: {"slotId": x[0], "drive": x[1]}, slotMap.items())),
+        "slots": get_slots(udev_ctx),
     }
     print(json.dumps(message, indent=None), flush=True)
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--live", action="store_true", default=False, required=False)
+    args = parser.parse_args()
+
     udev_ctx = pyudev.Context()
 
-    report_initial(udev_ctx)
-
-    monitor_changes(udev_ctx)
+    if args.live:
+        report_initial(udev_ctx)
+        monitor_changes(udev_ctx)
+    else:
+        print(json.dumps(get_slots(udev_ctx)))
 
 
 if __name__ == "__main__":

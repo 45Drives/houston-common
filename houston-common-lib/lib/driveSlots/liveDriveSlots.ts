@@ -1,11 +1,7 @@
-export * from "./types";
-
-import { DriveSlot, LiveDriveSlotsHandle } from "@/liveDriveSlots/types";
-import { Process, PythonCommand } from "@/process";
-import script from "./script.py?raw";
+import { slotsCommand } from "@/driveSlots/command";
+import { DriveSlot } from "@/driveSlots/types";
+import { Process } from "@/process";
 import { Server } from "@/server";
-
-const liveDriveSlotsCommand = new PythonCommand(script, [], { superuser: "try" });
 
 type LiveDriveSlotsMessageAllSlots = {
   type: "reportAll";
@@ -47,12 +43,16 @@ function onStream(output: string, ctx: LiveDriveSlotsCtx, setter: (slots: DriveS
   }
 }
 
+export type LiveDriveSlotsHandle = {
+  stop: () => void;
+};
+
 export function startLiveDriveSlotsWatcher(
   server: Server,
   setter: (slots: DriveSlot[]) => void
 ): LiveDriveSlotsHandle {
   const ctx: LiveDriveSlotsCtx = {
-    proc: server.spawnProcess(liveDriveSlotsCommand, true),
+    proc: server.spawnProcess(slotsCommand({ live: true }), true),
     slots: [],
     stop: false,
   };

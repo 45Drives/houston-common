@@ -54,10 +54,6 @@ export type SmartInfo = {
   health: string;
 };
 
-export type LiveDriveSlotsHandle = {
-  stop: () => void;
-};
-
 function formatTemperature(tempC: number): string {
   return `${tempC}°C / ${(tempC * 9) / 5 + 32}°F`;
 }

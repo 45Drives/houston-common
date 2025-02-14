@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, defineProps, watchEffect, computed } from "vue";
+import { defineProps, computed } from "vue";
 import HoustonHeader from "@/components/HoustonHeader.vue";
 import {
   defineHoustonAppTabState,
@@ -9,7 +9,7 @@ import {
 } from "@/components/tabs";
 import NotificationView from "@/components/NotificationView.vue";
 import { useGlobalProcessingState } from "@/composables/useGlobalProcessingState";
-import { ModalConfirm, Modal } from "@/components/modals";
+import { Modal, GlobalModalConfirm } from "@/components/modals";
 import { _internal } from "@/composables/globalModalConfirm";
 import { QuestionMarkCircleIcon } from "@heroicons/vue/20/solid";
 import DisclosureController from "@/components/DisclosureController.vue";
@@ -34,14 +34,6 @@ const {
 } = defineHoustonAppTabState(computed(() => props.tabs ?? []));
 
 const globalProcessingState = useGlobalProcessingState();
-
-const globalModalConfirm = ref<InstanceType<typeof ModalConfirm> | null>(null);
-
-watchEffect(() => {
-  if (globalModalConfirm.value !== null) {
-    _internal.provideGlobalModalFuncs(globalModalConfirm.value);
-  }
-});
 </script>
 
 <template>
@@ -109,7 +101,7 @@ watchEffect(() => {
       </div>
     </div>
     <NotificationView />
-    <ModalConfirm ref="globalModalConfirm" />
+    <GlobalModalConfirm />
   </div>
 </template>
 

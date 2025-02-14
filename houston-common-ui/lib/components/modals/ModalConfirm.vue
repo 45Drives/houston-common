@@ -115,33 +115,33 @@ defineExpose({
 <template>
   <Modal :show="currentConfirmation !== undefined" >
     <div class="fixed inset-0 flex items-center  justify-center">
-    <CardContainer class="sm:min-w-96 sm:max-w-[50%]">
-      <template #header>
-        <div class="text-center">
-          {{ headerText }}
-      </div>
-      </template>
-      <div class="flex flex-row items-center gap-2">
-        <ExclamationCircleIcon v-if="isDangerous" class="size-icon-xl icon-danger shrink-0" />
-        <div class="grow overflow-x-auto whitespace-pre-wrap">
-          {{ bodyText }}
+      <CardContainer class="sm:min-w-96 sm:max-w-[50%]">
+        <template #header>
+          <div class="text-center">
+            {{ headerText }}
         </div>
-      </div>
-      <template #footer>
-        <div class="button-group-row justify-end grow">
-          <button class="btn btn-secondary" @click="resolveCurrent(false)">
-            {{ cancelButtonText }}
-          </button>
-          <button
-            class="btn"
-            :class="isDangerous ? 'btn-danger' : 'btn-primary'"
-            @click="resolveCurrent(true)"
-          >
-            {{ confirmButtonText }}
-          </button>
+        </template>
+        <div class="flex flex-row items-center gap-2">
+          <ExclamationCircleIcon v-if="isDangerous" class="size-icon-xl icon-danger shrink-0" />
+          <div class="grow overflow-x-auto whitespace-pre-wrap">
+            {{ bodyText }}
+          </div>
         </div>
-      </template>
-    </CardContainer>
+        <template #footer>
+          <div class="button-group-row justify-end grow">
+            <button class="btn btn-secondary" @click="resolveCurrent(false)">
+              {{ cancelButtonText }}
+            </button>
+            <button
+              class="btn"
+              :class="isDangerous ? 'btn-danger' : 'btn-primary'"
+              @click="resolveCurrent(true)"
+            >
+              {{ confirmButtonText }}
+            </button>
+          </div>
+        </template>
+      </CardContainer>
     </div>
   </Modal>
 </template>

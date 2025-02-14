@@ -26,6 +26,10 @@ export interface ZPoolAddVDevOptions {
   force?: boolean;
 }
 
+export interface ZPoolDestroyOptions {
+  force?: boolean;
+}
+
 export interface ZPool extends ZPoolBase {
   status: string;
   guid: string;

@@ -30,3 +30,4 @@ export * from "./tabs";
 export * from "./modals";
 export * from "./disks";
 export * from "./wizard";
+export * from "./commander";

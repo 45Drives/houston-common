@@ -68,6 +68,13 @@
 		}
 	}
 
+	.bg-success {
+		@apply bg-green-600 dark:bg-green-500;
+		button&, a&, .btn&, &.interactive {
+			@apply hover:bg-green-700 dark:hover:bg-green-600;
+		}
+	}
+
 	/* Divide and border */
 	.divide-default {
 		@apply divide-neutral-200 dark:divide-neutral-700;

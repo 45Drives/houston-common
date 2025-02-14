@@ -198,8 +198,6 @@ export abstract class SambaManagerBase implements ISambaManager {
     proc.write(`${passwd}\n${passwd}\n`);
     
     return proc.wait().map(() => {});
-    // return server.execute(new Command(['bash', '-c', `echo -e "${passwd}\n${passwd}\n" | smbpasswd -a -s ${user}`], { superuser: 'try' }))
-    // .map(() => {});
   }
 
   abstract addShare(

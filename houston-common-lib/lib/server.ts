@@ -6,6 +6,7 @@ import { Directory, File } from "@/path";
 import { ParsingError, ProcessError, ValueError } from "@/errors";
 import { Download } from "@/download";
 import { safeJsonParse } from "./utils";
+import { assertProp } from "./utils";
 
 import DiskInfoPy from "@/scripts/disk_info.py?raw";
 import { lookupServerModel, ServerModel } from "@/serverModels";
@@ -86,11 +87,21 @@ export class Server {
     return this.execute(new Command(["true"]), true).map(() => true);
   }
 
-  getServerInfo() {
+  getServerInfo(): ResultAsync<ServerInfo, ProcessError | SyntaxError> {
     return new File(this, "/etc/45drives/server_info/server_info.json")
       .read()
       .andThen(safeJsonParse<ServerInfo>)
-      .map((si) => si as ServerInfo);
+      .andThen(assertProp("Alias Style"))
+      .andThen(assertProp("Chassis Size"))
+      .andThen(assertProp("Edit Mode"))
+      .andThen(assertProp("HBA"))
+      .andThen(assertProp("Hybrid"))
+      .andThen(assertProp("Model"))
+      .andThen(assertProp("Motherboard"))
+      .andThen(assertProp("OS NAME"))
+      .andThen(assertProp("OS VERSION_ID"))
+      .andThen(assertProp("Serial"))
+      .andThen(assertProp("VM"));
   }
 
   setupLiveDriveSlotInfo(setter: (slots: DriveSlot[]) => void) {
@@ -128,6 +139,15 @@ export class Server {
       );
     }
     return okAsync(this.hostname);
+  }
+
+  setHostname(hostname: string): ResultAsync<null, ProcessError> {
+    if (this.hostname === undefined || this.hostname !== hostname) {
+      return this.execute(new Command(["hostnamectl", "set-hostname", hostname]), true).map(
+        () => null
+      );
+    }
+    return okAsync(null);
   }
 
   getIpAddress(cache: boolean = true): ResultAsync<string, ProcessError | ParsingError> {

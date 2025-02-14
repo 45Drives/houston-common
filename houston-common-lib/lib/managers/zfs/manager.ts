@@ -13,7 +13,9 @@ import {
   Dataset,
   Disks,
   VDevDiskBase,
-  VDevDisk
+  VDevDisk,
+  ZPoolDestroyOptions,
+  convertToBytes
 } from "@/index";
 
 export interface IZFSManager {
@@ -122,10 +124,18 @@ export class ZFSManager implements IZFSManager {
     console.log(proc.getStdout());
   }
 
-  async destroyPool(pool: ZPoolBase | string): Promise<void> {
+  async destroyPool(pool: ZPoolBase | string, options: ZPoolDestroyOptions = {}): Promise<void> {
     const poolName = typeof pool === "string" ? pool : pool.name;
+    const argv = ["zpool", "destroy"]
+
+    if (options.force) {
+      argv.push("-f");
+    }
+    
+    argv.push(poolName);
+
     await unwrap(
-      this.server.execute(new Command(["zpool", "destroy", poolName], this.commandOptions))
+      this.server.execute(new Command(argv, this.commandOptions))
     );
   }
 
@@ -143,7 +153,7 @@ export class ZFSManager implements IZFSManager {
       this.server.getDiskInfo()
         .map((diskInfoData) =>
           diskInfoData.map((disk: any): VDevDiskBase => ({
-            path: disk["dev-by-path"],
+            path: disk["dev"],
           }))
         )
       );
@@ -163,8 +173,8 @@ export class ZFSManager implements IZFSManager {
           const matchingDisk = lsdevRows.find((lsdev: any) => lsdev.dev === disk.dev);
 
           return {
-            path: disk["dev-by-path"],
-            name: matchingDisk?.["model-name"] || "Unknown",
+            path: `/dev/disk/by-vdev/${disk["bay-id"]}`,
+            name: matchingDisk?.["bay-id"] || "Unknown",
             capacity: matchingDisk?.capacity || "Unknown",
             model: matchingDisk?.["model-name"] || "Unknown",
             guid: matchingDisk?.serial || "Unknown",
@@ -173,7 +183,7 @@ export class ZFSManager implements IZFSManager {
             stats: {},
             phy_path: disk["dev-by-path"],
             sd_path: disk.dev,
-            vdev_path: disk["dev-by-path"],
+            vdev_path: `/dev/disk/by-vdev/${disk["bay-id"]}`,
             serial: matchingDisk?.serial || "Unknown",
             temp: matchingDisk?.["temp-c"] || "N/A",
             powerOnCount: matchingDisk?.["power-cycle-count"] || "0",
@@ -251,4 +261,23 @@ export class ZFSManager implements IZFSManager {
 
     console.log(proc.getStdout());
   }
+
+  allDisksHaveSameCapacity(disks: VDevDisk[]): boolean {
+    if (disks.length === 0) return false;
+    const firstCapacity = convertToBytes(disks[0]!.capacity);
+    return disks.every(disk => (convertToBytes(disk.capacity) === firstCapacity));
+  }
+
+  RAIDZResiliency: Record<string, number> = {
+    "raidz1": 1, // Can lose 1 disk
+    "raidz2": 2, // Can lose 2 disks
+    "raidz3": 3  // Can lose 3 disks
+  };
+
+  OptimalRAIDZLevel: Record<number, string> = {
+    4: "raidz1",
+    8: "raidz2",
+    20: "raidz2",
+    30: "raidz3"
+  };
 }

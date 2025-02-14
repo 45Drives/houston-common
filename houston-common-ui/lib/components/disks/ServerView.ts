@@ -17,33 +17,6 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import { LAYER_DEFAULT, LAYER_NO_SELECT } from "./constants";
 
-function projectBox3ToCamera(box3: THREE.Box3, camera: THREE.Camera) {
-  const points = [
-    new THREE.Vector3(box3.min.x, box3.min.y, box3.min.z),
-    new THREE.Vector3(box3.min.x, box3.min.y, box3.max.z),
-    new THREE.Vector3(box3.min.x, box3.max.y, box3.min.z),
-    new THREE.Vector3(box3.min.x, box3.max.y, box3.max.z),
-    new THREE.Vector3(box3.max.x, box3.min.y, box3.min.z),
-    new THREE.Vector3(box3.max.x, box3.min.y, box3.max.z),
-    new THREE.Vector3(box3.max.x, box3.max.y, box3.min.z),
-    new THREE.Vector3(box3.max.x, box3.max.y, box3.max.z),
-  ];
-
-  const projectedPoints = points.map((point) => {
-    // Convert world position to normalized device coordinates (NDC)
-    const ndc = point.project(camera);
-    return new THREE.Vector2(ndc.x, ndc.y);
-  });
-
-  // Find the min and max coordinates in screen space
-  const minX = Math.min(...projectedPoints.map((p) => p.x));
-  const maxX = Math.max(...projectedPoints.map((p) => p.x));
-  const minY = Math.min(...projectedPoints.map((p) => p.y));
-  const maxY = Math.max(...projectedPoints.map((p) => p.y));
-
-  return new THREE.Box2(new THREE.Vector2(minX, minY), new THREE.Vector2(maxX, maxY));
-}
-
 export class ServerView extends THREE.EventDispatcher<
   ServerComponentEventMap & {
     selectionchange: { type: "selectionchange"; components: ServerComponent[] };
@@ -51,7 +24,6 @@ export class ServerView extends THREE.EventDispatcher<
   }
 > {
   private renderer = new THREE.WebGLRenderer();
-  // private camera: THREE.Camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
   private camera: THREE.Camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
   private scene: THREE.Scene = new THREE.Scene();
   private controls = new OrbitControls(this.camera, this.renderer.domElement);

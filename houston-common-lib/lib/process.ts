@@ -214,17 +214,29 @@ export class Process extends ProcessBase {
     return ok(null);
   }
 
-  public terminate(): Process {
+  public terminate(): this {
     if (this.spawnHandle) {
       this.spawnHandle.close("terminated");
     }
     return this;
   }
 
-  public close(): Process {
+  public close(): this {
     if (this.spawnHandle) {
       this.spawnHandle.close();
     }
     return this;
+  }
+
+  public streamBinary(callback: (output: Uint8Array) => void): Result<null, ProcessError>  {
+    if (this.spawnHandle === undefined) {
+      return err(new ProcessError(this.prefixMessage("process not running!")));
+    }
+    this.spawnHandle.stream(callback);
+    return ok(null);
+  }
+
+  public stream(callback: (output: string) => void) {
+    return this.streamBinary((output: Uint8Array) => callback(utf8Decoder.decode(output)))
   }
 }

@@ -4,6 +4,7 @@ import json
 import sys
 import re
 
+
 def disk_type(sysfs_path: str) -> str:
     with open(sysfs_path + "/queue/rotational", "r") as f:
         return "HDD" if bool(int(f.read())) else "SSD"
@@ -42,7 +43,7 @@ def get_disk_info():
 
 
 def main():
-    print(json.dumps(get_disk_info()))
+    print(json.dumps({"rows": get_disk_info()}))
 
 
 if __name__ == "__main__":

@@ -45,17 +45,19 @@ export type ServerInfo = {
   "OS VERSION_ID": string;
 };
 
-export type DiskInfo = (
-  | ({
-      "dev-by-path": string;
-      "bay-id": `${number}-${number}`;
-    } & {
-      occupied: true;
-      dev: string;
-      disk_type: "HDD" | "SSD";
-    })
-  | { occupied: false }
-)[];
+export type DiskInfo = {
+  rows: (
+    | ({
+        "dev-by-path": string;
+        "bay-id": `${number}-${number}`;
+      } & {
+        occupied: true;
+        dev: string;
+        disk_type: "HDD" | "SSD";
+      })
+    | { occupied: false }
+  )[];
+};
 
 export type LSDevDisk = {
   "dev-by-path": string;
@@ -167,9 +169,7 @@ export class Server {
   }
 
   /**
-   * deprecated
-   * @see getDriveSlots
-   *
+   * @deprecated use {@link Server.getDriveSlots} instead
    * @returns
    */
   getDiskInfo() {
@@ -180,8 +180,7 @@ export class Server {
   }
 
   /**
-   * deprecated
-   * @see getDriveSlots
+   * @deprecated use {@link Server.getDriveSlots} instead
    * @returns
    */
   getLsDev() {

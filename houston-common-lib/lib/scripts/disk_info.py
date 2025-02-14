@@ -22,7 +22,7 @@ def disk_type(sysfs_path: str) -> str:
 def populate_disk_information(disk: dict) -> dict:
     disk["occupied"] = os.path.islink(disk["dev-by-path"])
     if disk["occupied"]:
-        disk["dev"] = os.path.realpatiskh(disk["dev-by-path"])
+        disk["dev"] = os.path.realpath(disk["dev-by-path"])
         sysfs_path = "/sys/block/" + os.basename(disk["dev"])
         disk["disk_type"] = disk_type(sysfs_path)
 

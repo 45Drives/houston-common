@@ -149,6 +149,12 @@ export class Server {
     return startLiveDriveSlotsWatcher(this, setter);
   }
 
+  /**
+   * deprecated
+   * @see getDriveSlots
+   * 
+   * @returns 
+   */
   getDiskInfo() {
     return this.execute(new PythonCommand(DiskInfoPy, [], { superuser: "try" }))
       .map((proc) => proc.getStdout())
@@ -156,6 +162,11 @@ export class Server {
       .map((di) => di as DiskInfo);
   }
 
+  /**
+   * deprecated
+   * @see getDriveSlots
+   * @returns 
+   */
   getLsDev() {
     return this.execute(new Command(["/opt/45drives/tools/lsdev", "--json"], { superuser: "try" }))
       .map((proc) => proc.getStdout())

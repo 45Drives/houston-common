@@ -113,10 +113,13 @@ defineExpose({
 </script>
 
 <template>
-  <Modal :show="currentConfirmation !== undefined">
-    <CardContainer class="sm:min-w-96">
+  <Modal :show="currentConfirmation !== undefined" >
+    <div class="fixed inset-0 flex items-center  justify-center">
+    <CardContainer class="sm:min-w-96 sm:max-w-[50%]">
       <template #header>
-        {{ headerText }}
+        <div class="text-center">
+          {{ headerText }}
+      </div>
       </template>
       <div class="flex flex-row items-center gap-2">
         <ExclamationCircleIcon v-if="isDangerous" class="size-icon-xl icon-danger shrink-0" />
@@ -139,5 +142,6 @@ defineExpose({
         </div>
       </template>
     </CardContainer>
+    </div>
   </Modal>
 </template>

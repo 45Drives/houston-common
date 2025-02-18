@@ -224,6 +224,27 @@ export function runInSequence<T, E, Args extends any[]>(
   };
 }
 
+/**
+ * Format bytes value into string with units
+ * @param bytes raw number of bytes
+ * @param units "si" - "3.69 GB". "binary" - "3.44 GiB". "both" - "3.69 GB (3.44 GiB)".
+ * @returns 
+ */
+export function formatBytes(bytes: number, units: "si" | "binary" | "both"): string {
+  if (units === "both") {
+    return `${formatBytes(bytes, "si")} (${formatBytes(bytes, "binary")})`;
+  }
+  const lut = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
+
+  const base = units === "si" ? 1000 : 1024;
+
+  const exp = Math.min(Math.max(0, Math.floor(Math.log(bytes) / Math.log(base))), lut.length - 1);
+
+  const factor = Math.pow(base, exp);
+
+  return `${(bytes / factor).toPrecision(4)} ${units === "si" ? lut[exp]?.replace("i", "") : lut[exp]}`;
+}
+
 // Converts a size (TiB, GiB, etc.) to bytes for calculation
 export function convertToBytes(sizeString: string): number {
   // Extract the numeric value and unit from the string
@@ -253,7 +274,14 @@ export function convertToBytes(sizeString: string): number {
 }
 
 
-// Converts bytes back to the best-fitting unit (B, KiB, MiB, GiB, TiB, PiB, EiB)
+// 
+/**
+ * Converts bytes back to the best-fitting unit (B, KiB, MiB, GiB, TiB, PiB, EiB)
+ * @param sizeInBytes 
+ * @returns 
+ * 
+ * @deprecated use {@link formatBytes} instead
+ */
 export function formatCapacity(sizeInBytes: number): string {
   const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
   let index = 0;

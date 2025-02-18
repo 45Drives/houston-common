@@ -15,20 +15,23 @@ import {
   VDevDiskBase,
   VDevDisk,
   ZPoolDestroyOptions,
-  convertToBytes
+  convertToBytes,
 } from "@/index";
 
 export interface IZFSManager {
   createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<void>;
   destroyPool(name: string): Promise<void>;
   addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void>;
-  addDataset(parent: ZPoolBase | Dataset, name: string, options: DatasetCreateOptions): Promise<void>;
+  addDataset(
+    parent: ZPoolBase | Dataset,
+    name: string,
+    options: DatasetCreateOptions
+  ): Promise<void>;
   getBaseDisks(): Promise<VDevDiskBase[]>;
   getFullDisks(): Promise<VDevDiskBase[]>;
   getDiskCapacity(path: string): Promise<string>;
   // TODO:
   getPools(): Promise<ZPool[]>;
- 
 }
 
 export class ZFSManager implements IZFSManager {
@@ -126,17 +129,15 @@ export class ZFSManager implements IZFSManager {
 
   async destroyPool(pool: ZPoolBase | string, options: ZPoolDestroyOptions = {}): Promise<void> {
     const poolName = typeof pool === "string" ? pool : pool.name;
-    const argv = ["zpool", "destroy"]
+    const argv = ["zpool", "destroy"];
 
     if (options.force) {
       argv.push("-f");
     }
-    
+
     argv.push(poolName);
 
-    await unwrap(
-      this.server.execute(new Command(argv, this.commandOptions))
-    );
+    await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
   }
 
   async getPools(): Promise<ZPool[]> {
@@ -144,35 +145,29 @@ export class ZFSManager implements IZFSManager {
     return [];
   }
 
-
   /**
    * Fetches only the disk paths and returns them as VDevDiskBase[]
    */
   async getBaseDisks(): Promise<VDevDiskBase[]> {
     return unwrap(
-      this.server.getDiskInfo()
-        .map((diskInfoData) =>
-          diskInfoData.rows!.map((disk: any): VDevDiskBase => ({
+      this.server.getDiskInfo().map((diskInfoData) =>
+        diskInfoData.rows.map(
+          (disk: any): VDevDiskBase => ({
             path: disk["dev"],
-          }))
+          })
         )
-      );
+      )
+    );
   }
 
   /**
    * Fetches full disk information by merging fetchLsdev() and fetchDiskInfo()
    */
   async getFullDisks(): Promise<VDevDisk[]> {
-    return Promise.all([
-      unwrap(this.server.getLsDev()),
-      unwrap(this.server.getDiskInfo()),
-    ])
-      .then(([lsdevData, diskInfoData]) => {
+    return Promise.all([unwrap(this.server.getLsDev()), unwrap(this.server.getDiskInfo())])
+      .then(([lsdevData, diskInfo]) => {
         const lsdevRows = lsdevData.rows.flat(); // Flatten nested arrays in `lsdev`
-        const diskInfoRows = diskInfoData.rows!;
-        // console.log('lsdevRows:', lsdevRows);
-        // console.log('diskInfoRows:', diskInfoRows);
-        return diskInfoRows.map((disk: any): VDevDisk => {
+        return diskInfo.rows.map((disk: any): VDevDisk => {
           const matchingDisk = lsdevRows.find((lsdev: any) => lsdev.dev === disk.dev);
 
           return {
@@ -190,7 +185,7 @@ export class ZFSManager implements IZFSManager {
             serial: matchingDisk?.serial || "Unknown",
             temp: matchingDisk?.["temp-c"] || "N/A",
             powerOnCount: matchingDisk?.["power-cycle-count"] || "0",
-            powerOnHours: matchingDisk?.["power-on-time"] || 0,
+            powerOnHours: parseInt(matchingDisk?.["power-on-time"] || "0"),
             rotationRate: matchingDisk?.["rotation-rate"] || 0,
           };
         });
@@ -215,7 +210,11 @@ export class ZFSManager implements IZFSManager {
       .unwrapOr("Unknown");
   }
 
-  async addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void> {
+  async addVDevsToPool(
+    pool: ZPoolBase,
+    vdevs: VDevBase[],
+    options: ZPoolAddVDevOptions
+  ): Promise<void> {
     const argv = ["zpool", "add"];
 
     if (options.force) argv.push("-f");
@@ -233,13 +232,18 @@ export class ZFSManager implements IZFSManager {
     console.log(proc.getStdout());
   }
 
-  async addDataset(parent: ZPoolBase | Dataset, name: string, options: DatasetCreateOptions): Promise<void> {
+  async addDataset(
+    parent: ZPoolBase | Dataset,
+    name: string,
+    options: DatasetCreateOptions
+  ): Promise<void> {
     const argv = ["zfs", "create"];
 
     // Construct dataset properties
     const datasetProps: string[] = [];
     if (options.atime !== undefined) datasetProps.push(`atime=${options.atime}`);
-    if (options.casesensitivity !== undefined) datasetProps.push(`casesensitivity=${options.casesensitivity}`);
+    if (options.casesensitivity !== undefined)
+      datasetProps.push(`casesensitivity=${options.casesensitivity}`);
     if (options.compression !== undefined) datasetProps.push(`compression=${options.compression}`);
     if (options.dedup !== undefined) datasetProps.push(`dedup=${options.dedup}`);
     if (options.dnodesize !== undefined) datasetProps.push(`dnodesize=${options.dnodesize}`);
@@ -268,22 +272,19 @@ export class ZFSManager implements IZFSManager {
   allDisksHaveSameCapacity(disks: VDevDisk[]): boolean {
     if (disks.length === 0) return false;
     const firstCapacity = convertToBytes(disks[0]!.capacity);
-    return disks.every(disk => (convertToBytes(disk.capacity) === firstCapacity));
+    return disks.every((disk) => convertToBytes(disk.capacity) === firstCapacity);
   }
 
   RAIDZResiliency: Record<string, number> = {
-    "raidz1": 1, // Can lose 1 disk
-    "raidz2": 2, // Can lose 2 disks
-    "raidz3": 3  // Can lose 3 disks
+    raidz1: 1, // Can lose 1 disk
+    raidz2: 2, // Can lose 2 disks
+    raidz3: 3, // Can lose 3 disks
   };
 
   OptimalRAIDZLevel: Record<number, string> = {
     4: "raidz1",
     8: "raidz2",
     20: "raidz2",
-    30: "raidz3"
+    30: "raidz3",
   };
-
 }
-
-

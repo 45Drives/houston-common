@@ -1,51 +1,78 @@
 <template>
-  <img :src="driveBaysImage" alt="Drive bays" />
-  <!-- <div ref="canvasParent"></div> -->
+  <div ref="canvasParent"></div>
 </template>
 
 <script setup lang="ts">
-import { ref, provide, reactive, onMounted, computed, watch, useTemplateRef } from "vue";
-import { Server, type DiskInfo } from "@45drives/houston-common-lib";
-import { lookupImages } from "@/img";
-// import * as PIXI from "pixijs";
+import { useTemplateRef, onBeforeUnmount, watchEffect } from "vue";
+import {
+  Server,
+  type DriveSlot,
+} from "@45drives/houston-common-lib";
 
-const props = withDefaults(defineProps<{ server?: Server }>(), { server: () => new Server() });
+import * as THREE from "three";
+
+import { DriveSlotComponent } from "./DriveSlot";
+
+import { ServerView } from "./ServerView";
+
+import { useDarkModeState } from "@/composables";
+
+const props = withDefaults(
+  defineProps<{
+    server?: Server;
+    enableSelection: boolean;
+    enableRotate: boolean;
+    enablePan: boolean;
+    enableZoom: boolean;
+  }>(),
+  {
+    server: () => new Server(),
+    enableSelection: false,
+    enableRotate: false,
+    enablePan: false,
+    enableZoom: false,
+  }
+);
 
 const canvasParent = useTemplateRef<HTMLDivElement>("canvasParent");
 
-const modelNumber = ref("");
+const serverView = new ServerView(props.server);
 
-const diskInfo = ref<DiskInfo>();
+const selectedDriveSlots = defineModel<DriveSlot[]>("selectedDriveSlots", { default: [] });
 
-watch(
-  () => props.server,
-  (server) => {
-    server.getServerInfo().map((info) => {
-      modelNumber.value = info.Model ?? "";
-    });
+const driveSlots = defineModel<DriveSlot[]>("driveSlots", { default: [] });
 
-    server.getDiskInfo().map((d) => {
-      diskInfo.value = d as DiskInfo;
-    });
-  },
-  { immediate: true }
-);
+serverView.addEventListener("selectionchange", (e) => {
+  selectedDriveSlots.value = e.components
+    .filter((c): c is DriveSlotComponent => c instanceof DriveSlotComponent)
+    .map((driveSlot) => driveSlot.userData);
+});
 
-const serverGraphics = computed(() => lookupImages(modelNumber.value));
+serverView.addEventListener("driveslotchange", (e) => {
+  driveSlots.value = [...e.slots];
+});
 
-const driveBaysImage = computed(() => serverGraphics.value.drivebay);
+watchEffect(() => {
+  if (!canvasParent.value) {
+    return;
+  }
+  serverView.start(canvasParent.value);
+});
 
+watchEffect(() => {
+  serverView.enableSelection = props.enableSelection;
+  serverView.enableRotate = props.enableRotate;
+  serverView.enablePan = props.enablePan;
+  serverView.enableZoom = props.enableZoom;
+});
 
-// watch([diskInfo, serverGraphics], () => {
-//   if ([diskInfo.value, serverGraphics.value, canvasParent.value].some((v) => !v)) {
-//     return;
-//   }
-//   const bg = PIXI.Sprite.from(serverGraphics.value.drivebay);
-//   const app = new PIXI.Application<HTMLCanvasElement>({width: bg.width, height: bg.height});
+const darkMode = useDarkModeState();
 
-//   app.stage.addChild(bg);
+watchEffect(() => {
+  serverView.setBackground(new THREE.Color(darkMode.value ? 0x262626 : 0xffffff));
+});
 
-
-//   canvasParent.value!.appendChild(app.view);
-// });
+onBeforeUnmount(() => {
+  serverView.stop(canvasParent.value);
+});
 </script>

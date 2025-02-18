@@ -1,28 +1,40 @@
 import { EasySetupConfig } from "./types";
-import { Command, SambaConfParser, SambaManagerNet, server, unwrap, ZFSConfig } from "@/index";
+import {
+  Command,
+  SambaConfParser,
+  SambaManagerNet,
+  server,
+  unwrap,
+  ZFSConfig,
+  CommandOptions,
+} from "@/index";
 import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
 
 export interface EasySetupProgress {
-  message: string,
-  step: number,
-  total: number
+  message: string;
+  step: number;
+  total: number;
 }
 
 export class EasySetupConfigurator {
   sambaManager: SambaManagerNet;
   zfsManager: ZFSManager;
+  commandOptions: CommandOptions;
 
   constructor() {
     this.sambaManager = new SambaManagerNet();
     this.zfsManager = new ZFSManager();
+    this.commandOptions = { superuser: "try" };
   }
 
-  async applyConfig(config: EasySetupConfig, progressCallback: (progress: EasySetupProgress) => void) {
+  async applyConfig(
+    config: EasySetupConfig,
+    progressCallback: (progress: EasySetupProgress) => void
+  ) {
     if (true) {
       try {
-
         const total = 6;
         progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
 
@@ -35,35 +47,33 @@ export class EasySetupConfigurator {
         await this.createUser(config);
         progressCallback({ message: "Created your User", step: 4, total });
 
-        await this.applyZFSConfig(config)
+        await this.applyZFSConfig(config);
         progressCallback({ message: "Drive Configuration done", step: 5, total });
 
         await this.applySambaConfig(config);
         progressCallback({ message: "Network configured", step: 6, total });
-
       } catch (error: any) {
         console.error("Error in setupStorage:", error);
         progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });
       }
-    }
-    else {
+    } else {
       /**
-          * Simulated steps for setting up the storage system.
-          * In a real app, you might run actual async tasks or poll a backend API.
-          */
+       * Simulated steps for setting up the storage system.
+       * In a real app, you might run actual async tasks or poll a backend API.
+       */
       const steps: EasySetupProgress[] = [
-        { message: 'Initializing', step: 1, total: 3 },
-        { message: 'Creating Pools', step: 2, total: 3 },
-        { message: 'Setting Network Storage', step: 3, total: 3 },
-      ]
+        { message: "Initializing", step: 1, total: 3 },
+        { message: "Creating Pools", step: 2, total: 3 },
+        { message: "Setting Network Storage", step: 3, total: 3 },
+      ];
       let currentStep = 0;
       const stepInterval = setInterval(() => {
         if (currentStep < steps.length) {
-          progressCallback(steps[currentStep++]!)
+          progressCallback(steps[currentStep++]!);
         } else {
-          clearInterval(stepInterval)
+          clearInterval(stepInterval);
         }
-      }, 2000)
+      }, 2000);
     }
   }
 
@@ -72,23 +82,26 @@ export class EasySetupConfigurator {
       throw new Error("user and password not set in config");
     }
     try {
-      
-      await unwrap(server.execute(new Command(["useradd", "-m", "-s", "/bin/bash", config.smbUser]), true))
-    } catch (error) {
-    }
+      await unwrap(
+        server.execute(new Command(["useradd", "-m", "-s", "/bin/bash", config.smbUser], this.commandOptions), true)
+      );
+    } catch (error) {}
     try {
-      await unwrap(server.execute(new Command(["usermod", "-aG", "wheel", config.smbUser]), true))
-    } catch (error) {
-    }
+      await unwrap(server.execute(new Command(["usermod", "-aG", "wheel", config.smbUser], this.commandOptions), true));
+    } catch (error) {}
     try {
-      await unwrap(server.execute(new Command(["echo", `\"${config.smbUser}${config.smbPass}\"`, "|", "chpasswd"]), true))
-    } catch (error) {
-    }
+      await unwrap(
+        server.execute(
+          new Command(["echo", `\"${config.smbUser}${config.smbPass}\"`, "|", "chpasswd"], this.commandOptions),
+          true
+        )
+      );
+    } catch (error) {}
   }
 
   private async updateHostname(_config: EasySetupConfig) {
     //server.setHostname(config.hostname)
-    await unwrap(server.execute(new Command(["systemctl", "restart", "avahi-daemon"]), true))
+    await unwrap(server.execute(new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions), true));
   }
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
@@ -106,10 +119,9 @@ export class EasySetupConfigurator {
 
     for (let share of config.sambaConfig!.shares) {
       try {
-
         await this.sambaManager.removeShare(share);
       } catch (error) {
-        console.log(error)
+        console.log(error);
       }
     }
 
@@ -124,50 +136,59 @@ export class EasySetupConfigurator {
     let zfsConfig = _config.zfsConfig;
 
     let baseDisks = await this.zfsManager.getBaseDisks();
-    console.log("baseDisks:", baseDisks)
+    console.log("baseDisks:", baseDisks);
 
-    baseDisks = baseDisks.filter(b => b.path.trim().length > 0); 
-    console.log('baseDisks filtered', baseDisks);
+    baseDisks = baseDisks.filter((b) => b.path.trim().length > 0);
+    console.log("baseDisks filtered", baseDisks);
 
     zfsConfig!.pool.vdevs[0]!.disks = baseDisks;
     await this.zfsManager.createPool(zfsConfig!.pool, zfsConfig!.poolOptions);
-    await this.zfsManager.addDataset(zfsConfig!.pool, zfsConfig!.dataset.name, zfsConfig!.datasetOptions);
-
+    await this.zfsManager.addDataset(
+      zfsConfig!.pool,
+      zfsConfig!.dataset.name,
+      zfsConfig!.datasetOptions
+    );
   }
 
   private async applySambaConfig(config: EasySetupConfig) {
-
     await this.sambaManager.setUserPassword(config.smbUser!, config.smbPass!);
 
     await unwrap(this.sambaManager.editGlobal(config.sambaConfig!.global));
 
-    await unwrap(this.sambaManager.checkIfSambaConfIncludesRegistry("/etc/samba/smb.conf")
-      .andThen((includesRegistry) => includesRegistry ? okAsync({}) : this.sambaManager.patchSambaConfIncludeRegistry("/etc/samba/smb.conf"))
-    )
+    await unwrap(
+      this.sambaManager
+        .checkIfSambaConfIncludesRegistry("/etc/samba/smb.conf")
+        .andThen((includesRegistry) =>
+          includesRegistry
+            ? okAsync({})
+            : this.sambaManager.patchSambaConfIncludeRegistry("/etc/samba/smb.conf")
+        )
+    );
 
-    const shareSamabaResults = config.sambaConfig!.shares.map(share => this.sambaManager.addShare(share));
+    const shareSamabaResults = config.sambaConfig!.shares.map((share) =>
+      this.sambaManager.addShare(share)
+    );
     for (let i = 0; i < shareSamabaResults.length; i++) {
       const shareSamabaResult = shareSamabaResults[i];
       if (shareSamabaResult) {
-
-        await unwrap(shareSamabaResult)
-
+        await unwrap(shareSamabaResult);
       }
     }
-
   }
 
-  static async loadConfig(easyConfigName: keyof typeof defaultConfigs): Promise<EasySetupConfig | null> {
+  static async loadConfig(
+    easyConfigName: keyof typeof defaultConfigs
+  ): Promise<EasySetupConfig | null> {
     console.log("loading config for:", easyConfigName);
-    console.log("list of defaultconfigs:", defaultConfigs)
+    console.log("list of defaultconfigs:", defaultConfigs);
     const dc = defaultConfigs[easyConfigName];
     return SambaConfParser()
       .apply(dc.smbconf)
-      .map((sambaConfig):EasySetupConfig => {
+      .map((sambaConfig): EasySetupConfig => {
         return {
           sambaConfig,
-          zfsConfig: dc.zfsconf as ZFSConfig
-        }
+          zfsConfig: dc.zfsconf as ZFSConfig,
+        };
       })
       .unwrapOr(null);
   }

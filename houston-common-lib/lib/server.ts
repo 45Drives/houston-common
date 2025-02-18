@@ -186,7 +186,7 @@ export class Server {
     return this.execute(new Command(["/opt/45drives/tools/lsdev", "--json"], { superuser: "try" }))
       .map((proc) => proc.getStdout())
       .andThen(safeJsonParse<{ rows: LSDevDisk[][] }>)
-      .map((lsdev) => lsdev.rows?.flat() ?? []);
+      .map((lsdev) => lsdev as { rows: LSDevDisk[][] });
   }
 
   getServerModel(): ResultAsync<ServerModel, ProcessError | ParsingError> {

@@ -25,6 +25,7 @@ def populate_disk_information(disk: dict) -> dict:
         disk["dev"] = os.path.realpath(disk["dev-by-path"])
         sysfs_path = "/sys/block/" + os.path.basename(disk["dev"])
         disk["disk_type"] = disk_type(sysfs_path)
+    return disk
 
 
 def get_disk_info():

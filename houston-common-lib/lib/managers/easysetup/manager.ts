@@ -7,6 +7,7 @@ import {
   unwrap,
   ZFSConfig,
   CommandOptions,
+  ValueError,
 } from "@/index";
 import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
@@ -81,27 +82,23 @@ export class EasySetupConfigurator {
     if (!config.smbUser || !config.smbPass) {
       throw new Error("user and password not set in config");
     }
-    try {
-      await unwrap(
-        server.execute(new Command(["useradd", "-m", "-s", "/bin/bash", config.smbUser], this.commandOptions), true)
-      );
-    } catch (error) {}
-    try {
-      await unwrap(server.execute(new Command(["usermod", "-aG", "wheel", config.smbUser], this.commandOptions), true));
-    } catch (error) {}
-    try {
-      await unwrap(
-        server.execute(
-          new Command(["echo", `\"${config.smbUser}${config.smbPass}\"`, "|", "chpasswd"], this.commandOptions),
-          true
-        )
-      );
-    } catch (error) {}
+    const smbUserLogin = config.smbUser;
+    const smbUserPassword = config.smbPass;
+    server
+      .getUserByLogin(config.smbUser)
+      .orElse(() => server.addUser({ login: smbUserLogin }))
+      .andThen((user) => server.addUserToGroups(user, "wheel", "smbusers"))
+      .andThen((user) => server.changePassword(user, smbUserPassword));
   }
 
   private async updateHostname(_config: EasySetupConfig) {
     //server.setHostname(config.hostname)
-    await unwrap(server.execute(new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions), true));
+    await unwrap(
+      server.execute(
+        new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions),
+        true
+      )
+    );
   }
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
@@ -151,9 +148,19 @@ export class EasySetupConfigurator {
   }
 
   private async applySambaConfig(config: EasySetupConfig) {
-    await this.sambaManager.setUserPassword(config.smbUser!, config.smbPass!);
+    if (config.smbUser == undefined) {
+      throw new ValueError("config.smbUser is undefined!");
+    }
+    if (config.smbPass == undefined) {
+      throw new ValueError("config.smbPass is undefined!");
+    }
+    if (config.sambaConfig == undefined) {
+      throw new ValueError("config.sambaConfig is undefined!");
+    }
+    
+    await unwrap(this.sambaManager.setUserPassword(config.smbUser, config.smbPass));
 
-    await unwrap(this.sambaManager.editGlobal(config.sambaConfig!.global));
+    await unwrap(this.sambaManager.editGlobal(config.sambaConfig.global));
 
     await unwrap(
       this.sambaManager

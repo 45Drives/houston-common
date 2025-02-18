@@ -1,6 +1,6 @@
 import { ResultAsync, ok, okAsync, err, errAsync } from "neverthrow";
 import { Command, Process, ExitedProcess, PythonCommand } from "@/process";
-import { User, LocalUser, isLocalUser } from "@/user";
+import { User, LocalUser, isLocalUser, NewUser } from "@/user";
 import { Group, LocalGroup, isLocalGroup } from "@/group";
 import { Directory, File } from "@/path";
 import { ParsingError, ProcessError, ValueError } from "@/errors";
@@ -395,6 +395,35 @@ export class Server {
           ? ok(Group(this, undefined, gid, undefined))
           : ok(groupMatches[0]!)
       );
+  }
+
+  addUser(user: NewUser): ResultAsync<LocalUser, ProcessError> {
+    const argv = ["useradd", "--create-home"];
+    if (user.name) {
+      argv.push("--comment", user.name);
+    }
+    if (user.home) {
+      argv.push("--home", user.home);
+    }
+    if (user.shell) {
+      argv.push("--shell", user.shell);
+    }
+    argv.push(user.login);
+
+    return this.execute(new Command(argv, { superuser: "try" }), true).andThen(() =>
+      this.getUserByLogin(user.login)
+    );
+  }
+
+  changePassword(user: LocalUser, password: string): ResultAsync<LocalUser, ProcessError> {
+    const proc = this.spawnProcess(new Command(["passwd", user.login], { superuser: "try" }));
+    proc.write(`${password}\n${password}\n`);
+
+    return proc.wait().map(() => user);
+  }
+
+  addUserToGroups(user: LocalUser, ...groups: string[]): ResultAsync<LocalUser, ProcessError> {
+    return this.execute(new Command(["usermod", "-aG", ...groups, user.login])).map(() => user);
   }
 
   toString(): string {

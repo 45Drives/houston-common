@@ -129,7 +129,16 @@ export interface ISambaManager {
    * @param passwd 
    */
   setUserPassword(user: string, passwd: string): ResultAsync<void, ProcessError>;
+  
+  /**
+   * Stop Samba services
+   */
+  stopSambaService(): ResultAsync<void, ProcessError>;
 
+  /**
+ * Start Samba services
+ */
+  startSambaService(): ResultAsync<void, ProcessError>;
 }
 
 export abstract class SambaManagerBase implements ISambaManager {
@@ -222,6 +231,19 @@ export abstract class SambaManagerBase implements ISambaManager {
       )
     );
   }
+
+  stopSambaService(): ResultAsync<void, ProcessError> {
+    const proc = server.spawnProcess(new Command(['systemctl', 'stop', 'smb', 'nmb', 'winbind'], { superuser: 'try' }));
+
+    return proc.wait().map(() => { });
+  }
+
+  startSambaService(): ResultAsync<void, ProcessError> {
+    const proc = server.spawnProcess(new Command(['systemctl', 'start', 'smb', 'nmb', 'winbind'], { superuser: 'try' }));
+
+    return proc.wait().map(() => { });
+  }
+
 }
 
 export class SambaManagerNet extends SambaManagerBase implements ISambaManager {

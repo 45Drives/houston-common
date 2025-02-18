@@ -36,7 +36,7 @@ export class ServerView extends THREE.EventDispatcher<
 
   private slotInfoWatchHandle?: LiveDriveSlotsHandle;
 
-  private resizeObserver: ResizeObserver;
+  private parentResizeObserver: ResizeObserver;
 
   constructor(
     public readonly server: Server,
@@ -114,10 +114,9 @@ export class ServerView extends THREE.EventDispatcher<
     );
     this.mouseEventTranslator.addEventListener("selectionchange", (e) => this.dispatchEvent(e));
 
-    this.resizeObserver = new ResizeObserver((entries) => {
+    this.parentResizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        this.fixCameraAspect(entry.contentRect.width, entry.contentRect.height);
-
+        this.fixCameraAspect(entry.contentRect.width, entry.contentRect.height, true);
         this.chassis
           .then((chassis) => chassis.loaded)
           .then(() => {
@@ -127,25 +126,31 @@ export class ServerView extends THREE.EventDispatcher<
     });
   }
 
-  async start(parent?: HTMLElement | null) {
+  async start(parent: HTMLElement) {
     this.renderer.setAnimationLoop(() => this.animate());
-    parent?.appendChild(this.renderer.domElement);
+    parent.appendChild(this.renderer.domElement);
     this.slotInfoWatchHandle = this.server.setupLiveDriveSlotInfo((slotInfo) => {
       this.dispatchEvent({ type: "driveslotchange", slots: slotInfo });
       this.setDriveSlotInfo(slotInfo);
     });
-    this.resizeObserver.observe(this.renderer.domElement);
+    this.parentResizeObserver.observe(parent);
   }
 
-  stop(parent?: HTMLElement | null) {
-    parent?.removeChild(this.renderer.domElement);
+  stop() {
+    if (this.renderer.domElement.parentElement) {
+      this.parentResizeObserver.unobserve(this.renderer.domElement.parentElement);
+      this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+    }
     this.renderer.setAnimationLoop(null);
     this.slotInfoWatchHandle?.stop();
-    this.resizeObserver.unobserve(this.renderer.domElement);
   }
 
-  private fixCameraAspect(elementWidth: number, elementHeight: number) {
-    this.renderer.setSize(elementWidth, elementHeight, false);
+  private fixCameraAspect(
+    elementWidth: number,
+    elementHeight: number,
+    updateStyle: boolean = false
+  ) {
+    this.renderer.setSize(elementWidth, elementHeight, updateStyle);
 
     const aspect = elementWidth / elementHeight;
     if (this.camera instanceof THREE.OrthographicCamera) {

@@ -93,7 +93,7 @@ export class EasySetupConfigurator {
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
     try {
-
+      await this.sambaManager.stopSambaService();
       await this.zfsManager.destroyPool(config.zfsConfig!.pool, { force: true });
     } catch (error) {
       console.log(error);

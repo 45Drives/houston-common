@@ -91,8 +91,10 @@ export class EasySetupConfigurator {
       .andThen((user) => server.changePassword(user, smbUserPassword));
   }
 
-  private async updateHostname(_config: EasySetupConfig) {
-    //server.setHostname(config.hostname)
+  private async updateHostname(config: EasySetupConfig) {
+    if (config.srvrName) {
+      await unwrap(server.setHostname(config.srvrName));
+    }
     await unwrap(
       server.execute(
         new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions),
@@ -157,7 +159,7 @@ export class EasySetupConfigurator {
     if (config.sambaConfig == undefined) {
       throw new ValueError("config.sambaConfig is undefined!");
     }
-    
+
     await unwrap(this.sambaManager.setUserPassword(config.smbUser, config.smbPass));
 
     await unwrap(this.sambaManager.editGlobal(config.sambaConfig.global));

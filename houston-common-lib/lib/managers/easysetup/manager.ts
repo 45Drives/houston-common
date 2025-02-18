@@ -100,7 +100,10 @@ export class EasySetupConfigurator {
   }
 
   private async updateHostname(_config: EasySetupConfig) {
-    //server.setHostname(config.hostname)
+    if (_config.srvrName) {
+
+      server.setHostname(_config.srvrName)
+    }
     await unwrap(server.execute(new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions), true));
   }
 

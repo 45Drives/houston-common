@@ -198,7 +198,7 @@ export class ServerView extends THREE.EventDispatcher<
     console.log("projected size:", projectedSize);
 
     if (this.camera instanceof THREE.OrthographicCamera) {
-      this.camera.zoom = 2 / Math.max(projectedSize.x, projectedSize.y);
+      this.camera.zoom = 2 / Math.max(projectedSize.x, projectedSize.y) * margin;
     } else {
       throw new Error("not implemented");
     }

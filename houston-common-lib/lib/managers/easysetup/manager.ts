@@ -103,6 +103,22 @@ export class EasySetupConfigurator {
     );
   }
 
+  private async setShareOwnershipAndPermissions(sharePath: string) {
+    try {
+      console.log(`Setting ownership of ${sharePath} to root:smbusers...`);
+      await unwrap(
+        server.execute(new Command(["chown", "-R", "root:smbusers", sharePath], this.commandOptions), true)
+      );
+
+      console.log(`Setting permissions for ${sharePath}...`);
+      await unwrap(
+        server.execute(new Command(["chmod", "-R", "g+rw", sharePath], this.commandOptions), true)
+      );
+    } catch (error) {
+      console.error(`Error setting ownership and permissions for ${sharePath}:`, error);
+    }
+  }
+
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
     try {
       await this.sambaManager.stopSambaService();
@@ -174,14 +190,20 @@ export class EasySetupConfigurator {
         )
     );
 
-    const shareSamabaResults = config.sambaConfig!.shares.map((share) =>
-      this.sambaManager.addShare(share)
-    );
-    for (let i = 0; i < shareSamabaResults.length; i++) {
-      const shareSamabaResult = shareSamabaResults[i];
-      if (shareSamabaResult) {
-        await unwrap(shareSamabaResult);
-      }
+    // const shareSamabaResults = config.sambaConfig!.shares.map((share) =>
+    //   this.sambaManager.addShare(share)
+    // );
+    // for (let i = 0; i < shareSamabaResults.length; i++) {
+    //   const shareSamabaResult = shareSamabaResults[i];
+    //   if (shareSamabaResult) {
+    //     await unwrap(shareSamabaResult);
+    //   }
+    // }
+
+    // Apply share configurations and ensure correct ownership/permissions
+    for (const share of config.sambaConfig!.shares) {
+      await unwrap(this.sambaManager.addShare(share));
+      await this.setShareOwnershipAndPermissions(share.path);
     }
   }
 

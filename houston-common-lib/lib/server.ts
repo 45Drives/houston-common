@@ -422,8 +422,8 @@ export class Server {
     return proc.wait().map(() => user);
   }
 
-  addUserToGroups(user: LocalUser, groups: string[]): ResultAsync<LocalUser, ProcessError> {
-    return this.execute(new Command(["usermod", "-aG", groups.toString(), user.login])).map(() => user);
+  addUserToGroups(user: LocalUser, ...groups: [string, ...string[]]): ResultAsync<LocalUser, ProcessError> {
+    return this.execute(new Command(["usermod", "-aG", groups.join(','), user.login])).map(() => user);
   }
 
   toString(): string {

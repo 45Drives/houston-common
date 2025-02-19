@@ -10,6 +10,7 @@ import {
   KVRemainderGrabber,
   IdentityCaster,
   KVGrabberCollection,
+  joinStringArrayWithAnd,
 } from "./utils";
 import { Some, None } from "monet";
 
@@ -280,4 +281,18 @@ suite("utils", () => {
       expect(output).toEqual(expectedOutput);
     });
   });
+  suite("joinStringArrayWithAnd", () => {
+    test("empty", () => {
+      expect(joinStringArrayWithAnd([])).toEqual("");
+    })
+    test("length = 1", () => {
+      expect(joinStringArrayWithAnd(["hello"])).toEqual("hello");
+    })
+    test("length = 2", () => {
+      expect(joinStringArrayWithAnd(["hello", "world"])).toEqual("hello and world");
+    })
+    test("length = 3", () => {
+      expect(joinStringArrayWithAnd(["hello", "world", "yeet"])).toEqual("hello, world, and yeet");
+    })
+  })
 });

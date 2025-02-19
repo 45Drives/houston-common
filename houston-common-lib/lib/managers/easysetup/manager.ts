@@ -77,27 +77,87 @@ export class EasySetupConfigurator {
     }
   }
 
+  private async checkAndCreateSmbUserGroup() {
+    try {
+      const groupExists = await unwrap(
+        server.execute(new Command(["getent", "group", "smbusers"], this.commandOptions), true)
+      );
+
+      // Convert the output from Uint8Array to a string
+      const stdoutString = new TextDecoder().decode(groupExists.stdout).trim();
+
+      if (!stdoutString) {
+        console.log("Group 'smbusers' does not exist. Creating it...");
+        await unwrap(
+          server.execute(new Command(["groupadd", "smbusers"], this.commandOptions), true)
+        );
+      } else {
+        console.log("Group 'smbusers' already exists.");
+      }
+    } catch (error) {
+      console.error("Error checking/creating smbusers group:", error);
+    }
+  }
+
   private async createUser(config: EasySetupConfig) {
     if (!config.smbUser || !config.smbPass) {
-      throw new Error("user and password not set in config");
+      throw new Error("User and password not set in config");
     }
+
     try {
+      // Create the user if it doesn't exist
+      await unwrap(
+        server.execute(new Command(["id", config.smbUser], this.commandOptions), true)
+      );
+    } catch (error) {
+      console.log(`User '${config.smbUser}' does not exist. Creating it...`);
       await unwrap(
         server.execute(new Command(["useradd", "-m", "-s", "/bin/bash", config.smbUser], this.commandOptions), true)
       );
-    } catch (error) {}
+    }
+
+    // try {
+    //   await unwrap(server.execute(new Command(["usermod", "-aG", "wheel", config.smbUser], this.commandOptions), true));
+    // } catch (error) { }
+
     try {
-      await unwrap(server.execute(new Command(["usermod", "-aG", "wheel", config.smbUser], this.commandOptions), true));
-    } catch (error) {}
+      // Ensure user is added to smbusers group
+      await unwrap(
+        server.execute(new Command(["usermod", "-aG", "smbusers", config.smbUser], this.commandOptions), true)
+      );
+    } catch (error) {
+      console.error(`Error adding user '${config.smbUser}' to smbusers group:`, error);
+    }
+
     try {
+      // Set user password
       await unwrap(
         server.execute(
-          new Command(["echo", `\"${config.smbUser}${config.smbPass}\"`, "|", "chpasswd"], this.commandOptions),
+          new Command(["echo", `${config.smbUser}:${config.smbPass}`, "|", "chpasswd"], this.commandOptions),
           true
         )
       );
-    } catch (error) {}
+    } catch (error) {
+      console.error(`Error setting password for user '${config.smbUser}':`, error);
+    }
   }
+
+  private async setShareOwnershipAndPermissions(sharePath: string) {
+    try {
+      console.log(`Setting ownership of ${sharePath} to root:smbusers...`);
+      await unwrap(
+        server.execute(new Command(["chown", "-R", "root:smbusers", sharePath], this.commandOptions), true)
+      );
+
+      console.log(`Setting permissions for ${sharePath}...`);
+      await unwrap(
+        server.execute(new Command(["chmod", "-R", "g+rw", sharePath], this.commandOptions), true)
+      );
+    } catch (error) {
+      console.error(`Error setting ownership and permissions for ${sharePath}:`, error);
+    }
+  }
+
 
   private async updateHostname(_config: EasySetupConfig) {
     //server.setHostname(config.hostname)
@@ -151,10 +211,16 @@ export class EasySetupConfigurator {
   }
 
   private async applySambaConfig(config: EasySetupConfig) {
+    // Ensure the smbusers group exists before configuring Samba
+    await this.checkAndCreateSmbUserGroup();
+
+    // Set the Samba password for the user
     await this.sambaManager.setUserPassword(config.smbUser!, config.smbPass!);
 
+    // Edit the global Samba configuration
     await unwrap(this.sambaManager.editGlobal(config.sambaConfig!.global));
 
+    // Ensure Samba configuration includes registry
     await unwrap(
       this.sambaManager
         .checkIfSambaConfIncludesRegistry("/etc/samba/smb.conf")
@@ -165,14 +231,20 @@ export class EasySetupConfigurator {
         )
     );
 
-    const shareSamabaResults = config.sambaConfig!.shares.map((share) =>
-      this.sambaManager.addShare(share)
-    );
-    for (let i = 0; i < shareSamabaResults.length; i++) {
-      const shareSamabaResult = shareSamabaResults[i];
-      if (shareSamabaResult) {
-        await unwrap(shareSamabaResult);
-      }
+    // const shareSamabaResults = config.sambaConfig!.shares.map((share) =>
+    //   this.sambaManager.addShare(share)
+    // );
+    // for (let i = 0; i < shareSamabaResults.length; i++) {
+    //   const shareSamabaResult = shareSamabaResults[i];
+    //   if (shareSamabaResult) {
+    //     await unwrap(shareSamabaResult);
+    //   }
+    // }
+
+    // Apply share configurations and ensure correct ownership/permissions
+    for (const share of config.sambaConfig!.shares) {
+      await unwrap(this.sambaManager.addShare(share));
+      await this.setShareOwnershipAndPermissions(share.path);
     }
   }
 

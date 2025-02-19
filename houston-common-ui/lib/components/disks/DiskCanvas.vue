@@ -1,5 +1,5 @@
 <template>
-  <div ref="canvasParent"></div>
+  <div ref="canvasParent" class="overflow-hidden"></div>
 </template>
 
 <script setup lang="ts">
@@ -73,6 +73,6 @@ watchEffect(() => {
 });
 
 onBeforeUnmount(() => {
-  serverView.stop(canvasParent.value);
+  serverView.stop();
 });
 </script>

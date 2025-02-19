@@ -13,12 +13,6 @@ import recommendedDefaultsConf from "./recommended-defaults.conf?raw";
 
 import { server as defaultServer, server } from "@/houston";
 
-
-export interface AddUserResult {
-  success: boolean,
-  message: string
-}
-
 export interface ISambaManager {
   /**
    * Parse configuration text into a share object

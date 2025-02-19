@@ -87,7 +87,7 @@ export class EasySetupConfigurator {
     server
       .getUserByLogin(config.smbUser)
       .orElse(() => server.addUser({ login: smbUserLogin }))
-      .andThen((user) => server.addUserToGroups(user, "wheel", "smbusers"))
+      .andThen((user) => server.addUserToGroups(user, ["wheel", "smbusers"]))
       .andThen((user) => server.changePassword(user, smbUserPassword));
   }
 

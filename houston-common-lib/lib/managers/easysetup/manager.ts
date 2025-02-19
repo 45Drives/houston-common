@@ -120,8 +120,16 @@ export class EasySetupConfigurator {
   }
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
+    // try {
+    //   await unwrap(this.sambaManager.stopSambaService());
+    // } catch (error) {
+    //   console.log(error);
+    // }
+
     try {
-      await this.sambaManager.stopSambaService();
+      config.sambaConfig?.shares.forEach(async share => {
+        await unwrap(this.sambaManager.closeSambaShare(share.name));
+      });
     } catch (error) {
       console.log(error);
     }
@@ -141,7 +149,7 @@ export class EasySetupConfigurator {
     }
 
     try {
-      await this.sambaManager.startSambaService();
+      await unwrap(this.sambaManager.restartSambaService());
     } catch (error) {
       console.log(error);
     }

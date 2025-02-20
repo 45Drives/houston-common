@@ -1,5 +1,6 @@
 import { IHoustonDriver } from "./types";
-import { ProcessBase, IDriverProcess, Command, ExitedProcess } from "@/process";
+import { ProcessBase, IDriverProcess, ExitedProcess } from "@/process/ProcessBase";
+import { Command } from "@/process";
 import { Server } from "@/server";
 import { AuthenticationFailed, NonZeroExit, NotFound, ProcessError, UnknownHost } from "@/errors";
 
@@ -116,7 +117,7 @@ class CockpitProcess extends ProcessBase implements IDriverProcess {
   }
 }
 
-export const HoustonDriverCockpit: IHoustonDriver = {
+const HoustonDriverCockpit: IHoustonDriver = {
   Process: CockpitProcess,
   downloadCommandOutputURL(server, command, filename) {
     const query = window.btoa(
@@ -142,3 +143,5 @@ export const HoustonDriverCockpit: IHoustonDriver = {
   localStorage: cockpit.localStorage,
   sessionStorage: cockpit.sessionStorage,
 };
+
+export { HoustonDriverCockpit };

@@ -2,48 +2,9 @@ import { Server } from "@/server";
 import { Result, ResultAsync } from "neverthrow";
 import { ProcessError } from "@/errors";
 import { Maybe } from "monet";
-import { HoustonDriver } from "@/driver";
+import { Command } from "@/process/Command";
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: false });
-const utf8Encoder = new TextEncoder();
-
-export type CommandOptions = {
-  directory?: string;
-  environ?: string[];
-  pty?: boolean;
-  superuser?: "try" | "require";
-};
-
-export class Command {
-  public readonly argv: string[];
-  public readonly options: CommandOptions;
-
-  constructor(argv: string[], opts: CommandOptions = {}) {
-    this.argv = argv;
-    this.options = opts;
-  }
-
-  public getName(): string {
-    return this.argv[0] ?? "";
-  }
-
-  public toString(): string {
-    return `Command(${JSON.stringify(this.argv)}, ${JSON.stringify(this.options)})`;
-  }
-}
-
-export class BashCommand extends Command {
-  constructor(script: string, args: string[] = [], opts: CommandOptions & { arg0?: string } = {}) {
-    const arg0 = opts.arg0 ?? "HoustonBashCommand";
-    super(["/usr/bin/env", "bash", "-c", script, arg0, ...args], opts);
-  }
-}
-
-export class PythonCommand extends Command {
-  constructor(script: string, args: string[] = [], opts: CommandOptions = {}) {
-    super(["/usr/bin/env", "python3", "-c", script, ...args], opts);
-  }
-}
 
 export class ProcessBase {
   public readonly server: Server;
@@ -137,15 +98,8 @@ export interface IDriverProcess extends ProcessBase {
   streamBinary(callback: (output: Uint8Array) => void): Result<null, ProcessError>;
 }
 
-export class Process extends HoustonDriver.Process {
-  public write(data: string | Uint8Array, stream: boolean = false): Result<null, ProcessError> {
-    if (typeof data === "string") {
-      data = utf8Encoder.encode(data);
-    }
-    return super.write(data, stream);
-  }
+export interface IProcess extends IDriverProcess {
+  write(data: string | Uint8Array, stream?: boolean): Result<null, ProcessError>;
 
-  public stream(callback: (output: string) => void) {
-    return this.streamBinary((output: Uint8Array) => callback(utf8Decoder.decode(output)));
-  }
+  stream(callback: (output: string) => void): Result<null, ProcessError>;
 }

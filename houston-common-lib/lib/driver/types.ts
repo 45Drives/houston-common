@@ -1,4 +1,5 @@
-import { Command, IDriverProcess } from "@/process";
+import { Command } from "@/process/Command";
+import { IDriverProcess } from "@/process/ProcessBase";
 import { Server } from "@/server";
 
 export interface IHoustonDriver {

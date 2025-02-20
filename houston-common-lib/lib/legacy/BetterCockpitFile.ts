@@ -31,6 +31,7 @@ export class BetterCockpitFile {
    * @param {import('@45drives/cockpit-typings').File.Options<string | Uint8Array, any> & {dne?: string; persistStat?: boolean}} opts - options, same as [cockpit.file()](https://cockpit-project.org/guide/latest/cockpit-file.html) plus:
    * @param {string} opts.dne - if 'fail', throws error from read if file does not exist
    * @param {boolean} opts.persistStat - keep ownership and permissions through writes
+   * @deprecated use {@link FileSystemNode}
    */
   constructor(
     path: string,

@@ -1,27 +1,18 @@
 <script setup lang="ts">
-import {
-  ref,
-  onMounted,
-  defineProps,
-  defineModel,
-  defineExpose,
-  computed,
-} from "vue";
+import { ref, onMounted, defineProps, defineModel, defineExpose, computed } from "vue";
 import {
   Server,
   ProcessError,
   getServer,
   type LocalUser,
   type User,
+  HoustonDriver,
 } from "@45drives/houston-common-lib";
 import { wrapAction } from "@/composables/wrapActions";
-import {
-  default as SelectMenu,
-  type SelectMenuOption,
-} from "@/components/SelectMenu.vue";
+import { default as SelectMenu, type SelectMenuOption } from "@/components/SelectMenu.vue";
 import { ResultAsync } from "neverthrow";
 
-const _ = cockpit.gettext;
+const _ = HoustonDriver.gettext;
 
 const NOBODY_UID = 65534;
 const ROOT_UID = 0;
@@ -44,9 +35,7 @@ const loadUsers = wrapAction(() =>
       (allUsers) =>
         (users.value = props.includeSystemUsers
           ? allUsers
-          : allUsers.filter(
-              (u) => u.uid >= 1000 || [ROOT_UID, NOBODY_UID].includes(u.uid)
-            ))
+          : allUsers.filter((u) => u.uid >= 1000 || [ROOT_UID, NOBODY_UID].includes(u.uid)))
     )
 );
 

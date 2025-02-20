@@ -24,9 +24,9 @@ import {
   CheckCircleIcon,
 } from "@heroicons/vue/24/outline";
 import { XMarkIcon } from "@heroicons/vue/20/solid";
-import { SilentError } from "@45drives/houston-common-lib";
+import { SilentError, HoustonDriver } from "@45drives/houston-common-lib";
 
-const _ = cockpit.gettext;
+const _ = HoustonDriver.gettext;
 
 /** Notification passed to showNotification
  *
@@ -175,7 +175,7 @@ export default {
   setup() {
     return {
       notificationList,
-      _: cockpit.gettext,
+      _: HoustonDriver.gettext,
     };
   },
   components: {

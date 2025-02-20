@@ -15,9 +15,9 @@ import { type Action } from "@/composables/wrapActions";
 import CardContainer from "@/components/CardContainer.vue";
 import Modal from "./Modal.vue";
 import { ExclamationCircleIcon } from "@heroicons/vue/20/solid";
-import { CancelledByUser, type ValueElseUndefiend } from "@45drives/houston-common-lib";
+import { CancelledByUser, type ValueElseUndefiend, HoustonDriver } from "@45drives/houston-common-lib";
 
-const _ = cockpit.gettext;
+const _ = HoustonDriver.gettext;
 
 defineProps<{
   clickOutsideCancels?: boolean;

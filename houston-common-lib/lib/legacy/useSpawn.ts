@@ -79,6 +79,7 @@ export interface SpawnState<T extends string | Uint8Array> {
  * @param opts - {@link @45drives/cockpit-typings!spawn cockpit.spawn()} options
  * @param stderr - where to pipe stderr of proc
  * @returns the process state object
+ * @deprecated use {@link Server.Execute()}
  */
 export function useSpawn(
   argv: string[],

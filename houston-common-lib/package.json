@@ -24,6 +24,8 @@
 		"docs": "typedoc --out ../docs"
 	},
 	"devDependencies": {
+		"@types/node-localstorage": "^1.3.3",
+		"node-localstorage": "^3.0.5",
 		"prettier": "^3.3.1",
 		"typedoc": "^0.27.6",
 		"typedoc-plugin-mdn-links": "^4.0.10",

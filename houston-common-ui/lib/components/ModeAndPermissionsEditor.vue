@@ -7,6 +7,7 @@ import {
   FileSystemNode,
   Mode,
   Ownership,
+  HoustonDriver
 } from "@45drives/houston-common-lib";
 import { reportSuccess } from "@/components/NotificationView.vue";
 import { wrapActions } from "@/composables/wrapActions";
@@ -15,7 +16,7 @@ import { ResultAsync } from "neverthrow";
 import UserSelector from "@/components/UserSelector.vue";
 import GroupSelector from "@/components/GroupSelector.vue";
 
-const _ = cockpit.gettext;
+const _ = HoustonDriver.gettext;
 
 const props = withDefaults(
   defineProps<{

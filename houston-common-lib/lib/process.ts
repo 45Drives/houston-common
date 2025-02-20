@@ -1,25 +1,26 @@
 import { Server } from "@/server";
-import type Cockpit from "cockpit";
-import { Result, ResultAsync, ok, err } from "neverthrow";
-import { ProcessError, NonZeroExit, UnknownHost, NotFound, AuthenticationFailed } from "@/errors";
+import { Result, ResultAsync } from "neverthrow";
+import { ProcessError } from "@/errors";
 import { Maybe } from "monet";
+import { HoustonDriver } from "@/driver";
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: false });
 const utf8Encoder = new TextEncoder();
 
-export type CommandOptions = Omit<Cockpit.SpawnOptions, "host" | "binary" | "err">;
+export type CommandOptions = {
+  directory?: string;
+  environ?: string[];
+  pty?: boolean;
+  superuser?: "try" | "require";
+};
 
 export class Command {
   public readonly argv: string[];
-  public readonly spawnOptions: Cockpit.SpawnOptions & { binary: true };
+  public readonly options: CommandOptions;
 
   constructor(argv: string[], opts: CommandOptions = {}) {
     this.argv = argv;
-    this.spawnOptions = {
-      ...opts,
-      binary: true,
-      err: "message",
-    };
+    this.options = opts;
   }
 
   public getName(): string {
@@ -27,7 +28,7 @@ export class Command {
   }
 
   public toString(): string {
-    return `Command(${JSON.stringify(this.argv)}, ${JSON.stringify(this.spawnOptions)})`;
+    return `Command(${JSON.stringify(this.argv)}, ${JSON.stringify(this.options)})`;
   }
 }
 
@@ -127,116 +128,24 @@ ${this.getStderr()}`);
   }
 }
 
-export class Process extends ProcessBase {
-  private spawnHandle?: Cockpit.Spawn<Uint8Array>;
+export interface IDriverProcess extends ProcessBase {
+  execute(): this;
+  wait(failIfNonZero?: boolean): ResultAsync<ExitedProcess, ProcessError>;
+  write(data: Uint8Array, stream?: boolean): Result<null, ProcessError>;
+  terminate(): this;
+  close(): this;
+  streamBinary(callback: (output: Uint8Array) => void): Result<null, ProcessError>;
+}
 
-  constructor(server: Server, command: Command, defer?: boolean) {
-    super(server, command);
-
-    if (defer !== true) {
-      this.execute();
-    }
-  }
-
-  public execute(): Process {
-    this.spawnHandle = cockpit.spawn(this.command.argv, {
-      ...this.command.spawnOptions,
-      host: this.server.host,
-    });
-    return this;
-  }
-
-  public wait(failIfNonZero: boolean = true): ResultAsync<ExitedProcess, ProcessError> {
-    return ResultAsync.fromPromise(
-      new Promise((resolve, reject) => {
-        if (this.spawnHandle === undefined) {
-          return reject(new ProcessError(this.prefixMessage("Process never started!")));
-        }
-        this.spawnHandle
-          .then((stdout, stderr) => {
-            const exitStatus = 0;
-            resolve(new ExitedProcess(this.server, this.command, exitStatus, stdout, stderr));
-          })
-          .catch((ex, stdout) => {
-            if (
-              (ex.problem !== null && ex.problem !== undefined) ||
-              ex.exit_status === null ||
-              ex.exit_status === undefined
-            ) {
-              switch (ex.problem) {
-                case "unknown-host":
-                  return reject(new UnknownHost(`${this.server.host!}: ${ex.message}`));
-                case "not-found":
-                  return reject(new NotFound(this.prefixMessage(ex.message)));
-                case "authentication-failed":
-                  return reject(new AuthenticationFailed(`${this.server.host!}: ${ex.message}`));
-                default:
-                  return reject(
-                    new ProcessError(`${this.prefixMessage(ex.message)} (${ex.problem})`)
-                  );
-              }
-            }
-            const exitedProcess = new ExitedProcess(
-              this.server,
-              this.command,
-              ex.exit_status,
-              stdout,
-              ex.message
-            );
-            if (failIfNonZero && ex.exit_status !== 0) {
-              exitedProcess.logDebug(console.error);
-              return reject(
-                new NonZeroExit(this.prefixMessage(`${ex.message} (${ex.exit_status})`))
-              );
-            }
-            resolve(exitedProcess);
-          });
-      }),
-      (e) => {
-        if (e instanceof ProcessError) {
-          return e;
-        }
-        return new ProcessError(this.prefixMessage("Unknown error"), {
-          cause: e,
-        });
-      }
-    );
-  }
-
+export class Process extends HoustonDriver.Process {
   public write(data: string | Uint8Array, stream: boolean = false): Result<null, ProcessError> {
-    if (this.spawnHandle === undefined) {
-      return err(new ProcessError(this.prefixMessage("process not running!")));
-    }
     if (typeof data === "string") {
       data = utf8Encoder.encode(data);
     }
-    this.spawnHandle.input(data, stream);
-    return ok(null);
-  }
-
-  public terminate(): this {
-    if (this.spawnHandle) {
-      this.spawnHandle.close("terminated");
-    }
-    return this;
-  }
-
-  public close(): this {
-    if (this.spawnHandle) {
-      this.spawnHandle.close();
-    }
-    return this;
-  }
-
-  public streamBinary(callback: (output: Uint8Array) => void): Result<null, ProcessError>  {
-    if (this.spawnHandle === undefined) {
-      return err(new ProcessError(this.prefixMessage("process not running!")));
-    }
-    this.spawnHandle.stream(callback);
-    return ok(null);
+    return super.write(data, stream);
   }
 
   public stream(callback: (output: string) => void) {
-    return this.streamBinary((output: Uint8Array) => callback(utf8Decoder.decode(output)))
+    return this.streamBinary((output: Uint8Array) => callback(utf8Decoder.decode(output)));
   }
 }

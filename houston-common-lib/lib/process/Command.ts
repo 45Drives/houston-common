@@ -1,6 +1,6 @@
 export type CommandOptions = {
   directory?: string;
-  environ?: string[];
+  environ?: Record<string, string>;
   pty?: boolean;
   superuser?: "try" | "require";
 };

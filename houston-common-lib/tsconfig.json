@@ -44,10 +44,7 @@
 			"../typings/*": [
 				"./typings/*"
 			]
-		},
-		"types": [
-			"node"
-		]
+		}
 	},
 	"include": [
 		"typings/**/*.d.ts",

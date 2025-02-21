@@ -10,7 +10,7 @@ function determineHoustonDriver(): IHoustonDriver {
     return cockpitDriverFactory();
   }
   if (typeof process === "object" && process.release?.name === "node") {
-      return nodeDriverFactory();
+    return nodeDriverFactory();
   }
   throw new Error("Unable to determine Houston driver!");
 }

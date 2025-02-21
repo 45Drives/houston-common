@@ -22,7 +22,18 @@ export function factory(): IHoustonDriver {
   if (!fs.existsSync(datadir)) {
     fs.mkdirSync(datadir, { mode: 0o700 });
   }
-  const tmpdir = fs.mkdtempSync("houston");
+  const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), "houston"));
+  const cleanup = () => {
+    fs.rmSync(tmpdir, { recursive: true, force: true });
+  };
+  process.on("exit", cleanup);
+
+  // cleanup for tests, for some reason "exit" is never triggered
+  import("vitest").then((vitest) => {
+    vitest.afterAll(() => {
+      cleanup();
+    });
+  });
 
   const gettext = (...args: [string] | [string, string]) => args.at(-1)!;
   const localStorage = new localstorage.LocalStorage(path.join(datadir, "localStorage"));

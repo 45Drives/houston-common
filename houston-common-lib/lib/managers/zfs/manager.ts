@@ -46,7 +46,6 @@ export class ZFSManager implements IZFSManager {
    * @param vdev
    * @returns
    */
-  // private formatVDevArgv(vdev: VDevBase): string[] {
   private formatVDevArgv(vdev: VDev): string[] {
     const args = [];
     if (vdev.type !== "disk") {
@@ -58,7 +57,19 @@ export class ZFSManager implements IZFSManager {
       }
       args.push("mirror");
     }
-    args.push(...vdev.disks.map((disk) => disk.path));
+
+    // Filter out invalid paths and replace NVMe vdev_path with sd_path
+    const validDisks = vdev.disks
+      .map((disk) => (disk.vdev_path && disk.vdev_path !== "N/A") ? disk.vdev_path : (disk.sd_path ?? ""))
+      .filter((path): path is string => path !== "N/A" && path !== ""); // Type assertion to remove undefined values
+
+    if (validDisks.length === 0) {
+      throw new ValueError(`VDev of type ${vdev.type} has no valid disks!`);
+    }
+
+    // args.push(...vdev.disks.map((disk) => disk.path));
+    args.push(...validDisks);
+    
     return args;
   }
 
@@ -67,7 +78,6 @@ export class ZFSManager implements IZFSManager {
    * @param vdevs
    * @returns
    */
-  // private formatVDevsArgv(vdevs: VDevBase[]): string[] {
   private formatVDevsArgv(vdevs: VDev[]): string[] {
     return vdevs
       .sort((a, b) => {

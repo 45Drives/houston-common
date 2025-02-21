@@ -10,6 +10,9 @@ import type stream from "stream";
 
 export function factory(): IHoustonDriver["Process"] {
   const child_process = require("child_process") as typeof import("child_process");
+
+  const { Buffer } = require("node:buffer") as typeof import("node:buffer");
+
   class NodeProcessLinux extends ProcessBase implements IDriverProcess {
     private child?: child_process.ChildProcessByStdio<
       stream.Writable,
@@ -19,8 +22,19 @@ export function factory(): IHoustonDriver["Process"] {
 
     private promise?: Promise<ExitedProcess>;
 
+    private stdoutBuffer: Buffer;
+    private stderrBuffer: string;
+
+    private streamCallback: (data: Buffer) => void;
+
     constructor(server: Server, command: Command, defer?: boolean) {
       super(server, command);
+
+      this.stdoutBuffer = Buffer.alloc(0);
+      this.stderrBuffer = "";
+      this.streamCallback = (data) => {
+        this.stdoutBuffer = Buffer.concat([this.stdoutBuffer, data]);
+      };
 
       if (defer !== true) {
         this.execute();
@@ -54,26 +68,39 @@ export function factory(): IHoustonDriver["Process"] {
       if (this.command.options.pty) {
         throw new ProcessError("pty not supported!");
       }
+
+      this.stdoutBuffer = Buffer.alloc(0);
+      this.stderrBuffer = "";
+
       this.child = child_process.spawn(command, args, { ...opts, stdio: ["pipe", "pipe", "pipe"] });
+      this.child.stderr.setEncoding("utf-8");
+      this.child.stdout.on("data", (chunk: Buffer) => {
+        this.streamCallback(chunk);
+      });
+      this.child.stderr.on("data", (chunk: string) => {
+        this.stderrBuffer += chunk;
+      });
 
       this.promise = new Promise((resolve, reject) => {
+        1;
         if (this.child === undefined) {
           return reject(new ProcessError(this.prefixMessage("Process never started!")));
         }
         const child = this.child;
-        child.on("close", (code, signal) => {
+
+        child.on("close", async (code, signal) => {
           if (code === null) {
             return reject(
               new ProcessError(`${this.prefixMessage("terminated by signal")} (${signal})`)
             );
           }
-          child.stderr.setEncoding("utf-8");
           const exitedProcess = new ExitedProcess(
             this.server,
             this.command,
             code,
-            new Uint8Array((child.stdout.read() as Buffer) ?? []),
-            child.stderr.read()
+            Uint8Array.from(this.stdoutBuffer),
+            this.stderrBuffer,
+            signal ?? undefined
           );
           resolve(exitedProcess);
         });
@@ -126,17 +153,25 @@ export function factory(): IHoustonDriver["Process"] {
     }
 
     public close(): this {
-      this.child?.disconnect();
+      if (this.child?.stdin.closed === false) {
+        this.child.stdin.end();
+      }
+      if (this.child?.stdout.closed === false) {
+        this.child.stdout.destroy();
+      }
       return this;
     }
 
     public streamBinary(callback: (output: Uint8Array) => void): Result<null, ProcessError> {
-      if (this.child === undefined) {
-        return err(new ProcessError(this.prefixMessage("process not running!")));
-      }
-      this.child.stdout.on("data", (chunk: Buffer) => {
-        callback(new Uint8Array(chunk));
-      });
+      this.streamCallback = (data: Buffer) => {
+        callback(Uint8Array.from(data));
+      };
+      // if (this.child === undefined) {
+      //   return err(new ProcessError(this.prefixMessage("process not running!")));
+      // }
+      // this.child.stdout.on("data", (chunk: Buffer) => {
+      //   callback(new Uint8Array(chunk));
+      // });
       return ok(null);
     }
   }

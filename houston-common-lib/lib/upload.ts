@@ -5,9 +5,10 @@ export namespace Upload {
   export type Options = { accept?: string; multiple?: boolean };
 
   export function file(accept?: string) {
-    return getUpload({ multiple: false, accept }).andThen(([file]) =>
-      file === undefined ? err(new Error("No file given")) : ok(file)
-    );
+    return getUpload({ multiple: false, accept }).andThen((fileList) => {
+      const file = fileList[0];
+      return file === undefined ? err(new Error("No file given")) : ok(file);
+    });
   }
 
   export function files(accept?: string) {

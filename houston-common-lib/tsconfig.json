@@ -44,7 +44,8 @@
 			"../typings/*": [
 				"./typings/*"
 			]
-		}
+		},
+		"types": ["electron"]
 	},
 	"include": [
 		"typings/**/*.d.ts",

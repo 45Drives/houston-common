@@ -347,3 +347,16 @@ export function hasProp<T, TPartial extends Partial<T>, PropName extends keyof T
 export function assertProp<T, TPartial extends Partial<T>, PropName extends keyof TPartial>(prop: PropName) {
   return (partial: TPartial) => hasProp(partial, prop) ? ok(partial) : err(new TypeError(`missing property: ${String(prop)}`));
 }
+
+export function joinStringArrayWithAnd(strings: string[]): string {
+  switch (strings.length) {
+    case 0:
+      return "";
+    case 1:
+      return strings[0]!;
+    case 2:
+      return strings.join(" and ");
+    default:
+      return strings.slice(0, -1).join(", ") + `, and ${strings.at(-1)}`
+  }
+}

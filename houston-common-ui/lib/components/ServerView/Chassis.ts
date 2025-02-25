@@ -15,7 +15,7 @@ import {
   type SlotType,
 } from "@45drives/houston-common-lib";
 
-import { DriveSlotComponent } from "@/components/disks/DriveSlot";
+import { DriveSlotComponent } from "@/components/ServerView/DriveSlot";
 
 type SlotLocation = { id: string; type: SlotType; location: THREE.Vector3; rotation: THREE.Euler };
 

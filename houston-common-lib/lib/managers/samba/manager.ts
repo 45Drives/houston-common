@@ -238,6 +238,18 @@ export abstract class SambaManagerBase implements ISambaManager {
     return proc.wait().map(() => { });
   }
 
+  closeSambaShare(sharename: string): ResultAsync<void, ProcessError> {
+    const proc = server.spawnProcess(new Command(['smbcontrol', 'smbd', 'close-share', sharename], { superuser: 'try' }));
+
+    return proc.wait().map(() => { });
+  }
+
+
+  restartSambaService(): ResultAsync<void, ProcessError> {
+    const proc = server.spawnProcess(new Command(['systemctl', 'restart', 'smbd'], { superuser: 'try' }));
+
+    return proc.wait().map(() => { });
+  }
 }
 
 export class SambaManagerNet extends SambaManagerBase implements ISambaManager {

@@ -4,7 +4,7 @@ import {
   loadImageModel,
   lazyModelLoader,
   type ModelLoader,
-} from "@/components/disks/ServerComponent";
+} from "@/components/ServerView/ServerComponent";
 import { ValueError, type DriveSlot, type SlotType } from "@45drives/houston-common-lib";
 import * as THREE from "three";
 

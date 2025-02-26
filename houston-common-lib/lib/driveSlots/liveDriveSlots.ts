@@ -39,7 +39,10 @@ function onStream(output: string, ctx: LiveDriveSlotsCtx, setter: (slots: DriveS
         throw new TypeError(`Unknown LiveDriveSlotsMessage type: ${(message as any).type}`);
     }
   } catch (e) {
-    if (e instanceof Error) window.reportHoustonError(e);
+    if (e instanceof Error) {
+      window!.reportHoustonError(e);
+      global!.reportHoustonError(e);
+    }
   }
 }
 

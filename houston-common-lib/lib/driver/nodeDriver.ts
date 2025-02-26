@@ -1,6 +1,7 @@
 import { IHoustonDriver } from "@/driver/types";
 
 import { factory as linuxProcessFactory } from "./nodeDriverLinuxProcess";
+import { factory as windowsProcessFactory } from "./nodeDriverWindowsProcess";
 
 export function factory(): IHoustonDriver {
   const localstorage = require("node-localstorage") as typeof import("node-localstorage");
@@ -13,6 +14,9 @@ export function factory(): IHoustonDriver {
   switch (process.platform) {
     case "linux":
       Process = linuxProcessFactory();
+      break;
+    case "win32":
+      Process = windowsProcessFactory();
       break;
     default:
       throw new Error("No Process implementation for platform " + process.platform);

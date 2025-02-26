@@ -6,27 +6,35 @@ export class IPCMessageRouterCockpit<
   constructor() {
     super("cockpit");
 
-    // set up event listeners here to call this.routeMessage when message received
+    // from renderer to cockpit
+    window.addEventListener("console-message", (event: any) => {
+      const message = JSON.parse(event.message);
+      if (!isIPCMessage<MessageTypes>(message)) {
+        return;
+      }
+      this.routeMessage(message);
+    });
+    
   }
 
   protected forwardToBackend<
     T extends keyof MessageTypes,
     TMessage extends IPCMessage<MessageTypes, T>,
   >(message: TMessage): void {
-    throw new Error("not implemented");
+    console.log(JSON.stringify(message));
   }
 
   protected forwardToRenderer<
     T extends keyof MessageTypes,
     TMessage extends IPCMessage<MessageTypes, T>,
   >(message: TMessage): void {
-    throw new Error("not implemented");
+    console.log(JSON.stringify(message));
   }
 
   protected forwardToCockpit<
     T extends keyof MessageTypes,
     TMessage extends IPCMessage<MessageTypes, T>,
-  >(message: TMessage): void {
+  >(_message: TMessage): void {
     throw new Error("not implemented");
   }
 }

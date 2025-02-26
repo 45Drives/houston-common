@@ -408,6 +408,12 @@ export class Server {
     return proc.wait().map(() => user);
   }
 
+  createGroup(group: string): ResultAsync<LocalGroup, ProcessError> {
+    return this.execute(new Command(["groupadd", group], { superuser: "try" }), true)
+      .andThen(() => this.getGroupByName(group));
+  }
+
+
   addUserToGroups(
     user: LocalUser,
     ...groups: [string, ...string[]]

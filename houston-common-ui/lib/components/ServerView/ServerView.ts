@@ -1,17 +1,18 @@
-import { Chassis } from "@/components/disks/Chassis";
-import { MouseEventTranslator } from "@/components/disks/MouseEventTranslator";
+import * as THREE from "three";
+import { Chassis } from "@/components/ServerView/Chassis";
+
+import { MouseEventTranslator } from "@/components/ServerView/MouseEventTranslator";
 import {
   ServerComponent,
   type ServerComponentEventMap,
   type ServerComponentMouseEvent,
-} from "@/components/disks/ServerComponent";
+} from "@/components/ServerView/ServerComponent";
 import {
   Server,
   unwrap,
   type DriveSlot,
   type LiveDriveSlotsHandle,
 } from "@45drives/houston-common-lib";
-import * as THREE from "three";
 
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
@@ -198,7 +199,7 @@ export class ServerView extends THREE.EventDispatcher<
     console.log("projected size:", projectedSize);
 
     if (this.camera instanceof THREE.OrthographicCamera) {
-      this.camera.zoom = 2 / Math.max(projectedSize.x, projectedSize.y) * margin;
+      this.camera.zoom = (2 / Math.max(projectedSize.x, projectedSize.y)) * margin;
     } else {
       throw new Error("not implemented");
     }
@@ -208,8 +209,12 @@ export class ServerView extends THREE.EventDispatcher<
     this.controls.update();
   }
 
-  setBackground(bg: typeof this.scene.background) {
-    this.scene.background = bg;
+  /**
+   * Set background color hex
+   * @param bg color hex e.g. 0xFFFFFF = white
+   */
+  setBackground(bg: number) {
+    this.scene.background = new THREE.Color(bg);
   }
 
   async setDriveSlotInfo(slots: DriveSlot[]) {

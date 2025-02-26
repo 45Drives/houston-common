@@ -87,6 +87,9 @@ export class EasySetupConfigurator {
     server
       .getUserByLogin(config.smbUser)
       .orElse(() => server.addUser({ login: smbUserLogin }))
+      .andThen((user) =>
+        server.createGroup("smbusers").map(() => user)
+      )
       .andThen((user) => server.addUserToGroups(user, "wheel", "smbusers"))
       .andThen((user) => server.changePassword(user, smbUserPassword));
   }
@@ -120,8 +123,16 @@ export class EasySetupConfigurator {
   }
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
+    // try {
+    //   await unwrap(this.sambaManager.stopSambaService());
+    // } catch (error) {
+    //   console.log(error);
+    // }
+
     try {
-      await this.sambaManager.stopSambaService();
+      config.sambaConfig?.shares.forEach(async share => {
+        await unwrap(this.sambaManager.closeSambaShare(share.name));
+      });
     } catch (error) {
       console.log(error);
     }
@@ -141,7 +152,7 @@ export class EasySetupConfigurator {
     }
 
     try {
-      await this.sambaManager.startSambaService();
+      await unwrap(this.sambaManager.restartSambaService());
     } catch (error) {
       console.log(error);
     }

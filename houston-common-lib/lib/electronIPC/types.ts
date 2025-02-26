@@ -84,7 +84,7 @@ export abstract class IPCMessageRouter<MessageTypes extends Record<string, any> 
     callback: (data: MessageTypes[T]) => void
   ): void {
     this.callbacks[type] ??= [];
-    this.callbacks[type].push(callback);
+    this.callbacks[type]!.push(callback);
   }
 
   removeEventListener<T extends keyof MessageTypes>(

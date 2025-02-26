@@ -6,7 +6,7 @@ export class IPCMessageRouterCockpit<
   constructor() {
     super("cockpit");
 
-    // from renderer to cockpit
+    // from renderer to 
     window.addEventListener("console-message", (event: any) => {
       const message = JSON.parse(event.message);
       if (!isIPCMessage<MessageTypes>(message)) {

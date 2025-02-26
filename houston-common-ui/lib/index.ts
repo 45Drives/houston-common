@@ -17,4 +17,10 @@ window.onerror = (event) => {
   return false;
 };
 
-window.reportHoustonError = reportError;
+if (typeof window !== 'undefined') {
+  // Only run this in the renderer process (browser environment)
+  window.reportHoustonError = reportError
+} else if (typeof globalThis !== 'undefined') {
+  // Fallback for main process (Node.js environment)
+  global.reportHoustonError = reportError
+}

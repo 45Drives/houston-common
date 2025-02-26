@@ -34,6 +34,7 @@ export const HoustonDriver = HoustonDriver_ as Pick<
 export * from "@/houston";
 export * from "@/syntax";
 export * from "@/utils";
+export * from "@/electronIPC";
 export * from "@/errors";
 export * from "@/download";
 export * from "@/upload";
@@ -47,7 +48,16 @@ export * from "@/driveSlots/types";
 
 export * as legacy from "@/legacy";
 
-window.reportHoustonError ??= (e, ctx: string = "") => {
-  console.error(ctx, e);
-  return e;
-};
+if (typeof window !== 'undefined') {
+  // Only run this in the renderer process (browser environment)
+  window.reportHoustonError ??= (e, ctx: string = "") => {
+    console.error(ctx, e);
+    return e;
+  };
+} else if (typeof global !== 'undefined') {
+  // Fallback for main process (Node.js environment)
+  global.reportHoustonError ??= (e, ctx: string = "") => {
+    console.error(ctx, e);
+    return e;
+  };
+}

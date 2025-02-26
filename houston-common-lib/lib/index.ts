@@ -24,6 +24,13 @@
 /// <reference path="../typings/cockpit-typings/cockpit-import-hack.d.ts" />
 /// <reference path="../typings/window.d.ts" />
 
+import { HoustonDriver as HoustonDriver_ } from "@/driver";
+
+export const HoustonDriver = HoustonDriver_ as Pick<
+  typeof HoustonDriver_,
+  "gettext" | "localStorage" | "sessionStorage"
+>;
+
 export * from "@/houston";
 export * from "@/syntax";
 export * from "@/utils";
@@ -36,7 +43,7 @@ export * from "@/managers";
 export * from "@/disks";
 export * from "@/user";
 export * from "@/serverModels";
-export * from "@/driveSlots/types"
+export * from "@/driveSlots/types";
 
 export * as legacy from "@/legacy";
 

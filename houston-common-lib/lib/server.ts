@@ -18,6 +18,7 @@ import {
   startLiveDriveSlotsWatcher,
   type Drive,
 } from "@/driveSlots";
+import { HoustonDriver } from "@/driver";
 
 export type ServerInfo = {
   Motherboard: {
@@ -245,22 +246,7 @@ export class Server {
   }
 
   downloadCommandOutput(command: Command, filename: string): void {
-    const query = window.btoa(
-      JSON.stringify({
-        ...command.spawnOptions,
-        host: this.host,
-        payload: "stream",
-        binary: "raw",
-        spawn: command.argv,
-        external: {
-          "content-disposition": 'attachment; filename="' + encodeURIComponent(filename) + '"',
-          "content-type": "application/x-xz, application/octet-stream",
-        },
-      })
-    );
-    const prefix = new URL(cockpit.transport.uri("channel/" + cockpit.transport.csrf_token))
-      .pathname;
-    const url = prefix + "?" + query;
+    const url = HoustonDriver.downloadCommandOutputURL(this, command, filename);
     Download.url(url, filename);
   }
 
@@ -428,8 +414,13 @@ export class Server {
   }
 
 
-  addUserToGroups(user: LocalUser, ...groups: [string, ...string[]]): ResultAsync<LocalUser, ProcessError> {
-    return this.execute(new Command(["usermod", "-aG", groups.join(','), user.login])).map(() => user);
+  addUserToGroups(
+    user: LocalUser,
+    ...groups: [string, ...string[]]
+  ): ResultAsync<LocalUser, ProcessError> {
+    return this.execute(new Command(["usermod", "-aG", groups.join(","), user.login])).map(
+      () => user
+    );
   }
 
   toString(): string {

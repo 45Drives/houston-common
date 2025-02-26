@@ -13,6 +13,7 @@ import {
   getServer,
   type Group,
   type LocalGroup,
+  HoustonDriver,
 } from "@45drives/houston-common-lib";
 import { wrapAction } from "@/composables/wrapActions";
 import {
@@ -21,7 +22,7 @@ import {
 } from "@/components/SelectMenu.vue";
 import { ResultAsync } from "neverthrow";
 
-const _ = cockpit.gettext;
+const _ = HoustonDriver.gettext;
 
 const NOBODY_GID = 65534;
 const ROOT_GID = 0;

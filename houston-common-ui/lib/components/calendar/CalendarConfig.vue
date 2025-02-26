@@ -21,7 +21,7 @@
                     <option value="daily">Daily</option>
                     <option value="weekly">Weekly</option>
                     <option value="monthly">Monthly</option>
-                    <option value="yearly">Yearly</option>
+                    <!-- <option value="yearly">Yearly</option> -->
                 </select>
                 <div name="schedule-fields" class="col-span-1 grid grid-cols-2 gap-2 mt-2">
                     <div name="hour">

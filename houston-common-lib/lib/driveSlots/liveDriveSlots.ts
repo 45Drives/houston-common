@@ -40,8 +40,7 @@ function onStream(output: string, ctx: LiveDriveSlotsCtx, setter: (slots: DriveS
     }
   } catch (e) {
     if (e instanceof Error) {
-      window!.reportHoustonError(e);
-      global!.reportHoustonError(e);
+      globalThis.reportHoustonError(e);
     }
   }
 }
@@ -64,7 +63,7 @@ export function startLiveDriveSlotsWatcher(
     ctx.proc.wait().match(
       () => start(),
       (e) => {
-        window.reportHoustonError(e, "Live drive slots watcher died.");
+        globalThis.reportHoustonError(e, "Live drive slots watcher died.");
         start();
       }
     );

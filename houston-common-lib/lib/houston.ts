@@ -104,8 +104,7 @@ export function getServerCluster(
             serverResult.match(
               (s) => s,
               (e) => {
-                window!.reportHoustonError(e, `While getting ${scope} cluster hosts:`);
-                global!.reportHoustonError(e, `While getting ${scope} cluster hosts:`);
+                globalThis.reportHoustonError(e, `While getting ${scope} cluster hosts:`);
                 return null;
               }
             )
@@ -116,8 +115,7 @@ export function getServerCluster(
       servers.length > 0 ? ok(servers as [Server, ...Server[]]) : err(new ProcessError("No acessible servers in cluster."))
     )
     .orElse((e) => {
-      window!.reportHoustonError(e, "Assuming single server:");
-      global!.reportHoustonError(e, "Assuming single server:");
+      globalThis.reportHoustonError(e, "Assuming single server:");
       return localServerResult.map((s) => [s] as [Server, ...Server[]]);
     });
 }

@@ -24,6 +24,7 @@ export function Group(
 	};
 }
 
+
 export function isLocalGroup(group: Group): group is LocalGroup {
 	return [group.name, group.members].every((prop) => prop !== undefined);
 }

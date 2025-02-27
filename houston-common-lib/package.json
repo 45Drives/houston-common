@@ -38,7 +38,7 @@
 	},
 	"dependencies": {
 		"monet": "^0.9.3",
-		"neverthrow": "^6.2.1",
+		"neverthrow": "6.2.2",
 		"vite": "^6.0.11"
 	}
 }

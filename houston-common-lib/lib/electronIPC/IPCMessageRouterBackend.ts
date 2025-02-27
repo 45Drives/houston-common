@@ -12,7 +12,7 @@ export class IPCMessageRouterBackend<
     this.webcontents = webcontents;
     
     // from backend to renderer
-    ipcMain.on("IPCMessage", (message: any) => {
+    ipcMain.on("IPCMessage", (_event, message: string) => {
       if (!isIPCMessage<MessageTypes>(message)) {
         return;
       }

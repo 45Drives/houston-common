@@ -1,8 +1,3 @@
-export interface BackUpManager {
-  queryTasks(): BackUpTask[]
-  unschedule(task: BackUpTask): void
-  schedule(task: BackUpTask): void
-}
 
 export interface TaskSchedule {
   repeatFrequency: 'hour' | 'day' | 'week' | 'month'
@@ -22,18 +17,3 @@ export interface BackUpSetupConfig {
 }
 
 export const backupTaskTag = "houston-client-manager-backup-task"
-
-/**
- * WinBackUpManager
- * * schtasks
- * * robocopy
- * 
- * LinuxBackUpManager
- * * systemd
- * * rsync
- * 
- * MacBackUpManager
- * * launchd
- * * rsync
- * 
- */

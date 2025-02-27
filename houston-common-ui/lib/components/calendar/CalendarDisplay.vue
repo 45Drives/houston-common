@@ -28,7 +28,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { type Interval, convertDayOfWeekToCron } from  "@45drives/houston-common-lib";
+import { type Interval, convertDayOfWeekToCron, validateCronField } from  "@45drives/houston-common-lib";
 
 interface Props {
   interval: Interval;
@@ -81,9 +81,19 @@ const days = computed(() => {
 
 
 function checkSchedule(date: Date, interval: Interval): boolean {
-	const dayOfWeekMap = {
-		'Sun': '0', 'Mon': '1', 'Tue': '2', 'Wed': '3', 'Thu': '4', 'Fri': '5', 'Sat': '6',
-	};
+	// Validate fields before processing
+	if (!validateCronField(interval.day!.value, 'day')) {
+		console.warn(`Invalid cron expression for day: ${interval.day!.value}`);
+		return false;
+	}
+
+	if (!validateCronField(interval.month!.value, 'month')) {
+		console.warn(`Invalid cron expression for month: ${interval.month!.value}`);
+		return false;
+	}
+	// const dayOfWeekMap = {
+	// 	'Sun': '0', 'Mon': '1', 'Tue': '2', 'Wed': '3', 'Thu': '4', 'Fri': '5', 'Sat': '6',
+	// };
 
 	const matches = (value: string, dateComponent: number) => {
 		if (value === '*') {
@@ -115,17 +125,19 @@ function checkSchedule(date: Date, interval: Interval): boolean {
 		if (!cronDays.includes(date.getDay().toString())) return false;
 	}
 
-	if (interval.year && !matches(interval.year.value.toString(), date.getFullYear())) {
-		return false;
-	}
-	if (interval.month && !matches(interval.month.value.toString(), date.getMonth() + 1)) {
-		return false;
-	}
-	if (interval.day && !matches(interval.day.value.toString(), date.getDate())) {
-		return false;
-	}
+	// if (interval.year && !matches(interval.year.value.toString(), date.getFullYear())) {
+	// 	return false;
+	// }
+	// if (interval.month && !matches(interval.month.value.toString(), date.getMonth() + 1)) {
+	// 	return false;
+	// }
+	// if (interval.day && !matches(interval.day.value.toString(), date.getDate())) {
+	// 	return false;
+	// }
+	return matches(interval.day!.value, date.getDate()) &&
+		matches(interval.month!.value, date.getMonth() + 1);
 
-	return true;
+	// return true;
 }
 
 

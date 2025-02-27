@@ -22,5 +22,6 @@ export interface Interval {
     hour?: TimeComponent;
     day?: TimeComponent;
     month?: TimeComponent;
-    dayOfWeek?: string;  // Change to a comma-separated string for cron compatibility
+    // dayOfWeek?: string;  // Change to a comma-separated string for cron compatibility
+    dayOfWeek?: DayOfWeek[];
 }

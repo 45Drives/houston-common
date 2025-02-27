@@ -10,7 +10,7 @@
             <!-- Left side: Interval configuration -->
             <div class="border border-default p-2">
                 <p class="block text-base">
-                    
+
                 </p>
 
                 <label for="preset-select" class="block text-sm font-medium">Interval Preset</label>
@@ -29,30 +29,32 @@
                             <div class="flex flex-row justify-between items-center">
                                 <label class="block text-sm leading-6 text-default mr-2">Hour</label>
                                 <CommanderToolTip :width="700"
-                                    :message="'Use * for Every Value, \n*/N for Every Nth Value, \nCommas to specify separate values, \nHyphen to specify a range of values.'" />
+                                    :message="'Use asterisk (*) for Every Value, \n*/N for Every Nth Value, \nCommas to specify separate values, \nHyphen to specify a range of values.'" />
                             </div>
-                            <ExclamationCircleIcon v-if="hourErrorTag" class="mt-1 w-5 h-5 text-danger" />
+                            <ExclamationCircleIcon v-if="hourErrorTag" class="mt-1 w-5 h-5 text-danger"
+                                title="Invalid hour: Must be *, a single value (0-23), a list (e.g., 0,6,12), or a range (e.g., 0-23)." />
                         </div>
                         <input @click.stop v-model="interval.hour!.value" type="text" placeholder="(0-23)" :class="[
                             'my-1 block w-full text-default input-textlike bg-default',
                             hourErrorTag ? 'outline outline-1 outline-rose-500 dark:outline-rose-700' : ''
                         ]"
-                            title="Use asterisk (*) for all values, hyphen (-) for ranges (eg. 2-7), and commas for lists (eg. 2,4,7)" />
+                            :title="`Use asterisk (*) for Every Value, \n*/N for Every Nth Value, \nCommas to specify separate values, \nHyphen to specify a range of values.`" />
                     </div>
                     <div name="minute">
                         <div class="flex flex-row justify-between items-center">
                             <div class="flex flex-row justify-between items-center">
                                 <label class="block text-sm leading-6 text-default mr-2">Minute</label>
                                 <CommanderToolTip :width="700"
-                                    :message="'Use * for Every Value, \n*/N for Every Nth Value, \nCommas to specify separate values, \nHyphen to specify a range of values.'" />
+                                    :message="'Use asterisk (*) for Every Value, \n*/N for Every Nth Value, \nCommas to specify separate values, \nHyphen to specify a range of values.'" />
                             </div>
-                            <ExclamationCircleIcon v-if="minuteErrorTag" class="mt-1 w-5 h-5 text-danger" />
+                            <ExclamationCircleIcon v-if="minuteErrorTag" class="mt-1 w-5 h-5 text-danger"
+                                title="Invalid minute: Must be *, a single value (0-59), a list (e.g., 0,15,30), or a range (e.g., 0-59)." />
                         </div>
                         <input @click.stop v-model="interval.minute!.value" type="text" placeholder="(0-59)" :class="[
                             'my-1 block w-full text-default input-textlike bg-default',
                             minuteErrorTag ? 'outline outline-1 outline-rose-500 dark:outline-rose-700' : ''
                         ]"
-                            title="Use asterisk (*) for all values, hyphen (-) for ranges (eg. 2-7), and commas for lists (eg. 2,4,7)" />
+                            :title="'Use asterisk (*) for Every Value, \n*/N for Every Nth Value, \nCommas to specify separate values, \nHyphen to specify a range of values.'" />
                     </div>
 
                     <div name="date-data" class="col-span-2 grid grid-cols-3 gap-2">
@@ -60,32 +62,34 @@
                             <div class="flex flex-row justify-between items-center">
                                 <div class="flex flex-row justify-between items-center">
                                     <label class="block text-sm leading-6 text-default mr-2">Day</label>
-                                    <CommanderToolTip :width="700" :message="'Use * for Every Value, \nX/N for Every Nth Value starting on Day X, \nCommas to specify separate values, \nTwo periods to specify a range of values (2..8).'" />
+                                    <CommanderToolTip :width="700"
+                                        :message="'Use asterisk (*) for all values, X-Y for ranges (2-8), commas for lists (2,4,7).'" />
                                 </div>
-                                <ExclamationCircleIcon v-if="dayErrorTag" class="mt-1 w-5 h-5 text-danger" />
+                                <ExclamationCircleIcon v-if="dayErrorTag" class="mt-1 w-5 h-5 text-danger"
+                                    title="Invalid day: Use *, a number (1-31), a list (e.g., 1,15,30), or a range (e.g., 1-31)." />
                             </div>
                             <input @click.stop v-model="interval.day!.value" type="text" placeholder="(1-31)" :class="[
                                 'my-1 block w-full text-default input-textlike bg-default',
                                 dayErrorTag ? 'outline outline-1 outline-rose-500 dark:outline-rose-700' : ''
                             ]"
-                                title="Use asterisk (*) for all values, double-periods (..) for ranges (eg. 2..7), and commas for lists (eg. 2,4,7)" />
+                                :title="'Use asterisk (*) for all values, X-Y for ranges (2-8), commas for lists (2,4,7).'" />
                         </div>
                         <div name="month">
                             <div class="flex flex-row justify-between items-center">
                                 <div class="flex flex-row justify-between items-center">
                                     <label class="block text-sm leading-6 text-default mr-2">Month</label>
                                     <CommanderToolTip :width="700"
-                                        :message="'Use * for Every Value, \nCommas to specify separate values, \nTwo periods to specify a range of values(2..8).'" />
+                                        :message="'Use * for all values, X-Y for ranges (2-8), commas for lists (2,4,7).'" />
                                 </div>
-                                <ExclamationCircleIcon v-if="monthErrorTag" class="mt-1 w-5 h-5 text-danger" />
+                                <ExclamationCircleIcon v-if="monthErrorTag" class="mt-1 w-5 h-5 text-danger"
+                                    title="Invalid month: Use *, a number (1-12), a list (e.g., 1,6,12), or a range (e.g., 1-12)." />
                             </div>
                             <input @click.stop v-model="interval.month!.value" type="text" placeholder="(1-12)" :class="[
                                     'my-1 block w-full text-default input-textlike bg-default',
                                     monthErrorTag ? 'outline outline-1 outline-rose-500 dark:outline-rose-700' : ''
-                                ]"
-                                title="Use asterisk (*) for all values, double-periods (..) for ranges (eg. 2..7), and commas for lists (eg. 2,4,7)" />
+                                ]" title="Use * for all values, X-Y for ranges (2-8), commas for lists (2,4,7)." />
                         </div>
-                        <div name="year">
+                        <!-- <div name="year">
                             <div class="flex flex-row justify-between items-center">
                                 <div class="flex flex-row justify-between items-center">
                                     <label class="block text-sm leading-6 text-default mr-2">Year</label>
@@ -99,7 +103,7 @@
                                     yearErrorTag ? 'outline outline-1 outline-rose-500 dark:outline-rose-700' : ''
                                 ]"
                                 title="Use asterisk (*) for all values, double-periods (..) for ranges (eg. 2..7), and commas for lists (eg. 2,4,7)" />
-                        </div>
+                        </div> -->
                     </div>
 
                     <div name="dayOfWeek" class="col-span-2">
@@ -123,16 +127,24 @@
                             </tr>
                         </table>
                     </div>
+
+                    <div class="col-span-2 mt-2 text-base text-default bg-well p-2 rounded-md">
+                        <p><strong>Preview:</strong> {{ parsedCronInterval }} </p>
+                        <p><i>{{ parsedIntervalString }}</i></p>
+                    </div>
+
                 </div>
             </div>
 
             <!-- Right side: Calendar preview -->
             <div class="border border-default p-2">
                 <CalendarDisplay :interval="interval" />
-                <div class="mt-2 text-sm text-muted bg-header p-2 rounded-md">
-                    <!-- Optionally, display the parsed interval string -->
-                    <strong>Preview:</strong> {{ parsedInterval }}
-                </div>
+                <!-- <div class="mt-2 text-sm text-muted bg-header p-2 rounded-md">
+                    <strong>Preview:</strong> {{ parsedCronInterval }} ({{ parsedIntervalString }})
+                </div> -->
+                <!-- <div>
+                    <strong>{{ formatCronToHumanReadable(parsedCronInterval) }}</strong>
+                </div> -->
             </div>
         </div>
         <template #footer>
@@ -142,8 +154,8 @@
                         <button @click.stop="$emit('close')" id="close-add-schedule-btn" name="close-add-schedule-btn"
                             class="btn btn-danger h-fit w-full">Close</button>
                     </div>
-                    <!-- <div class="button-group-row">
-                        <button disabled v-if="savingSchedule && hasIntervals" id="adding-schedule-btn" type="button"
+                    <div class="button-group-row">
+                        <button disabled v-if="savingSchedule" id="adding-schedule-btn" type="button"
                             class="btn btn-primary h-fit w-full">
                             <svg aria-hidden="true" role="status"
                                 class="inline w-4 h-4 mr-3 text-gray-200 animate-spin text-default"
@@ -157,11 +169,9 @@
                             </svg>
                             Saving Schedule...
                         </button>
-                        <button disabled v-if="!savingSchedule && !hasIntervals" id="add-schedule-btn" type="button"
+                        <button v-if="!savingSchedule" id="add-schedule-btn" type="button"
                             class="btn btn-primary h-fit w-full" @click="saveScheduleBtn()">Save Schedule</button>
-                        <button v-if="!savingSchedule && hasIntervals" id="add-schedule-btn" type="button"
-                            class="btn btn-primary h-fit w-full" @click="saveScheduleBtn()">Save Schedule</button>
-                    </div> -->
+                    </div>
                 </div>
             </div>
         </template>
@@ -174,7 +184,7 @@ import { ExclamationCircleIcon } from '@heroicons/vue/24/outline';
 import { CardContainer } from '..';
 import CalendarDisplay from './CalendarDisplay.vue';
 import { CommanderToolTip } from '../commander';
-import { type Interval, type DayOfWeek, convertToCronSyntax } from  "@45drives/houston-common-lib";
+import { type Interval, type DayOfWeek, convertToCronSyntax, parseIntervalIntoString, formatCronToHumanReadable, validateCronField } from  "@45drives/houston-common-lib";
 
 interface Props {
   title: string;
@@ -189,20 +199,29 @@ const hourErrorTag = ref(false);
 const minuteErrorTag = ref(false);
 const dayErrorTag = ref(false);
 const monthErrorTag = ref(false);
-const yearErrorTag = ref(false);
+// const yearErrorTag = ref(false);
 
-const daysOfWeek: DayOfWeek[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 const selectedPreset = ref('none');
 
 // Set up the reactive interval object
 const interval = reactive<Interval>({
   minute: { value: '0' },
   hour: { value: '0' },
-  day: { value: '1' },
+  day: { value: '*' },
   month: { value: '*' },
 //   year: { value: '*' },
   dayOfWeek: []
+    // dayOfWeek: ''
 });
+
+watch(interval, () => {
+    hourErrorTag.value = !validateCronField(interval.hour!.value, 'hour');
+    minuteErrorTag.value = !validateCronField(interval.minute!.value, 'minute');
+    dayErrorTag.value = !validateCronField(interval.day!.value, 'day');
+    monthErrorTag.value = !validateCronField(interval.month!.value, 'month');
+});
+
 // const interval = reactive<Interval>(props.config.interval || {
 //     minute: { value: '0' },
 //     hour: { value: '0' },
@@ -222,6 +241,36 @@ const interval = reactive<Interval>({
 //   }
 // }
 
+const daysOfWeek: DayOfWeek[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// const daysOfWeek = ref(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+
+// const isDaySelected = (day: string) => {
+//     return interval.dayOfWeek!.split(',').includes(day);
+// };
+
+// const toggleDay = (day: string) => {
+//     let daysArray = interval.dayOfWeek ? interval.dayOfWeek.split(',') : [];
+
+//     if (daysArray.includes(day)) {
+//         // Remove the day
+//         daysArray = daysArray.filter(d => d !== day);
+//     } else {
+//         // Add the day
+//         daysArray.push(day);
+//     }
+
+//     // Update as a comma-separated string
+//     interval.dayOfWeek = daysArray.join(',');
+// };
+
+const daySelectedClass = (dayOfWeek: DayOfWeek) => {
+    const isSelected = interval.dayOfWeek!.includes(dayOfWeek);
+    return isSelected ? 'bg-green-30 dark:bg-green-700' : '';
+}
+// const daySelectedClass = (day: string) => {
+//     return isDaySelected(day) ? 'bg-green-300 dark:bg-green-700' : '';
+// }
+
 // Watch the preset and update the interval accordingly
 watch(selectedPreset, (newVal) => {
   switch (newVal) {
@@ -230,70 +279,75 @@ watch(selectedPreset, (newVal) => {
       interval.hour!.value = '0';
       interval.day!.value = '1';
       interval.month!.value = '*';
-      interval.year!.value = '*';
+    //   interval.year!.value = '*';
       interval.dayOfWeek = [];
+    // interval.dayOfWeek = ''
       break;
     case 'minutely':
       interval.minute!.value = '*';
       interval.hour!.value = '*';
       interval.day!.value = '*';
       interval.month!.value = '*';
-      interval.year!.value = '*';
+    //   interval.year!.value = '*';
       interval.dayOfWeek = [];
+    // interval.dayOfWeek = ''
       break;
     case 'hourly':
       interval.minute!.value = '0';
       interval.hour!.value = '*';
       interval.day!.value = '*';
       interval.month!.value = '*';
-      interval.year!.value = '*';
+    //   interval.year!.value = '*';
       interval.dayOfWeek = [];
+    // interval.dayOfWeek = ''
       break;
     case 'daily':
       interval.minute!.value = '0';
       interval.hour!.value = '0';
       interval.day!.value = '*';
       interval.month!.value = '*';
-      interval.year!.value = '*';
+    //   interval.year!.value = '*';
       interval.dayOfWeek = [];
+    // interval.dayOfWeek = ''
       break;
     case 'weekly':
       interval.minute!.value = '0';
       interval.hour!.value = '0';
       interval.day!.value = '*';
       interval.month!.value = '*';
-      interval.year!.value = '*';
-      interval.dayOfWeek = ['Sun']; // default to Sunday
+    //   interval.year!.value = '*';
+      interval.dayOfWeek = ['Sun'];
+    //   interval.dayOfWeek = 'Sun'; // default to Sunday
       break;
     case 'monthly':
       interval.minute!.value = '0';
       interval.hour!.value = '0';
       interval.day!.value = '1';
       interval.month!.value = '*';
-      interval.year!.value = '*';
+    //   interval.year!.value = '*';
       interval.dayOfWeek = [];
+    // interval.dayOfWeek = ''
       break;
-    case 'yearly':
-      interval.minute!.value = '0';
-      interval.hour!.value = '0';
-      interval.day!.value = '1';
-      interval.month!.value = '1';
-      interval.year!.value = '*';
-      interval.dayOfWeek = [];
-      break;
+    // case 'yearly':
+    //   interval.minute!.value = '0';
+    //   interval.hour!.value = '0';
+    //   interval.day!.value = '1';
+    //   interval.month!.value = '1';
+    //   interval.year!.value = '*';
+    //   interval.dayOfWeek = [];
+    //   break;
   }
 });
 
-
-const daySelectedClass = (dayOfWeek: DayOfWeek) => {
-    const isSelected = interval.dayOfWeek!.includes(dayOfWeek);
-    return isSelected ? 'bg-green-30 dark:bg-green-700' : '';
-}
-
-
 // Compute a preview string using the manager logic
-// const parsedInterval = computed(() => parseIntervalIntoString(interval));
-const parsedInterval = computed(() => convertToCronSyntax(interval));
+const parsedIntervalString = computed(() => parseIntervalIntoString(interval));
+const parsedCronInterval = computed(() => convertToCronSyntax(interval));
+
+
+const savingSchedule = ref(false);
+async function saveScheduleBtn() {
+    savingSchedule.value = true;
+}
 
 </script>
 

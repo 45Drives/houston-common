@@ -19,35 +19,35 @@ function getDaySuffix(day: number): string {
     }
 }
 
-// function formatUnit(value: string, type: TimeUnit): string {
-//     if (value === '*') {
-//         return type === 'minute'
-//             ? 'every minute'
-//             : type === 'hour'
-//                 ? 'every hour'
-//                 : `every ${type}`;
-//     } else if (value.startsWith('*/')) {
-//         const interval = value.slice(2);
-//         return `every ${interval} ${type}${Number(interval) > 1 ? 's' : ''}`;
-//     } else if (value.includes('/')) {
-//         const [base, step] = value.split('/');
-//         if (type === 'day') {
-//             return `every ${step} days starting on the ${base}${getDaySuffix(Number(base))}`;
-//         }
-//         return `every ${step} ${type}${Number(step) > 1 ? 's' : ''} starting from ${base}`;
-//     } else if (value === '0' && type === 'minute') {
-//         return 'at the start of the hour';
-//     } else if (value === '0' && type === 'hour') {
-//         return 'at midnight';
-//     } else if (type === 'day') {
-//         return `on the ${value}${getDaySuffix(Number(value))} of the month`;
-//     } else if (type === 'month') {
-//         return `in ${getMonthName(Number(value))}`;
-//     }
-//     return `at ${value} ${type}`;
-// }
+function formatUnit(value: string, type: TimeUnit): string {
+    if (value === '*') {
+        return type === 'minute'
+            ? 'every minute'
+            : type === 'hour'
+                ? 'every hour'
+                : `every ${type}`;
+    } else if (value.startsWith('*/')) {
+        const interval = value.slice(2);
+        return `every ${interval} ${type}${Number(interval) > 1 ? 's' : ''}`;
+    } else if (value.includes('/')) {
+        const [base, step] = value.split('/');
+        if (type === 'day') {
+            return `every ${step} days starting on the ${base}${getDaySuffix(Number(base))}`;
+        }
+        return `every ${step} ${type}${Number(step) > 1 ? 's' : ''} starting from ${base}`;
+    } else if (value === '0' && type === 'minute') {
+        return 'at the start of the hour';
+    } else if (value === '0' && type === 'hour') {
+        return 'at midnight';
+    } else if (type === 'day') {
+        return `on the ${value}${getDaySuffix(Number(value))} of the month`;
+    } else if (type === 'month') {
+        return `in ${getMonthName(Number(value))}`;
+    }
+    return `at ${value} ${type}`;
+}
 
-function formatUnitForCron(value: string, type: TimeUnit): string {
+function formatUnitForCron(value: string): string {
     if (value === '*') return '*'; // Every unit
     if (value.startsWith('*/')) return value; // Every N units (*/5 for every 5 minutes)
     if (value.includes(',')) return value; // List of specific values (e.g., 1,3,5)
@@ -56,16 +56,16 @@ function formatUnitForCron(value: string, type: TimeUnit): string {
 }
 
 export function convertToCronSyntax(interval: Interval): string {
-    const minute = formatUnitForCron(interval.minute?.value || '*', 'minute');
-    const hour = formatUnitForCron(interval.hour?.value || '*', 'hour');
-    const day = formatUnitForCron(interval.day?.value || '*', 'day');
-    const month = formatUnitForCron(interval.month?.value || '*', 'month');
-    const dayOfWeek = interval.dayOfWeek ? convertDayOfWeekToCron(interval.dayOfWeek) : '*';
+    const minute = formatUnitForCron(interval.minute?.value || '*');
+    const hour = formatUnitForCron(interval.hour?.value || '*');
+    const day = formatUnitForCron(interval.day?.value || '*');
+    const month = formatUnitForCron(interval.month?.value || '*');
+    const dayOfWeek = interval.dayOfWeek ? convertDayOfWeekToCron(interval.dayOfWeek.toString()) : '*';
 
     return `${minute} ${hour} ${day} ${month} ${dayOfWeek}`;
 }
 
-function convertDayOfWeekToCron(dayOfWeek: string): string {
+export function convertDayOfWeekToCron(dayOfWeek: string): string {
     const dayMap: { [key: string]: string } = {
         'Sun': '0', 'Mon': '1', 'Tue': '2', 'Wed': '3', 'Thu': '4', 'Fri': '5', 'Sat': '6'
     };
@@ -76,31 +76,32 @@ function convertDayOfWeekToCron(dayOfWeek: string): string {
 }
 
 
-// export function parseIntervalIntoString(interval: Interval): string {
-//     const elements: string[] = [];
-//     const formattedMinute = interval.minute ? formatUnit(interval.minute.value, 'minute') : null;
-//     const formattedHour = interval.hour ? formatUnit(interval.hour.value, 'hour') : null;
+export function parseIntervalIntoString(interval: Interval): string {
+    const elements: string[] = [];
+    const formattedMinute = interval.minute ? formatUnit(interval.minute.value, 'minute') : null;
+    const formattedHour = interval.hour ? formatUnit(interval.hour.value, 'hour') : null;
 
-//     // Special case for midnight
-//     if (formattedMinute === null && formattedHour === 'at midnight') {
-//         elements.push('at midnight');
-//     } else {
-//         if (formattedMinute) elements.push(formattedMinute);
-//         if (formattedHour) elements.push(formattedHour);
-//     }
+    // Special case for midnight
+    if (formattedMinute === null && formattedHour === 'at midnight') {
+        elements.push('at midnight');
+    } else {
+        if (formattedMinute) elements.push(formattedMinute);
+        if (formattedHour) elements.push(formattedHour);
+    }
 
-//     const formattedDay = interval.day ? formatUnit(interval.day.value, 'day') : 'every day';
-//     const formattedMonth = interval.month ? formatUnit(interval.month.value, 'month') : 'every month';
-//     const formattedYear = interval.year ? formatUnit(interval.year.value, 'year') : 'every year';
+    const formattedDay = interval.day ? formatUnit(interval.day.value, 'day') : 'every day';
+    const formattedMonth = interval.month ? formatUnit(interval.month.value, 'month') : 'every month';
+    // const formattedYear = interval.year ? formatUnit(interval.year.value, 'year') : 'every year';
 
-//     elements.push(formattedDay, formattedMonth, formattedYear);
+    // elements.push(formattedDay, formattedMonth, formattedYear);
+    elements.push(formattedDay, formattedMonth);
 
-//     if (interval.dayOfWeek && interval.dayOfWeek.length > 0) {
-//         elements.push(`on ${interval.dayOfWeek.join(', ')}`);
-//     }
+    if (interval.dayOfWeek && interval.dayOfWeek.length > 0) {
+        elements.push(`only on ${interval.dayOfWeek.join(', ')}`);
+    }
 
-//     return elements.filter(e => e).join(', ');
-// }
+    return elements.filter(e => e).join(', ');
+}
 
 export function formatCronToHumanReadable(cron: string): string {
     const [minute, hour, day, month, dayOfWeek] = cron.split(' ');
@@ -128,7 +129,7 @@ export function formatCronToHumanReadable(cron: string): string {
     }
 
     if (formattedDayOfWeek !== 'every day') {
-        result += ` on ${formattedDayOfWeek}`;
+        result += ` only on ${formattedDayOfWeek}`;
     }
 
     return result.trim();
@@ -182,4 +183,34 @@ function convertCronToDayName(value: string): string {
         '3': 'Wednesday', '4': 'Thursday', '5': 'Friday', '6': 'Saturday'
     };
     return dayMap[value] || value;
+}
+
+export function validateCronField(value: string, type: TimeUnit): boolean {
+    if (value === '*') return true; // Allow all values
+
+    if (value.startsWith('*/')) {
+        // */N is only valid for minute, hour
+        return type === 'minute' || type === 'hour';
+    }
+
+    if (value.includes(',')) {
+        return value.split(',').every(v => validateCronField(v.trim(), type));
+    }
+
+    if (value.includes('-')) {
+        const [start, end] = value.split('-').map(Number);
+        return !isNaN(start!) && !isNaN(end!) && start! <= end!;
+    }
+
+    // Ensure valid numeric range
+    const num = Number(value);
+    switch (type) {
+        case 'minute': return num >= 0 && num <= 59;
+        case 'hour': return num >= 0 && num <= 23;
+        case 'day': return num >= 1 && num <= 31;
+        case 'month': return num >= 1 && num <= 12;
+        case 'dayOfWeek': return num >= 0 && num <= 6;
+    }
+
+    return false;
 }

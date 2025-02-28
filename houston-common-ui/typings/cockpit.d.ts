@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/// <reference path="../cockpit-extra.d.ts" />
+/// <reference path="./cockpit-extra.d.ts" />
 
 declare module 'cockpit' {
     type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };

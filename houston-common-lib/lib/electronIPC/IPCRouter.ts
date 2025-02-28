@@ -1,3 +1,4 @@
+import { Ref } from "vue";
 import { IPCMessageRouterBackend } from "./IPCMessageRouterBackend";
 import { IPCMessageRouterCockpit } from "./IPCMessageRouterCockpit";
 import { IPCMessageRouterRenderer } from "./IPCMessageRouterRenderer";
@@ -8,7 +9,7 @@ export class IPCRouter {
 
   private constructor() {}
 
-  public static initRenderer(webview: any) {
+  public static initRenderer(webview: Ref<any>) {
     IPCRouter.instance = new IPCMessageRouterRenderer(webview);
   }
 

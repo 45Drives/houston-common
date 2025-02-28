@@ -1,8 +1,11 @@
+import {BackUpTask} from "../managers/backup"
+
 export type IPCMessageTarget = "cockpit" | "renderer" | "backend";
 
 export type IPCMessageTypes = {
   action: string;
   action2: { prop: "val" };
+  sendBackupTasks: BackUpTask[]
 };
 
 export type IPCMessage<MessageTypes extends Record<string, any>, T extends keyof MessageTypes> = {

@@ -48,16 +48,25 @@ export * from "@/driveSlots/types";
 
 export * as legacy from "@/legacy";
 
-if (typeof window !== 'undefined') {
-  // Only run this in the renderer process (browser environment)
-  window.reportHoustonError ??= (e, ctx: string = "") => {
-    console.error(ctx, e);
-    return e;
-  };
-} else if (typeof global !== 'undefined') {
-  // Fallback for main process (Node.js environment)
-  global.reportHoustonError ??= (e, ctx: string = "") => {
-    console.error(ctx, e);
-    return e;
-  };
+function setupReportHoustonError() {
+  const globalObj =
+    typeof window !== "undefined"
+      ? window // Browser
+      : typeof global !== "undefined"
+      ? global // Node.js
+      : globalThis; // Fallback (covers workers, Deno, etc.)
+
+  if (!("reportHoustonError" in globalObj)) {
+    Object.defineProperty(globalObj, "reportHoustonError", {
+      value: (e: unknown, ctx: string = "") => {
+        console.error(ctx, e);
+        return e;
+      },
+      writable: true, // Prevent accidental overwrites
+      configurable: true, // Allow redefining if needed
+    });
+  }
 }
+
+// Call it once to initialize
+setupReportHoustonError();

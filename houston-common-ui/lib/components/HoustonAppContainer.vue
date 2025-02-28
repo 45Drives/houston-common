@@ -25,6 +25,7 @@ const props = defineProps<{
   issuesURL?: string;
   tabs?: HoustonAppTabEntry[];
   noScroll?: boolean;
+  notificationComponent?: any;
 }>();
 
 const {
@@ -45,6 +46,10 @@ const globalProcessingState = useGlobalProcessingState();
       <template v-slot:header-left v-if="tabs">
         <TabSelector :labels="tabLabels" v-model:index="tabIndex" />
       </template>
+
+      <template v-slot:header-right v-if="props.notificationComponent">
+      <component :is="props.notificationComponent" />
+    </template>
     </HoustonHeader>
     <div 
     :class="['grow basis-0 flex flex-col items-stretch', (noScroll? '' : 'overflow-y-auto')]"

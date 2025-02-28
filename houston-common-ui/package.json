@@ -22,11 +22,12 @@
     "build-only": "vite build",
     "type-check": "vue-tsc --build --force",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
-    "format": "prettier --write lib/"
+    "format": "prettier --write lib/",
+    "preinstall": "node ./scripts/fix-dependencies.js"
   },
   "dependencies": {
-    "@45drives/houston-common-css": "workspace:^",
-    "@45drives/houston-common-lib": "workspace:^",
+    "@45drives/houston-common-css": "file:../houston-common-css",
+    "@45drives/houston-common-lib": "file:../houston-common-lib",
     "@headlessui/vue": "^1.7.22",
     "@heroicons/vue": "^2.1.3",
     "deep-equal": "^2.2.3",

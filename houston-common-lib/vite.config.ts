@@ -31,12 +31,16 @@ export default defineConfig({
       fileName: "index",
       formats: ["es", "cjs"],
     },
+    rollupOptions: {
+      external: (id) => id.includes('test') || id.includes('spec'), // Exclude test files
+    },
     sourcemap: true,
     emptyOutDir: true,
   },
   test: {
     globals: true,
-    environment: 'jsdom'
+    environment: 'jsdom',
+    setupFiles: './tests/setup.ts',
   },
   plugins: [
     dts({

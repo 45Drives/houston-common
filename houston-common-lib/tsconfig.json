@@ -56,5 +56,8 @@
 	"exclude": [
 		"dist",
 		"node_modules",
+		"tests",
+    "lib/**/*.test.ts",
+    "lib/**/*.spec.ts"
 	]
 }

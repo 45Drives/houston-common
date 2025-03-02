@@ -31,6 +31,7 @@
     "@headlessui/vue": "^1.7.22",
     "@heroicons/vue": "^2.1.3",
     "deep-equal": "^2.2.3",
+    "monet": "^0.9.3",
     "neverthrow": "6.2.2",
     "three": "^0.173.0",
     "uuid": "^9.0.1",

@@ -1,4 +1,3 @@
-import { Ref, watch } from "vue";
 import { IPCMessageRouter, IPCMessageTypes, IPCMessage, isIPCMessage } from "./types";
 
 interface ElectronApi {
@@ -17,35 +16,35 @@ declare global {
 export class IPCMessageRouterRenderer<
   MessageTypes extends Record<string, any> = IPCMessageTypes,
 > extends IPCMessageRouter<MessageTypes> {
-  constructor(private webviewElement: Ref<any>) {
+  webviewElement: any;
+  constructor() {
     super("renderer");
-
-    // set up event listeners here to call this.routeMessage when message received
-
-    watch(webviewElement, () => {
-      
-      // from cockpit to renderer
-      if (this.webviewElement.value) {
-
-        this.webviewElement.value.addEventListener("console-message", (event: any) => {
-          const message = JSON.parse(event.message);
-          if (!isIPCMessage<MessageTypes>(message)) {
-            return;
-          }
-          this.routeMessage(message);
-        });
-
-      }
-    });
-    
-    
     // from backend to renderer
-    window.electron.ipcRenderer.on("IPCMessage", (message: any) => {
+    window.electron.ipcRenderer.on("IPCMessage", (_event, message: any) => {
+      console.log(message)
       if (!isIPCMessage<MessageTypes>(message)) {
         return;
       }
       this.routeMessage(message);
     });
+  }
+
+  setCockpitWebView(webviewElement: any) {
+    // from cockpit to renderer
+    if (!this.webviewElement) {
+      this.webviewElement = webviewElement;
+      this.webviewElement.addEventListener("console-message", (event: any) => {
+        const message = event.message;
+        if (!isIPCMessage<MessageTypes>(message)) {
+          return;
+        }
+        this.routeMessage(message);
+      });
+    } else {
+      // I guess it could be set more than once but maybe we should clean up the listener and readd
+      throw new Error("Setting the cockpit webview can only be done once.");
+    }
+
   }
 
   protected forwardToBackend<

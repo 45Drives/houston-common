@@ -7,7 +7,7 @@ export interface ZFSConfig {
 
 export interface ZPoolBase {
   name: string;
-  vdevs: VDevBase[];
+  vdevs: VDev[];
 }
 
 export interface ZpoolCreateOptions {
@@ -20,6 +20,8 @@ export interface ZpoolCreateOptions {
   dedup?: string;
   forceCreate?: boolean;
   refreservationPercent?: number;
+  createFileSystem?: boolean;
+  readOnly?: boolean;
 }
 
 export interface ZPoolAddVDevOptions {
@@ -68,33 +70,39 @@ export interface ZPool extends ZPoolBase {
   scan?: PoolScanObject;
   diskIdentifier?: DiskIdentifier;
   errorCount: number;
+  createFileSystem?: boolean;
 }
 
 export type DiskIdentifier = "vdev_path" | "phy_path" | "sd_path";
 
-export interface VDevDiskBase {
+export interface VDevDisk {
   path: string;
+  name?: string;
+  capacity?: string;
+  model?: string;
+  guid?: string;
+  type?: string;
+  health?: string;
+  stats?: Record<string, any>;
+  phy_path?: string;
+  sd_path?: string;
+  vdev_path?: string;
+  serial?: string;
+  temp?: string;
+  powerOnCount?: string;
+  powerOnHours?: number;
+  rotationRate?: number;
+  hasPartitions?: boolean;
+  errors?: string[];
+  vDevName?: string;
+  poolName?: string;
+  vDevType?: string;
+  children?: VDevDisk[];
 }
 
-export interface VDevDisk extends VDevDiskBase {
-  name: string;
-  capacity: string;
-  model: string;
-  guid: string;
-  type: "SSD" | "HDD" | "NVMe";
-  health: string;
-  stats: Record<string, any>;
-  phy_path: string;
-  sd_path: string;
-  vdev_path: string;
-  serial: string;
-  temp: string;
-  powerOnCount: string;
-  powerOnHours: number;
-  rotationRate: number;
-}
 
 export type VDevType =
+  | "data"
   | "disk"
   | "mirror"
   | "raidz1"
@@ -106,22 +114,26 @@ export type VDevType =
   | "special"
   | "cache";
 
-export interface VDevBase {
-  type: VDevType;
-  disks: VDevDiskBase[];
-  isMirror?: boolean;
-}
 
-export interface VDev extends VDevBase {
+export interface VDev {
+  name?: string;
+  type: VDevType | string;
   disks: VDevDisk[];
-  guid: string;
-  status: string;
-  stats: {
+  isMirror?: boolean;
+  forceAdd?: ZPoolAddVDevOptions;
+  diskIdentifier?: DiskIdentifier;
+  selectedDisks?: string[];
+  guid?: string;
+  status?: string;
+  stats?: {
     read_errors: number;
     write_errors: number;
     checksum_errors: number;
   };
-  errors: string[];
+  errors?: string[];
+  path?: string;
+  poolName?: string;
+  diskType?: string;
 }
 
 export namespace VDev {
@@ -152,9 +164,10 @@ export interface DatasetCreateOptions {
 }
 
 export interface Dataset extends DatasetBase {
-  parent: ZPool | Dataset;
-  children: Dataset[];
+  parent: string;
+  children?: Dataset[];
   fileSystem?: ZFSFileSystemInfo;
+  encrypted?: boolean;
 }
 
 export interface ZFSFileSystemInfo {
@@ -201,6 +214,8 @@ export interface ZFSFileSystemInfo {
     };
     used: number;
   };
+  parentFS?: string;
+  children?: ZFSFileSystemInfo[];
 }
 
 //object for tracking pool scan (scrub/resilver) data

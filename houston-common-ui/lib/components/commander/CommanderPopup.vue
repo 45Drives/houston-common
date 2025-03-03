@@ -1,7 +1,7 @@
 <template>
     <teleport to="body">
         <div v-if="visible" id="commander-popup"
-            class="absolute flex items-start text-left bg-slate-800/95 text-white p-6 min-h-[100px] rounded-md shadow-lg user-select-none"
+            class="z-50 absolute flex items-start text-left bg-slate-800/95 text-white p-6 min-h-[100px] rounded-md shadow-lg user-select-none"
             :style="{ width: width + 'px', top: position.top,left: position.left }">
 
             <div class="absolute w-0 h-0 border-l-[12px] border-r-[12px] border-transparent" :class="{

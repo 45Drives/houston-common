@@ -4,34 +4,30 @@ import {
   Server,
   Command,
   ZPoolBase,
-  VDevBase,
+  VDev,
   ValueError,
   unwrap,
   CommandOptions,
   ZPoolAddVDevOptions,
   DatasetCreateOptions,
-  Dataset,
   Disks,
-  VDevDiskBase,
   VDevDisk,
   ZPoolDestroyOptions,
   convertToBytes,
+  ExitedProcess
 } from "@/index";
 
 export interface IZFSManager {
-  createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<void>;
+  createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<ExitedProcess>;
   destroyPool(name: string): Promise<void>;
-  addVDevsToPool(pool: ZPoolBase, vdevs: VDevBase[], options: ZPoolAddVDevOptions): Promise<void>;
-  addDataset(
-    parent: ZPoolBase | Dataset,
-    name: string,
-    options: DatasetCreateOptions
-  ): Promise<void>;
-  getBaseDisks(): Promise<VDevDiskBase[]>;
-  getFullDisks(): Promise<VDevDiskBase[]>;
+  addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<ExitedProcess>;
+  addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<ExitedProcess>;
+  getBaseDisks(): Promise<VDevDisk[]>;
+  getFullDisks(): Promise<VDevDisk[]>;
   getDiskCapacity(path: string): Promise<string>;
   // TODO:
   getPools(): Promise<ZPool[]>;
+
 }
 
 export class ZFSManager implements IZFSManager {
@@ -46,7 +42,7 @@ export class ZFSManager implements IZFSManager {
    * @param vdev
    * @returns
    */
-  private formatVDevArgv(vdev: VDevBase): string[] {
+  private formatVDevArgv(vdev: VDev): string[] {
     const args = [];
     if (vdev.type !== "disk") {
       args.push(vdev.type);
@@ -57,7 +53,19 @@ export class ZFSManager implements IZFSManager {
       }
       args.push("mirror");
     }
-    args.push(...vdev.disks.map((disk) => disk.path));
+
+    // Filter out invalid paths and replace NVMe vdev_path with sd_path
+    const validDisks = vdev.disks
+      .map((disk) => (disk.vdev_path && disk.vdev_path !== "N/A") ? disk.vdev_path : (disk.sd_path ?? ""))
+      .filter((path): path is string => path !== "N/A" && path !== ""); // Type assertion to remove undefined values
+
+    if (validDisks.length === 0) {
+      throw new ValueError(`VDev of type ${vdev.type} has no valid disks!`);
+    }
+
+    // args.push(...vdev.disks.map((disk) => disk.path));
+    args.push(...validDisks);
+
     return args;
   }
 
@@ -66,7 +74,7 @@ export class ZFSManager implements IZFSManager {
    * @param vdevs
    * @returns
    */
-  private formatVDevsArgv(vdevs: VDevBase[]): string[] {
+  private formatVDevsArgv(vdevs: VDev[]): string[] {
     return vdevs
       .sort((a, b) => {
         // ensure stripe vdevs come first since they have no type argument
@@ -81,7 +89,7 @@ export class ZFSManager implements IZFSManager {
       .flatMap((vdev) => this.formatVDevArgv(vdev));
   }
 
-  async createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<void> {
+  async createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<ExitedProcess> {
     const argv = ["zpool", "create", pool.name];
 
     // set up pool properties
@@ -122,14 +130,20 @@ export class ZFSManager implements IZFSManager {
     console.log("****\ncmdstring:\n", ...argv, "\n****");
 
     // using new process execution method instead of useSpawn
-    const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
-
-    console.log(proc.getStdout());
+    // console.log(proc.getStdout());
+    try {
+      const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+      console.log("Command output:", proc.getStdout());
+      return proc;  // Return the process result
+    } catch (error) {
+      console.error("Error executing command:", error);
+      throw error; // Ensure caller catches the error
+    }
   }
 
   async destroyPool(pool: ZPoolBase | string, options: ZPoolDestroyOptions = {}): Promise<void> {
     const poolName = typeof pool === "string" ? pool : pool.name;
-    const argv = ["zpool", "destroy"];
+    const argv = ["zpool", "destroy"]
 
     if (options.force) {
       argv.push("-f");
@@ -137,7 +151,9 @@ export class ZFSManager implements IZFSManager {
 
     argv.push(poolName);
 
-    await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+    await unwrap(
+      this.server.execute(new Command(argv, this.commandOptions))
+    );
   }
 
   async getPools(): Promise<ZPool[]> {
@@ -145,18 +161,18 @@ export class ZFSManager implements IZFSManager {
     return [];
   }
 
+
   /**
-   * Fetches only the disk paths and returns them as VDevDiskBase[]
+   * Fetches only the disk paths and returns them as VDevDisk[]
    */
-  async getBaseDisks(): Promise<VDevDiskBase[]> {
+  async getBaseDisks(): Promise<VDevDisk[]> {
     return unwrap(
-      this.server.getDiskInfo().map((diskInfoData) =>
-        diskInfoData.rows.map(
-          (disk: any): VDevDiskBase => ({
+      this.server.getDiskInfo()
+        .map((diskInfoData) =>
+          diskInfoData.rows!.map((disk: any): VDevDisk => ({
             path: disk["dev"],
-          })
+          }))
         )
-      )
     );
   }
 
@@ -164,10 +180,16 @@ export class ZFSManager implements IZFSManager {
    * Fetches full disk information by merging fetchLsdev() and fetchDiskInfo()
    */
   async getFullDisks(): Promise<VDevDisk[]> {
-    return Promise.all([unwrap(this.server.getLsDev()), unwrap(this.server.getDiskInfo())])
-      .then(([lsdevData, diskInfo]) => {
+    return Promise.all([
+      unwrap(this.server.getLsDev()),
+      unwrap(this.server.getDiskInfo()),
+    ])
+      .then(([lsdevData, diskInfoData]) => {
         const lsdevRows = lsdevData.rows.flat(); // Flatten nested arrays in `lsdev`
-        return diskInfo.rows.map((disk: any): VDevDisk => {
+        const diskInfoRows = diskInfoData.rows!;
+        // console.log('lsdevRows:', lsdevRows);
+        // console.log('diskInfoRows:', diskInfoRows);
+        return diskInfoRows.map((disk: any): VDevDisk => {
           const matchingDisk = lsdevRows.find((lsdev: any) => lsdev.dev === disk.dev);
 
           return {
@@ -185,8 +207,8 @@ export class ZFSManager implements IZFSManager {
             serial: matchingDisk?.serial || "Unknown",
             temp: matchingDisk?.["temp-c"] || "N/A",
             powerOnCount: matchingDisk?.["power-cycle-count"] || "0",
-            powerOnHours: parseInt(matchingDisk?.["power-on-time"] || "0"),
-            rotationRate: matchingDisk?.["rotation-rate"] || 0,
+            powerOnHours: Number(matchingDisk?.["power-on-time"]) || 0,
+            rotationRate: Number(matchingDisk?.["rotation-rate"]) || 0,
           };
         });
       })
@@ -210,11 +232,7 @@ export class ZFSManager implements IZFSManager {
       .unwrapOr("Unknown");
   }
 
-  async addVDevsToPool(
-    pool: ZPoolBase,
-    vdevs: VDevBase[],
-    options: ZPoolAddVDevOptions
-  ): Promise<void> {
+  async addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<ExitedProcess> {
     const argv = ["zpool", "add"];
 
     if (options.force) argv.push("-f");
@@ -227,64 +245,66 @@ export class ZFSManager implements IZFSManager {
     console.log("****\ncmdstring:\n", ...argv, "\n****");
 
     // using new process execution method instead of useSpawn
-    const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
 
-    console.log(proc.getStdout());
+    try {
+      const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+      console.log("Command output:", proc.getStdout());
+      return proc;  // Return the process result
+    } catch (error) {
+      console.error("Error executing command:", error);
+      throw error; // Ensure caller catches the error
+    }
   }
 
-  async addDataset(
-    parent: ZPoolBase | Dataset,
-    name: string,
-    options: DatasetCreateOptions
-  ): Promise<void> {
+  async addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<ExitedProcess> {
     const argv = ["zfs", "create"];
-
-    // Construct dataset properties
     const datasetProps: string[] = [];
+
     if (options.atime !== undefined) datasetProps.push(`atime=${options.atime}`);
-    if (options.casesensitivity !== undefined)
-      datasetProps.push(`casesensitivity=${options.casesensitivity}`);
+    if (options.casesensitivity !== undefined) datasetProps.push(`casesensitivity=${options.casesensitivity}`);
     if (options.compression !== undefined) datasetProps.push(`compression=${options.compression}`);
     if (options.dedup !== undefined) datasetProps.push(`dedup=${options.dedup}`);
     if (options.dnodesize !== undefined) datasetProps.push(`dnodesize=${options.dnodesize}`);
     if (options.xattr !== undefined) datasetProps.push(`xattr=${options.xattr}`);
     if (options.recordsize !== undefined) datasetProps.push(`recordsize=${options.recordsize}`);
     if (options.readonly !== undefined) datasetProps.push(`readonly=${options.readonly}`);
-
     if (options.quota !== undefined) {
       datasetProps.push(`quota=${options.quota === "0" ? "none" : options.quota}`);
     }
 
-    // Append properties to command arguments
     argv.push(...datasetProps.flatMap((prop) => ["-o", prop]));
-
-    // Append dataset path
-    argv.push(`${parent.name}/${name}`);
+    argv.push(`${parent}/${name}`);
 
     console.log("****\ncmdstring:\n", ...argv, "\n****");
 
-    // Execute command
-    const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
-
-    console.log(proc.getStdout());
+    try {
+      const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+      console.log("Command output:", proc.getStdout());
+      return proc;  // Return the process result
+    } catch (error) {
+      console.error("Error executing command:", error);
+      throw error; // Ensure caller catches the error
+    }
   }
+
 
   allDisksHaveSameCapacity(disks: VDevDisk[]): boolean {
     if (disks.length === 0) return false;
-    const firstCapacity = convertToBytes(disks[0]!.capacity);
-    return disks.every((disk) => convertToBytes(disk.capacity) === firstCapacity);
+    const firstCapacity = convertToBytes(disks[0]!.capacity!);
+    return disks.every(disk => (convertToBytes(disk.capacity!) === firstCapacity));
   }
 
   RAIDZResiliency: Record<string, number> = {
-    raidz1: 1, // Can lose 1 disk
-    raidz2: 2, // Can lose 2 disks
-    raidz3: 3, // Can lose 3 disks
+    "raidz1": 1, // Can lose 1 disk
+    "raidz2": 2, // Can lose 2 disks
+    "raidz3": 3  // Can lose 3 disks
   };
 
   OptimalRAIDZLevel: Record<number, string> = {
     4: "raidz1",
     8: "raidz2",
     20: "raidz2",
-    30: "raidz3",
+    30: "raidz3"
   };
+
 }

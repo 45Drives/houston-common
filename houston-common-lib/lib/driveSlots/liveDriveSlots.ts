@@ -17,6 +17,7 @@ type LiveDriveSlotsCtx = {
   proc: Process;
   slots: DriveSlot[];
   stop: boolean;
+  retries: number;
 };
 
 type LiveDriveSlotsMessage = LiveDriveSlotsMessageAllSlots | LiveDriveSlotsMessageDriveAdded;
@@ -53,6 +54,7 @@ export function startLiveDriveSlotsWatcher(
     proc: server.spawnProcess(slotsCommand({ live: true }), true),
     slots: [],
     stop: false,
+    retries: 3,
   };
   const start = () => {
     if (ctx.stop) {
@@ -63,8 +65,13 @@ export function startLiveDriveSlotsWatcher(
     ctx.proc.wait().match(
       () => start(),
       (e) => {
-        globalThis.reportHoustonError(e, "Live drive slots watcher died.");
-        start();
+        if (ctx.retries > 0) {
+          console.error("Live drive slots watcher died, retrying:", e);
+          ctx.retries -= 1;
+          start();
+        } else {
+          window.reportHoustonError(e, "Live drive slots watcher died.");
+        }
       }
     );
   };

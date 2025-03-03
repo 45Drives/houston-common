@@ -3,7 +3,7 @@
 </template>
 
 <script setup lang="ts">
-import { useTemplateRef, onBeforeUnmount, watchEffect, type WatchHandle } from "vue";
+import { useTemplateRef, onBeforeUnmount, watchEffect, type WatchHandle, onMounted } from "vue";
 import { Server, type DriveSlot } from "@45drives/houston-common-lib";
 
 import { useDarkModeState } from "@/composables";
@@ -34,6 +34,7 @@ const selectedDriveSlots = defineModel<DriveSlot[]>("selectedDriveSlots", { defa
 const driveSlots = defineModel<DriveSlot[]>("driveSlots", { default: [] });
 
 const darkMode = useDarkModeState();
+
 
 import("./ServerView").then(({ ServerView }) => {
   const watchHandles: WatchHandle[] = [];

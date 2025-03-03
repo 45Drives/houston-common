@@ -170,7 +170,7 @@ export class EasySetupConfigurator {
     zfsConfig!.pool.vdevs[0]!.disks = baseDisks;
     await this.zfsManager.createPool(zfsConfig!.pool, zfsConfig!.poolOptions);
     await this.zfsManager.addDataset(
-      zfsConfig!.pool,
+      zfsConfig!.pool.name,
       zfsConfig!.dataset.name,
       zfsConfig!.datasetOptions
     );

@@ -14,6 +14,13 @@
 			"require": "./dist/index.cjs"
 		}
 	},
+	"build": {
+		"files": [
+			"**/*",
+			"!**/*.test.js",
+			"!**/*.spec.js"
+		]
+	},
 	"types": "dist/lib/index.d.ts",
 	"scripts": {
 		"build:lib": "tsc --noEmit && vite build",
@@ -24,6 +31,7 @@
 		"docs": "typedoc --out ../docs"
 	},
 	"devDependencies": {
+		"@types/electron": "^1.6.12",
 		"@types/node": "^22.13.4",
 		"@types/node-localstorage": "^1.3.3",
 		"node-localstorage": "^3.0.5",
@@ -36,8 +44,12 @@
 		"vitest": "^1.6.0"
 	},
 	"dependencies": {
-		"monet": "^0.9.3",
-		"neverthrow": "^6.2.1",
+		"monet": "0.9.3",
+		"neverthrow": "6.2.2",
 		"vite": "^6.0.11"
+	},
+	"peerDependencies": {
+		"monet": "0.9.3",
+		"neverthrow": "6.2.2"
 	}
 }

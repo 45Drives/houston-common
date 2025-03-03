@@ -12,31 +12,35 @@ declare module "vite" {
 }
 import { defineConfig } from "vite";
 
-import { resolve } from "path";
+import path from "path";
 
 export default defineConfig({
   base: "./",
   resolve: {
     alias: {
-      "@": new URL("./lib/", import.meta.url).pathname,
+      "@": path.resolve(__dirname, "lib"),
     },
   },
   build: {
     minify: false,
     // lib property is set in build script
     lib: {
-      entry: new URL("./lib/index.ts", import.meta.url).pathname,
+      entry: path.resolve(__dirname, "lib/index.ts"),
       name: "Houston Common Library",
       // the proper extensions will be added
       fileName: "index",
       formats: ["es", "cjs"],
+    },
+    rollupOptions: {
+      external: (id) => id.includes('test') || id.includes('spec'), // Exclude test files
     },
     sourcemap: true,
     emptyOutDir: true,
   },
   test: {
     globals: true,
-    environment: 'jsdom'
+    environment: 'jsdom',
+    setupFiles: './tests/setup.ts',
   },
   plugins: [
     dts({

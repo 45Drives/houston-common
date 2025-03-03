@@ -35,57 +35,56 @@ const driveSlots = defineModel<DriveSlot[]>("driveSlots", { default: [] });
 
 const darkMode = useDarkModeState();
 
-const serverView = import("./ServerView").then(({ ServerView, DriveSlotComponent }) => {
+
+import("./ServerView").then(({ ServerView }) => {
+  const watchHandles: WatchHandle[] = [];
+
   const serverView = new ServerView(props.server);
 
-  serverView.addEventListener("selectionchange", (e) => {
-    selectedDriveSlots.value = e.components
-      .filter((c): c is InstanceType<typeof DriveSlotComponent> => c instanceof DriveSlotComponent)
-      .map((driveSlot) => driveSlot.userData);
+  import("./ServerView/DriveSlot").then(({ DriveSlotComponent }) => {
+    serverView.addEventListener("selectionchange", (e) => {
+      selectedDriveSlots.value = e.components
+        .filter(
+          (c): c is InstanceType<typeof DriveSlotComponent> => c instanceof DriveSlotComponent
+        )
+        .map((driveSlot) => driveSlot.userData);
+    });
   });
 
   serverView.addEventListener("driveslotchange", (e) => {
     driveSlots.value = [...e.slots];
   });
 
-  return serverView;
-});
-
-onMounted(() => {
-  serverView.then((serverView) => {
-    const watchHandles: WatchHandle[] = [];
-
-    watchHandles.push(
-      watchEffect(() => {
-        if (!canvasParent.value) {
-          return;
-        }
-        serverView.start(canvasParent.value);
-      })
-    );
-
-    watchHandles.push(
-      watchEffect(() => {
-        serverView.enableSelection = props.enableSelection;
-        serverView.enableRotate = props.enableRotate;
-        serverView.enablePan = props.enablePan;
-        serverView.enableZoom = props.enableZoom;
-      })
-    );
-
-    watchHandles.push(
-      watchEffect(() => {
-        serverView.setBackground(darkMode.value ? 0x262626 : 0xffffff);
-      })
-    );
-
-    unmountCallback = () => {
-      serverView.stop();
-      for (const wh of watchHandles) {
-        wh.stop();
+  watchHandles.push(
+    watchEffect(() => {
+      if (!canvasParent.value) {
+        return;
       }
-    };
-  });
+      serverView.start(canvasParent.value);
+    })
+  );
+
+  watchHandles.push(
+    watchEffect(() => {
+      serverView.enableSelection = props.enableSelection;
+      serverView.enableRotate = props.enableRotate;
+      serverView.enablePan = props.enablePan;
+      serverView.enableZoom = props.enableZoom;
+    })
+  );
+
+  watchHandles.push(
+    watchEffect(() => {
+      serverView.setBackground(darkMode.value ? 0x262626 : 0xffffff);
+    })
+  );
+
+  unmountCallback = () => {
+    serverView.stop();
+    for (const wh of watchHandles) {
+      wh.stop();
+    }
+  };
 });
 
 onBeforeUnmount(() => {

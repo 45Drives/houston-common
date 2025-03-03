@@ -7,3 +7,4 @@ export * from "./zfs/types";
 export * from "./zfs/manager";
 export * from "./calendar/manager";
 export * from "./calendar/types";
+export * from "./backup";

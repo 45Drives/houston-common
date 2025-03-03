@@ -34,6 +34,7 @@ export const HoustonDriver = HoustonDriver_ as Pick<
 export * from "@/houston";
 export * from "@/syntax";
 export * from "@/utils";
+export * from "@/electronIPC";
 export * from "@/errors";
 export * from "@/download";
 export * from "@/upload";
@@ -47,7 +48,25 @@ export * from "@/driveSlots/types";
 
 export * as legacy from "@/legacy";
 
-window.reportHoustonError ??= (e, ctx: string = "") => {
-  console.error(ctx, e);
-  return e;
-};
+function setupReportHoustonError() {
+  const globalObj =
+    typeof window !== "undefined"
+      ? window // Browser
+      : typeof global !== "undefined"
+      ? global // Node.js
+      : globalThis; // Fallback (covers workers, Deno, etc.)
+
+  if (!("reportHoustonError" in globalObj)) {
+    Object.defineProperty(globalObj, "reportHoustonError", {
+      value: (e: unknown, ctx: string = "") => {
+        console.error(ctx, e);
+        return e;
+      },
+      writable: true, // Prevent accidental overwrites
+      configurable: true, // Allow redefining if needed
+    });
+  }
+}
+
+// Call it once to initialize
+setupReportHoustonError();

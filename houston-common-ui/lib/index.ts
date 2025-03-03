@@ -17,4 +17,4 @@ window.onerror = (event) => {
   return false;
 };
 
-window.reportHoustonError = reportError;
+(globalThis as any).reportHoustonError = reportError

@@ -5,7 +5,8 @@ export type IPCMessageTarget = "cockpit" | "renderer" | "backend";
 export type IPCMessageTypes = {
   action: string;
   action2: { prop: "val" };
-  sendBackupTasks: BackUpTask[]
+  sendBackupTasks: BackUpTask[],
+  mountSambaClient: {smb_host: string, smb_share: string, smb_user: string, smb_pass: string}
 };
 
 export type IPCMessage<MessageTypes extends Record<string, any>, T extends keyof MessageTypes> = {

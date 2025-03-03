@@ -21,7 +21,10 @@ export class IPCMessageRouterRenderer<
     super("renderer");
     // from backend to renderer
     window.electron.ipcRenderer.on("IPCMessage", (_event, message: any) => {
-      console.log(message)
+      try {
+        message = JSON.parse(message);
+      } catch (error) {
+      }
       if (!isIPCMessage<MessageTypes>(message)) {
         return;
       }
@@ -34,7 +37,12 @@ export class IPCMessageRouterRenderer<
     if (!this.webviewElement) {
       this.webviewElement = webviewElement;
       this.webviewElement.addEventListener("console-message", (event: any) => {
-        const message = event.message;
+        let message = event.message;
+        try {
+          message = JSON.parse(message);
+        } catch (error) {
+        }
+
         if (!isIPCMessage<MessageTypes>(message)) {
           return;
         }

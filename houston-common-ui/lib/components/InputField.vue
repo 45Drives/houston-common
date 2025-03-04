@@ -6,7 +6,7 @@ import {
 } from "vue";
 import { v4 as uuidv4 } from "uuid";
 
-const [model, modifiers] = defineModel<string>({ default: "" });
+const [model, modifiers] = defineModel<string | number>({ default: "" });
 
 const props = withDefaults(
   defineProps<{

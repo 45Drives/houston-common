@@ -1,5 +1,6 @@
 
 import { Interval, TimeUnit } from './types';
+import { TaskSchedule } from '../backup';
 
 function getMonthName(number: number): string {
     const months = [
@@ -214,3 +215,46 @@ export function validateCronField(value: string, type: TimeUnit): boolean {
 
     return false;
 }
+
+export function parseTaskScheduleIntoString(schedule: TaskSchedule): string {
+    const elements: string[] = [];
+
+    // Extract day and month for the start date
+    const startDay = schedule.startDate.getDate();
+    const startMonth = schedule.startDate.toLocaleString("en-US", { month: "long" });
+
+    // Format repeat frequency
+    switch (schedule.repeatFrequency) {
+        case "hour":
+            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)}`);
+            elements.push("every hour");
+            break;
+        case "day":
+            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)}`);
+            elements.push("every day");
+            break;
+        case "week":
+            const dayOfWeek = schedule.startDate.toLocaleString("en-US", { weekday: "long" });
+            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)}`);
+            elements.push(`every week on ${dayOfWeek}`);
+            break;
+        case "month":
+            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)}`);
+            elements.push(`every month on the ${startDay}${getOrdinalSuffix(startDay)}`);
+            break;
+    }
+
+    return elements.filter(e => e).join(", ");
+}
+
+// Helper function to format ordinal numbers (1st, 2nd, 3rd, etc.)
+function getOrdinalSuffix(n: number): string {
+    if (n >= 11 && n <= 13) return "th";
+    switch (n % 10) {
+        case 1: return "st";
+        case 2: return "nd";
+        case 3: return "rd";
+        default: return "th";
+    }
+}
+

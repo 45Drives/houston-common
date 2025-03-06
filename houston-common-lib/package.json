@@ -46,6 +46,7 @@
 		"vitest": "^1.6.0"
 	},
 	"dependencies": {
+		"esbuild": "^0.25.0",
 		"monet": "0.9.3",
 		"neverthrow": "6.2.2",
 		"vite": "^6.0.11"

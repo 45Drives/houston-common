@@ -32,12 +32,14 @@ export function factory(): IHoustonDriver {
   };
   process.on("exit", cleanup);
 
-  // cleanup for tests, for some reason "exit" is never triggered
-  import("vitest").then((vitest) => {
-    vitest.afterAll(() => {
-      cleanup();
+  if (process.env.NODE_ENV === 'test') {
+    // cleanup for tests, for some reason "exit" is never triggered
+    import("vitest").then((vitest) => {
+      vitest.afterAll(() => {
+        cleanup();
+      });
     });
-  });
+  }
 
   const gettext = (...args: [string] | [string, string]) => args.at(-1)!;
   const localStorage = new localstorage.LocalStorage(path.join(datadir, "localStorage"));

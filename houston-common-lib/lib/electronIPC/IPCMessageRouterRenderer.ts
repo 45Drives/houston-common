@@ -33,26 +33,19 @@ export class IPCMessageRouterRenderer<
   }
 
   setCockpitWebView(webviewElement: any) {
-    // from cockpit to renderer
-    if (!this.webviewElement) {
-      this.webviewElement = webviewElement;
-      this.webviewElement.addEventListener("console-message", (event: any) => {
-        let message = event.message;
-        try {
-          message = JSON.parse(message);
-        } catch (error) {
-        }
+    this.webviewElement = webviewElement;
+    this.webviewElement.addEventListener("console-message", (event: any) => {
+      let message = event.message;
+      try {
+        message = JSON.parse(message);
+      } catch (error) {
+      }
 
-        if (!isIPCMessage<MessageTypes>(message)) {
-          return;
-        }
-        this.routeMessage(message);
-      });
-    } else {
-      // I guess it could be set more than once but maybe we should clean up the listener and readd
-      throw new Error("Setting the cockpit webview can only be done once.");
-    }
-
+      if (!isIPCMessage<MessageTypes>(message)) {
+        return;
+      }
+      this.routeMessage(message);
+    });
   }
 
   protected forwardToBackend<

@@ -37,6 +37,9 @@
     "zod": "^3.23.8",
     "zod-validation-error": "^3.3.0"
   },
+  "peerDependencies": {
+    "vue": "^3.5.13"
+  },
   "devDependencies": {
     "@fontsource/red-hat-text": "^5.0.18",
     "@rushstack/eslint-patch": "^1.10.2",

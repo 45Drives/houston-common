@@ -29,8 +29,8 @@ jobs:
       run:  git checkout -b gh-pages
     - name: Generate autodocs
       run:  |
-        yarn set version stable
-        yarn workspaces foreach -A install
+        ./bootstrap.sh
+        yarn install
         yarn docs
     - id: "upload-documentation"
       name: "Upload Pages artifact"

@@ -123,7 +123,18 @@ export type GetDriveSlotsOpts = {
    * default: false
    */
   excludeEmpty?: boolean;
+  /**
+   * Include drives that aren't in aliased slots, e.g. boot drives
+   */
+  includeNonAliased?: boolean;
 };
+
+export type LiveDriveSlotsOpts = {
+  /**
+   * Include drives that aren't in aliased slots, e.g. boot drives
+   */
+  includeNonAliased?: boolean;
+}
 
 export type LiveDriveSlotsHandle = {
   stop: () => void;

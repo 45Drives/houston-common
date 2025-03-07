@@ -3,7 +3,7 @@
 from functools import partial
 import pyudev, json, re, subprocess, argparse
 
-AUTO_REFRESH_TIME = 10
+AUTO_REFRESH_TIME = 30
 
 
 def get_smart_info(device: pyudev.Device) -> dict:
@@ -89,19 +89,23 @@ def handle_add_or_change(device: pyudev.Device, slot: dict):
     print(json.dumps(message, indent=None), flush=True)
 
 
-def monitor_changes(udev_ctx: pyudev.Context):
+def monitor_changes(udev_ctx: pyudev.Context, args):
     udev_monitor = pyudev.Monitor.from_netlink(udev_ctx)
 
     udev_monitor.filter_by("block", "disk")
 
     while True:
         for device in iter(partial(udev_monitor.poll, AUTO_REFRESH_TIME), None):
+            if device.device_path.startswith("/devices/virtual"):
+                continue
             slot = {}
 
             if "SLOT_NAME" in device:
                 slot["slotId"] = device["SLOT_NAME"]
             elif "ID_VDEV" in device:
                 slot["slotId"] = device["ID_VDEV"]
+            elif args.include_non_aliased:
+                slot["slotId"] = "unknown"
             else:
                 continue
 
@@ -109,11 +113,12 @@ def monitor_changes(udev_ctx: pyudev.Context):
                 handle_remove(device, slot)
             elif device.action in ["add", "change"]:
                 handle_add_or_change(device, slot)
-        report_initial(udev_ctx)
+        report_initial(udev_ctx, args)
 
 
-def get_slots(udev_ctx: pyudev.Context):
+def get_slots(udev_ctx: pyudev.Context, args):
     slotMap = {}
+    nonAliased = []
 
     with open("/etc/vdev_id.conf", "r") as vdev_id:
         for line in vdev_id:
@@ -123,23 +128,28 @@ def get_slots(udev_ctx: pyudev.Context):
             slotMap[slotId] = None
 
     for device in udev_ctx.list_devices(subsystem="block", DEVTYPE="disk"):
+        if device.device_path.startswith("/devices/virtual"):
+            continue
         slotId = None
         if "SLOT_NAME" in device:
             slotId = device["SLOT_NAME"]
         elif "ID_VDEV" in device:
             slotId = device["ID_VDEV"]
-        else:
-            continue
+        
+        if slotId is not None:
+            slotMap[slotId] = get_drive(device)
+        elif args.include_non_aliased:
+            nonAliased.append(get_drive(device))
+    
+    aliasedSlots = list(map(lambda x: {"slotId": x[0], "drive": x[1]}, slotMap.items()))
 
-        slotMap[slotId] = get_drive(device)
-
-    return list(map(lambda x: {"slotId": x[0], "drive": x[1]}, slotMap.items()))
+    return aliasedSlots + list(map(lambda drive: {"slotId": "unknown", "drive": drive}, nonAliased))
 
 
-def report_initial(udev_ctx: pyudev.Context):
+def report_initial(udev_ctx: pyudev.Context, args):
     message = {
         "type": "reportAll",
-        "slots": get_slots(udev_ctx),
+        "slots": get_slots(udev_ctx, args),
     }
     print(json.dumps(message, indent=None), flush=True)
 
@@ -147,15 +157,16 @@ def report_initial(udev_ctx: pyudev.Context):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--live", action="store_true", default=False, required=False)
+    parser.add_argument("--include-non-aliased", action="store_true", default=False, required=False)
     args = parser.parse_args()
 
     udev_ctx = pyudev.Context()
 
     if args.live:
-        report_initial(udev_ctx)
-        monitor_changes(udev_ctx)
+        report_initial(udev_ctx, args)
+        monitor_changes(udev_ctx, args)
     else:
-        print(json.dumps(get_slots(udev_ctx)))
+        print(json.dumps(get_slots(udev_ctx, args)))
 
 
 if __name__ == "__main__":

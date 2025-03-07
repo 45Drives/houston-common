@@ -15,6 +15,7 @@ import {
   DriveSlot,
   getDriveSlots,
   GetDriveSlotsOpts,
+  LiveDriveSlotsOpts,
   startLiveDriveSlotsWatcher,
   type Drive,
 } from "@/driveSlots";
@@ -139,33 +140,41 @@ export class Server {
   ): ResultAsync<(DriveSlot & { drive: Drive })[], ProcessError | SyntaxError>;
   getDriveSlots(opts: GetDriveSlotsOpts = {}) {
     if (opts.excludeEmpty) {
-      return getDriveSlots(this, { excludeEmpty: true });
+      return getDriveSlots(this, { ...opts, excludeEmpty: true });
     }
-    return getDriveSlots(this, { excludeEmpty: false });
+    return getDriveSlots(this, { ...opts, excludeEmpty: false });
   }
 
   /**
    * Set up live view of system drive slots.
    * @param setter This callback will be called once initially and every time a disk is added or removed
-   * @returns
+   * @param opts Options (e.g. includeNonAliased)
+   * @returns LiveDriveSlotsHandle to stop watcher
    *
    * @example
    * ```vue
    * <script setup lang="ts">
-   * import { ref } from "vue";
+   * import { ref, onMounted, onUnmounted } from "vue";
    * import { server, DriveSlot } from "@45drives/houston-common-lib";
    *
    * const driveSlots = ref<DriveSlot[]>([]);
+   * let liveDriveSlotsHandle: LiveDriveSlotsHandle;
    *
-   * server.setupLiveDriveSlotInfo((slots) => driveSlots.value = slots);
+   * onMounted(() => {
+   *     liveDriveSlotsHandle = server.setupLiveDriveSlotInfo((slots) => driveSlots.value = slots);
+   * });
+   * 
+   * onUnmounted(() => {
+   *     liveDriveSlotsHandle?.stop();
+   * });
    * </script>
    * <template>
    *
    * </template>
    * ```
    */
-  setupLiveDriveSlotInfo(setter: (slots: DriveSlot[]) => void) {
-    return startLiveDriveSlotsWatcher(this, setter);
+  setupLiveDriveSlotInfo(setter: (slots: DriveSlot[]) => void, opts?: LiveDriveSlotsOpts) {
+    return startLiveDriveSlotsWatcher(this, setter, opts);
   }
 
   /**

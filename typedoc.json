@@ -29,7 +29,6 @@
 		"noUncheckedIndexedAccess": false,
     },
     "sourceLinkExternal": true,
-    "hideParameterTypesInTitle": false,
     "sidebarLinks": {
         "Official Cockpit API Documentation": "https://cockpit-project.org/guide/latest/api-base1.html"
     },

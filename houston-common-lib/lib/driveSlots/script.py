@@ -50,8 +50,13 @@ def get_smart_info(device: pyudev.Device) -> dict:
         if "smart_status" in smart_json.keys() and smart_json["smart_status"]["passed"]
         else "POOR"
     )
+    smart_info["freshness"] = get_freshness(smart_info) 
     return smart_info
 
+
+def get_freshness(smart_info: dict) -> {
+    return "NEW";
+}
 
 def get_drive(device: pyudev.Device) -> dict:
     drive = {}

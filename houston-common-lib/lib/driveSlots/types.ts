@@ -52,6 +52,7 @@ export type SmartInfo = {
    * "OK"
    */
   health: string;
+  freshness: 'NEW' | 'USED' | 'OLD'
 };
 
 function formatTemperature(tempC: number): string {

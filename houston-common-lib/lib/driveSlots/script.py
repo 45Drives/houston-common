@@ -54,9 +54,9 @@ def get_smart_info(device: pyudev.Device) -> dict:
     return smart_info
 
 
-def get_freshness(smart_info: dict) -> {
-    return "NEW";
-}
+def get_freshness(smart_info: dict):
+    return "NEW"
+
 
 def get_drive(device: pyudev.Device) -> dict:
     drive = {}

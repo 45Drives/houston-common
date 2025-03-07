@@ -32,6 +32,10 @@ function SlotLocation(
   return { id, type, location: new THREE.Vector3(x, y, z), rotation: new THREE.Euler(rx, ry, rz) };
 }
 
+function slotLocationsByPitch(type: SlotType, slotIds: string[], startX: number, startY: number, startZ: number, pitchX: number, pitchY: number, pitchZ: number) {
+  return slotIds.map((slotId, index) => (SlotLocation(slotId, type, startX + pitchX * index, startY + pitchY * index, startZ + pitchZ * index)));
+}
+
 export class Chassis extends ServerComponent {
   protected static modelNumberLUT: { re: RegExp; modelLoader: ModelLoader; slots: SlotLocation[] }[] = [
     {
@@ -39,36 +43,37 @@ export class Chassis extends ServerComponent {
       modelLoader: lazyModelLoader(() =>
         loadImageModel(import("./assets/hl4/drivebay.png"), { width: 5 + 3 / 8 })
       ),
-      slots: [
-        SlotLocation(
-          "1-1",
-          "HDD",
-          (37 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,
-          (((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,
-          1
-        ),
-        SlotLocation(
-          "1-2",
-          "HDD",
-          (69 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,
-          (((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,
-          1
-        ),
-        SlotLocation(
-          "1-3",
-          "HDD",
-          (101 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,
-          (((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,
-          1
-        ),
-        SlotLocation(
-          "1-4",
-          "HDD",
-          (133 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,
-          (((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,
-          1
-        ),
-      ],
+      // slots: [
+      //   SlotLocation(
+      //     "1-1",
+      //     "HDD",
+      //     (37 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,
+      //     (((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,
+      //     1
+      //   ),
+      //   SlotLocation(
+      //     "1-2",
+      //     "HDD",
+      //     (69 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,
+      //     (((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,
+      //     1
+      //   ),
+      //   SlotLocation(
+      //     "1-3",
+      //     "HDD",
+      //     (101 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,
+      //     (((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,
+      //     1
+      //   ),
+      //   SlotLocation(
+      //     "1-4",
+      //     "HDD",
+      //     (133 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,
+      //     (((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,
+      //     1
+      //   ),
+      // ],
+      slots: slotLocationsByPitch("HDD", ["1-1", "1-2", "1-3", "1-4"], (37 * (5 + 3 / 8)) / 144 - (5 + 3 / 8) / 2,(((5 + 3 / 8) / 144) * 165) / 2 - (45 * (5 + 3 / 8)) / 144,1, 1.125, 0, 0)
     },
   ];
 

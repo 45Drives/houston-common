@@ -57,7 +57,7 @@ const emit = defineEmits<{
           class="fixed overflow-hidden z-10 inset-0 flex items-end sm:items-center justify-center px-4 pb-20 pt-4 sm:pb-4"
           @click.self="emit('clickOutside')"
         >
-          <div class="max-w-full max-h-full overflow-auto whitespace-normal">
+          <div class="w-full max-h-full overflow-auto whitespace-normal">
             <slot />
           </div>
         </div>

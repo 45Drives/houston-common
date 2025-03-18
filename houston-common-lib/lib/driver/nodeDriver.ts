@@ -15,6 +15,9 @@ export function factory(): IHoustonDriver {
     case "linux":
       Process = linuxProcessFactory();
       break;
+    case "darwin":
+      Process = linuxProcessFactory();
+      break;
     case "win32":
       Process = windowsProcessFactory();
       break;

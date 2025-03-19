@@ -209,14 +209,46 @@ export class Server {
     return okAsync(this.hostname);
   }
 
+  // setHostname(hostname: string): ResultAsync<null, ProcessError> {
+  //   if (this.hostname === undefined || this.hostname !== hostname) {
+  //     return this.execute(new Command(["hostnamectl", "set-hostname", hostname]), true).map(
+  //       () => null
+  //     );
+  //   }
+  //   return okAsync(null);
+  // }
+
   setHostname(hostname: string): ResultAsync<null, ProcessError> {
     if (this.hostname === undefined || this.hostname !== hostname) {
-      return this.execute(new Command(["hostnamectl", "set-hostname", hostname]), true).map(
-        () => null
-      );
+      return this.execute(new Command(["hostnamectl", "set-hostname", hostname], { superuser: "try" }))
+        .orElse((err) => {
+          if (err.message.includes("Could not set property: Access denied")) {
+            return this.execute(new Command(["hostnamectl", "set-hostname", hostname], { superuser: "try" }));
+          }
+          return errAsync(err);
+        })
+        .map(() => null)
+        .orElse(() => okAsync(null)); // ignore errors after both attempts
     }
     return okAsync(null);
   }
+
+  // setHostname(hostname: string): ResultAsync<null, ProcessError> {
+  //   if (this.hostname === undefined || this.hostname !== hostname) {
+  //     return this.execute(new Command(["sh", "-c", `echo '${hostname}' > /etc/hostname`], { superuser: "try" }))
+  //       .andThen(() =>
+  //         this.execute(
+  //           new Command(
+  //             ["sh", "-c", `echo 'PRETTY_HOSTNAME=\"${hostname}\"' > /etc/machine-info`],
+  //             { superuser: "try" }
+  //           )
+  //         )
+  //       )
+  //       .map(() => null);
+  //   }
+  //   return okAsync(null);
+  // }
+
 
   getIpAddress(cache: boolean = true): ResultAsync<string, ProcessError | ParsingError> {
     if (this.ipAddress === undefined || cache === false) {

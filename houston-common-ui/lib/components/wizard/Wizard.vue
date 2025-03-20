@@ -1,21 +1,46 @@
 <script setup lang="ts">
-import { defineWizardSteps, type WizardStep } from "./index";
+import { createWizardInjectionKey, defineWizardSteps, type WizardStep } from "./index";
 import WizardStepView from "./WizardStepView.vue";
-import StepsHeader from "@/components/wizard/StepsHeader.vue";
-import { computed, defineProps } from "vue";
+import StepsHeader from "./StepsHeader.vue";
+import { computed, defineProps, ref, watch } from "vue";
+import ProgressBar from "./ProgressBar.vue";
 
 const props = defineProps<{
+  id: string,
   steps: WizardStep[];
+  onComplete: (data: any) => void;
   hideHeader?: boolean;
 }>();
 
-const state = defineWizardSteps(props.steps);
+console.log(props.id);
+
+const state = defineWizardSteps(props.steps, createWizardInjectionKey(props.id));
+console.log("defined")
+
+watch(
+  () => state.completedSteps,  // Watch only completedSteps
+  (newCompletedSteps) => {
+    console.log(newCompletedSteps);
+
+    if (newCompletedSteps.value.filter(completed => completed === true).length === props.steps.length) {
+      props.onComplete(state.data);
+    }
+  },
+  { deep: true } // Ensure it tracks changes inside the array
+);
+
+const progress = computed(() => {
+  const total = props.steps.length;
+  const current = state.index.value;
+  return Math.round((current / total) * 100);
+})
 
 </script>
 
 <template>
   <div class="flex flex-col">
     <StepsHeader v-if="!hideHeader" v-bind="state" />
+    <ProgressBar v-if="hideHeader" :percent="progress" />
     <WizardStepView v-bind="state" class="grow" />
   </div>
 </template>

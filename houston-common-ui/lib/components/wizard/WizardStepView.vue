@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, defineProps, type Component } from "vue";
-import { type HoustonAppTabEntry } from "@/components/tabs";
+import { defineProps } from "vue";
 import type { WizardState } from '@/components/wizard';
 
 const props = defineProps<WizardState>();

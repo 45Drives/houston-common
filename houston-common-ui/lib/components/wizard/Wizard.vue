@@ -6,6 +6,7 @@ import { computed, defineProps } from "vue";
 
 const props = defineProps<{
   steps: WizardStep[];
+  hideHeader?: boolean;
 }>();
 
 const state = defineWizardSteps(props.steps);
@@ -14,7 +15,7 @@ const state = defineWizardSteps(props.steps);
 
 <template>
   <div class="flex flex-col">
-    <StepsHeader v-bind="state" />
+    <StepsHeader v-if="!hideHeader" v-bind="state" />
     <WizardStepView v-bind="state" class="grow" />
   </div>
 </template>

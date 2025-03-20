@@ -50,11 +50,11 @@ export function defineWizardSteps(
     const step = steps[currentIndex];
 
     const nextStepIndex = step.nextStep ? step.nextStep(data) : currentIndex + 1;
-    console.log(nextStepIndex)
-    console.log(data)
     const nextStep = steps[nextStepIndex];
+    if (nextStep) {
 
-    nextStep.previousStepIndex = currentIndex;
+      nextStep.previousStepIndex = currentIndex;
+    }
 
     return nextStepIndex;
   };

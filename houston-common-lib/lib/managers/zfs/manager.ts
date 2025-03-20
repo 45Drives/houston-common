@@ -56,7 +56,7 @@ export class ZFSManager implements IZFSManager {
 
     // Filter out invalid paths and replace NVMe vdev_path with sd_path
     const validDisks = vdev.disks
-      .map((disk) => (disk.vdev_path && disk.vdev_path !== "N/A") ? disk.vdev_path : (disk.sd_path ?? ""))
+      .map((disk) => (disk.path && disk.path !== "N/A") ? disk.path : (disk.sd_path ?? ""))
       .filter((path): path is string => path !== "N/A" && path !== ""); // Type assertion to remove undefined values
 
     if (validDisks.length === 0) {

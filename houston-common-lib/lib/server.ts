@@ -209,15 +209,6 @@ export class Server {
     return okAsync(this.hostname);
   }
 
-  // setHostname(hostname: string): ResultAsync<null, ProcessError> {
-  //   if (this.hostname === undefined || this.hostname !== hostname) {
-  //     return this.execute(new Command(["hostnamectl", "set-hostname", hostname]), true).map(
-  //       () => null
-  //     );
-  //   }
-  //   return okAsync(null);
-  // }
-
   setHostname(hostname: string): ResultAsync<null, ProcessError> {
     if (this.hostname === undefined || this.hostname !== hostname) {
       return this.execute(new Command(["hostnamectl", "set-hostname", hostname], { superuser: "try" }))
@@ -228,27 +219,42 @@ export class Server {
           return errAsync(err);
         })
         .map(() => null)
-        .orElse(() => okAsync(null)); // ignore errors after both attempts
+        .orElse(() => okAsync(null));
     }
     return okAsync(null);
   }
 
-  // setHostname(hostname: string): ResultAsync<null, ProcessError> {
-  //   if (this.hostname === undefined || this.hostname !== hostname) {
-  //     return this.execute(new Command(["sh", "-c", `echo '${hostname}' > /etc/hostname`], { superuser: "try" }))
-  //       .andThen(() =>
-  //         this.execute(
-  //           new Command(
-  //             ["sh", "-c", `echo 'PRETTY_HOSTNAME=\"${hostname}\"' > /etc/machine-info`],
-  //             { superuser: "try" }
-  //           )
-  //         )
-  //       )
-  //       .map(() => null);
-  //   }
-  //   return okAsync(null);
-  // }
+  writeHostnameFiles(hostname: string): ResultAsync<null, ProcessError> {
+    console.log(`Writing hostname files for: ${hostname}`);
 
+    return this.execute(new Command(["sh", "-c", `echo '${hostname}' > /etc/hostname`], { superuser: "try" }))
+      .map((result) => {
+        console.log("Successfully wrote to /etc/hostname");
+        return result;
+      })
+      .orElse((err) => {
+        console.log("Failed to write to /etc/hostname:", err.message);
+        return errAsync(err);
+      })
+      .andThen(() => {
+        console.log("Writing pretty hostname to /etc/machine-info");
+        return this.execute(
+          new Command(["sh", "-c", `echo 'PRETTY_HOSTNAME=\"${hostname}\"' > /etc/machine-info`], {
+            superuser: "try",
+          })
+        )
+          .map((result) => {
+            console.log("Successfully wrote to /etc/machine-info");
+            return result;
+          })
+          .orElse((err) => {
+            console.log("Failed to write to /etc/machine-info:", err.message);
+            return errAsync(err);
+          });
+      })
+      .map(() => null)
+      .orElse(() => okAsync(null)); // Ignore any errors and return null in the end
+  }
 
   getIpAddress(cache: boolean = true): ResultAsync<string, ProcessError | ParsingError> {
     if (this.ipAddress === undefined || cache === false) {

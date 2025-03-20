@@ -151,6 +151,9 @@ export class ServerView extends THREE.EventDispatcher<
     elementHeight: number,
     updateStyle: boolean = false
   ) {
+    if (elementWidth === 0 || elementHeight === 0) {
+      return;
+    }
     this.renderer.setSize(elementWidth, elementHeight, updateStyle);
 
     const aspect = elementWidth / elementHeight;

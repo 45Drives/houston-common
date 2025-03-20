@@ -97,6 +97,7 @@ export class EasySetupConfigurator {
   private async updateHostname(config: EasySetupConfig) {
     if (config.srvrName) {
       await unwrap(server.setHostname(config.srvrName));
+      await unwrap(server.writeHostnameFiles(config.srvrName));
     }
     await unwrap(
       server.execute(
@@ -210,6 +211,16 @@ export class EasySetupConfigurator {
     //     await unwrap(shareSamabaResult);
     //   }
     // }
+
+    // config.sambaConfig!.shares = [
+    //   {
+    //     ...SambaShareConfig.defaults(config.folderName),
+    //     path: `/mnt/${config.folderName}`,
+    //     description: `Auto-generated share for ${config.folderName}`,
+    //     readOnly: false,
+    //   },
+    // ];
+
 
     // Apply share configurations and ensure correct ownership/permissions
     for (const share of config.sambaConfig!.shares) {

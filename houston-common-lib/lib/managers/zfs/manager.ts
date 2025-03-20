@@ -56,9 +56,8 @@ export class ZFSManager implements IZFSManager {
 
     // Filter out invalid paths and replace NVMe vdev_path with sd_path
     const validDisks = vdev.disks
-      .map((disk) => (disk.vdev_path && disk.vdev_path !== "N/A") ? disk.vdev_path : (disk.sd_path ?? ""))
+      .map((disk) => (disk.path && disk.path !== "N/A") ? disk.path : (disk.sd_path ?? ""))
       .filter((path): path is string => path !== "N/A" && path !== ""); // Type assertion to remove undefined values
-
     if (validDisks.length === 0) {
       throw new ValueError(`VDev of type ${vdev.type} has no valid disks!`);
     }
@@ -92,6 +91,8 @@ export class ZFSManager implements IZFSManager {
   async createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<ExitedProcess> {
     const argv = ["zpool", "create", pool.name];
 
+    console.log('createPool pool:', pool);
+    // console.log('createPool poolOptions:', pool);
     // set up pool properties
     const poolProps: string[] = [];
 

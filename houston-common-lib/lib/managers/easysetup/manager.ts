@@ -212,9 +212,17 @@ export class EasySetupConfigurator {
     // }
 
     // Apply share configurations and ensure correct ownership/permissions
-    for (const share of config.sambaConfig!.shares) {
-      await unwrap(this.sambaManager.addShare(share));
-      await this.setShareOwnershipAndPermissions(share.path);
+    const shares = config.sambaConfig!.shares;
+    for (let i = 0; i < shares.length; i++) {
+      let share = shares[i];
+      if (share) {
+        if (config.folderName && i === 0) {
+  
+          share.name = config.folderName;
+        }
+        await unwrap(this.sambaManager.addShare(share));
+        await this.setShareOwnershipAndPermissions(share.path);
+      }
     }
   }
 

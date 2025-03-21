@@ -464,4 +464,16 @@ export class Server {
   toString(): string {
     return `Server(${this.host ?? "localhost"})`;
   }
+
+  reboot(): ResultAsync<null, ProcessError> {
+    return this.execute(new Command(['shutdown', '-r', 'now'], { superuser: 'try' }))
+      .map(() => {
+        console.log(`${this.toString()}: Reboot triggered.`);
+        return null;
+      })
+      .orElse((err) => {
+        console.error(`${this.toString()}: Failed to trigger reboot`, err);
+        return errAsync(err);
+      });
+  }
 }

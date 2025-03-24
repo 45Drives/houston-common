@@ -130,8 +130,12 @@ export class EasySetupConfigurator {
     //   console.log(error);
     // }
 
+    const allShares = (await this.sambaManager.getShares())._unsafeUnwrap();
+
     try {
-      config.sambaConfig?.shares.forEach(async share => {
+      console.log('existing samba shares:', allShares);
+      allShares.forEach(async share => {
+        console.log('existing share found:', share);
         await unwrap(this.sambaManager.closeSambaShare(share.name));
       });
     } catch (error) {
@@ -139,12 +143,13 @@ export class EasySetupConfigurator {
     }
 
     try {
+      console.log('existing pool found:', config.zfsConfig!.pool);
       await this.zfsManager.destroyPool(config.zfsConfig!.pool, { force: true });
     } catch (error) {
       console.log(error);
     }
 
-    for (let share of config.sambaConfig!.shares) {
+    for (let share of allShares) {
       try {
         await this.sambaManager.removeShare(share);
       } catch (error) {

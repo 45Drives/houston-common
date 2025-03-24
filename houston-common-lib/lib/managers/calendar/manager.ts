@@ -215,32 +215,33 @@ export function validateCronField(value: string, type: TimeUnit): boolean {
 
     return false;
 }
-
 export function parseTaskScheduleIntoString(schedule: TaskSchedule): string {
     const elements: string[] = [];
 
-    // Extract day and month for the start date
     const startDay = schedule.startDate.getDate();
     const startMonth = schedule.startDate.toLocaleString("en-US", { month: "long" });
+    const startHour = schedule.startDate.getHours().toString().padStart(2, '0');
+    const startMinute = schedule.startDate.getMinutes().toString().padStart(2, '0');
 
-    // Format repeat frequency
+    const startTimeString = `at ${startHour}:${startMinute}`;
+
     switch (schedule.repeatFrequency) {
         case "hour":
-            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)}`);
+            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)} ${startTimeString}`);
             elements.push("every hour");
             break;
         case "day":
-            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)}`);
-            elements.push("every day");
+            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)} ${startTimeString}`);
+            elements.push(`every day at ${startHour}:${startMinute}`);
             break;
         case "week":
             const dayOfWeek = schedule.startDate.toLocaleString("en-US", { weekday: "long" });
-            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)}`);
-            elements.push(`every week on ${dayOfWeek}`);
+            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)} ${startTimeString}`);
+            elements.push(`every week on ${dayOfWeek} at ${startHour}:${startMinute}`);
             break;
         case "month":
-            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)}`);
-            elements.push(`every month on the ${startDay}${getOrdinalSuffix(startDay)}`);
+            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)} ${startTimeString}`);
+            elements.push(`every month on the ${startDay}${getOrdinalSuffix(startDay)} at ${startHour}:${startMinute}`);
             break;
     }
 

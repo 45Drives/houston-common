@@ -9,3 +9,13 @@ export type EasySetupConfig = {
   srvrName?: string
   folderName?: string
 };
+
+export interface BackupLogEntry {
+  serverName: string;
+  shareName: string;
+  setupTime: string; // ISO string (formatted)
+}
+
+export interface BackupLog {
+  [ipAddress: string]: BackupLogEntry;
+}

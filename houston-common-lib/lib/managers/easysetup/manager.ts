@@ -1,4 +1,4 @@
-import { BackupLog, BackupLogEntry, EasySetupConfig } from "./types";
+import { BackupLogEntry, EasySetupConfig } from "./types";
 import {
   Command,
   SambaConfParser,

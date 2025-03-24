@@ -20,6 +20,20 @@ function getDaySuffix(day: number): string {
     }
 }
 
+// function formatTime(hour: number, minute: number): string {
+//     const h = hour.toString().padStart(2, '0');
+//     const m = minute.toString().padStart(2, '0');
+//     return `${h}:${m}`;
+// }
+
+function formatTime12h(hour: number, minute: number): string {
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    const h = (hour % 12) === 0 ? 12 : hour % 12;
+    const m = minute.toString().padStart(2, '0');
+    return `${h}:${m} ${suffix}`;
+}
+
+
 function formatUnit(value: string, type: TimeUnit): string {
     if (value === '*') {
         return type === 'minute'
@@ -104,22 +118,51 @@ export function parseIntervalIntoString(interval: Interval): string {
     return elements.filter(e => e).join(', ');
 }
 
+// export function formatCronToHumanReadable(cron: string): string {
+//     const [minute, hour, day, month, dayOfWeek] = cron.split(' ');
+
+//     const formattedMinute = formatCronPart(minute!, 'minute');
+//     const formattedHour = formatCronPart(hour!, 'hour');
+//     const formattedDay = formatCronPart(day!, 'day');
+//     const formattedMonth = formatCronPart(month!, 'month');
+//     const formattedDayOfWeek = formatCronPart(dayOfWeek!, 'dayOfWeek');
+
+//     let result = '';
+
+//     if (formattedMinute && formattedHour) {
+//         result += `At ${formattedHour} ${formattedMinute}`;
+//     } else if (formattedMinute) {
+//         result += formattedMinute;
+//     }
+
+//     if (formattedDay !== 'every day') {
+//         result += ` on ${formattedDay}`;
+//     }
+
+//     if (formattedMonth !== 'every month') {
+//         result += ` in ${formattedMonth}`;
+//     }
+
+//     if (formattedDayOfWeek !== 'every day') {
+//         result += ` only on ${formattedDayOfWeek}`;
+//     }
+
+//     return result.trim();
+// }
 export function formatCronToHumanReadable(cron: string): string {
     const [minute, hour, day, month, dayOfWeek] = cron.split(' ');
 
-    const formattedMinute = formatCronPart(minute!, 'minute');
-    const formattedHour = formatCronPart(hour!, 'hour');
+    const cronMinute = minute === '*' ? 0 : parseInt(minute!);
+    const cronHour = hour === '*' ? 0 : parseInt(hour!);
+    const timeString = (minute === '*' && hour === '*')
+        ? 'every hour'
+        : `at ${formatTime12h(cronHour, cronMinute)}`;
+
     const formattedDay = formatCronPart(day!, 'day');
     const formattedMonth = formatCronPart(month!, 'month');
     const formattedDayOfWeek = formatCronPart(dayOfWeek!, 'dayOfWeek');
 
-    let result = '';
-
-    if (formattedMinute && formattedHour) {
-        result += `At ${formattedHour} ${formattedMinute}`;
-    } else if (formattedMinute) {
-        result += formattedMinute;
-    }
+    let result = `${timeString}`;
 
     if (formattedDay !== 'every day') {
         result += ` on ${formattedDay}`;
@@ -135,6 +178,7 @@ export function formatCronToHumanReadable(cron: string): string {
 
     return result.trim();
 }
+
 
 function formatCronPart(value: string, type: TimeUnit): string {
     if (value === '*') {
@@ -159,7 +203,7 @@ function formatCronPart(value: string, type: TimeUnit): string {
     }
 
     if (type === 'minute' || type === 'hour') {
-        return `at ${value} ${type}`;
+        return value;
     }
 
     if (type === 'day') {
@@ -215,6 +259,7 @@ export function validateCronField(value: string, type: TimeUnit): boolean {
 
     return false;
 }
+
 export function parseTaskScheduleIntoString(schedule: TaskSchedule): string {
     const elements: string[] = [];
 

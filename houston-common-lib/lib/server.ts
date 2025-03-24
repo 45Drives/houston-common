@@ -466,7 +466,7 @@ export class Server {
   }
 
   reboot(): ResultAsync<null, ProcessError> {
-    return this.execute(new Command(['shutdown', '-r', 'now'], { superuser: 'try' }))
+    return this.execute(new Command(['reboot'], { superuser: 'try' }))
       .map(() => {
         console.log(`${this.toString()}: Reboot triggered.`);
         return null;

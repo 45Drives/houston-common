@@ -1,4 +1,4 @@
-import { BackupLogEntry, EasySetupConfig } from "./types";
+import { EasySetupConfig } from "./types";
 import {
   Command,
   SambaConfParser,
@@ -9,11 +9,11 @@ import {
   CommandOptions,
   ValueError,
 } from "@/index";
+import { storeEasySetupConfig } from './logConfig';
 import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
-import * as fs from 'fs';
-import * as path from 'path';
+
 
 export interface EasySetupProgress {
   message: string;
@@ -262,35 +262,5 @@ export class EasySetupConfigurator {
         };
       })
       .unwrapOr(null);
-  }
-}
-
-export async function storeEasySetupConfig(config: EasySetupConfig) {
-  const now = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
-  const ipAddress = (await server.getIpAddress())._unsafeUnwrap();
-  const configSavePath = `/etc/45drives/simple-setup-log.json`;
-
-  const newEntry: BackupLogEntry = {
-    serverName: config.srvrName!,
-    shareName: config.folderName!,
-    setupTime: now,
-  };
-
-  try {
-    fs.mkdirSync(path.dirname(configSavePath), { recursive: true });
-
-    let existingLog: Record<string, BackupLogEntry> = {};
-    if (fs.existsSync(configSavePath)) {
-      existingLog = JSON.parse(fs.readFileSync(configSavePath, 'utf-8'));
-    }
-
-    // Add or update entry for this IP
-    existingLog[ipAddress] = newEntry;
-
-    // Write updated log
-    fs.writeFileSync(configSavePath, JSON.stringify(existingLog, null, 2));
-    console.log(`✅ EasySetupConfig appended/updated for ${ipAddress} at ${configSavePath}`);
-  } catch (error) {
-    console.error('Error saving EasySetupConfig:', error);
   }
 }

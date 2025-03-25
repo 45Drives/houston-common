@@ -56,6 +56,8 @@ export class EasySetupConfigurator {
         await this.applySambaConfig(config);
         progressCallback({ message: "Network configured", step: 6, total });
 
+        await storeEasySetupConfig(config);
+
       } catch (error: any) {
         console.error("Error in setupStorage:", error);
         progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });
@@ -78,36 +80,6 @@ export class EasySetupConfigurator {
           clearInterval(stepInterval);
         }
       }, 2000);
-    }
-  }
-
-  async storeEasySetupConfig(config: EasySetupConfig) {
-    const now = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
-    const configSavePath = `/etc/45drives/simple-setup-log.json`;
-    const ipAddress = (await server.getIpAddress())._unsafeUnwrap(); // get IP from server object
-
-    const newEntry: BackupLogEntry = {
-      serverName: config.srvrName!,
-      shareName: config.folderName!,
-      setupTime: now,
-    };
-
-    try {
-      fs.mkdirSync(path.dirname(configSavePath), { recursive: true });
-
-      let existingLog: Record<string, BackupLogEntry> = {};
-      if (fs.existsSync(configSavePath)) {
-        existingLog = JSON.parse(fs.readFileSync(configSavePath, 'utf-8'));
-      }
-
-      // Add or update entry for this IP
-      existingLog[ipAddress] = newEntry;
-
-      // Write updated log
-      fs.writeFileSync(configSavePath, JSON.stringify(existingLog, null, 2));
-      console.log(`✅ EasySetupConfig appended/updated for ${ipAddress} at ${configSavePath}`);
-    } catch (error) {
-      console.error('Error saving EasySetupConfig:', error);
     }
   }
 
@@ -290,5 +262,35 @@ export class EasySetupConfigurator {
         };
       })
       .unwrapOr(null);
+  }
+}
+
+export async function storeEasySetupConfig(config: EasySetupConfig) {
+  const now = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
+  const ipAddress = (await server.getIpAddress())._unsafeUnwrap();
+  const configSavePath = `/etc/45drives/simple-setup-log.json`;
+
+  const newEntry: BackupLogEntry = {
+    serverName: config.srvrName!,
+    shareName: config.folderName!,
+    setupTime: now,
+  };
+
+  try {
+    fs.mkdirSync(path.dirname(configSavePath), { recursive: true });
+
+    let existingLog: Record<string, BackupLogEntry> = {};
+    if (fs.existsSync(configSavePath)) {
+      existingLog = JSON.parse(fs.readFileSync(configSavePath, 'utf-8'));
+    }
+
+    // Add or update entry for this IP
+    existingLog[ipAddress] = newEntry;
+
+    // Write updated log
+    fs.writeFileSync(configSavePath, JSON.stringify(existingLog, null, 2));
+    console.log(`✅ EasySetupConfig appended/updated for ${ipAddress} at ${configSavePath}`);
+  } catch (error) {
+    console.error('Error saving EasySetupConfig:', error);
   }
 }

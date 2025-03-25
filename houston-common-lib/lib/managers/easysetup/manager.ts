@@ -56,8 +56,6 @@ export class EasySetupConfigurator {
         await this.applySambaConfig(config);
         progressCallback({ message: "Network configured", step: 6, total });
 
-        console.log("storeEasySetupConfig is:", this.storeEasySetupConfig);
-        await this.storeEasySetupConfig(config);
       } catch (error: any) {
         console.error("Error in setupStorage:", error);
         progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });

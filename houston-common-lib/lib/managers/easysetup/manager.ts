@@ -56,7 +56,8 @@ export class EasySetupConfigurator {
         await this.applySambaConfig(config);
         progressCallback({ message: "Network configured", step: 6, total });
 
-        this.storeEasySetupConfig(config);
+        console.log("storeEasySetupConfig is:", this.storeEasySetupConfig);
+        await this.storeEasySetupConfig(config);
       } catch (error: any) {
         console.error("Error in setupStorage:", error);
         progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });
@@ -82,9 +83,9 @@ export class EasySetupConfigurator {
     }
   }
 
-  private async storeEasySetupConfig(config: EasySetupConfig) {
+  async storeEasySetupConfig(config: EasySetupConfig) {
     const now = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
-    const configSavePath = `/etc/houston/backup-log.json`;
+    const configSavePath = `/etc/45drives/simple-setup-log.json`;
     const ipAddress = (await server.getIpAddress())._unsafeUnwrap(); // get IP from server object
 
     const newEntry: BackupLogEntry = {

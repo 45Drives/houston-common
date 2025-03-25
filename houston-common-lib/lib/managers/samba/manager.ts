@@ -231,42 +231,18 @@ export abstract class SambaManagerBase implements ISambaManager {
 
   //   return proc.wait().map(() => { });
   // }
-  stopSambaService(): ResultAsync<void, ProcessError> {
-    const stopCommands = [
-      ['systemctl', 'stop', 'smb', 'nmb', 'winbind', 'smbd', 'nmbd', 'winbindd', 'samba'],
-      ['service', 'smb', 'stop'],
-      ['service', 'smbd', 'stop'],
-      ['service', 'samba', 'stop']
-    ];
-
-    const attempts = stopCommands.map((cmd) =>
-      server.spawnProcess(new Command(cmd, { superuser: 'try' })).wait().map(() => { }).orElse(() => ResultAsync.fromSafePromise(Promise.resolve()))
-    );
-
-    return ResultAsync.combine(attempts).map(() => { });
-  }
-
 
   // startSambaService(): ResultAsync<void, ProcessError> {
   //   const proc = server.spawnProcess(new Command(['systemctl', 'start', 'smb', 'nmb', 'winbind'], { superuser: 'try' }));
 
   //   return proc.wait().map(() => { });
   // }
-  startSambaService(): ResultAsync<void, ProcessError> {
-    const stopCommands = [
-      ['systemctl', 'start', 'smb', 'nmb', 'winbind', 'smbd', 'nmbd', 'winbindd', 'samba'],
-      ['service', 'smb', 'start'],
-      ['service', 'smbd', 'start'],
-      ['service', 'samba', 'start']
-    ];
 
-    const attempts = stopCommands.map((cmd) =>
-      server.spawnProcess(new Command(cmd, { superuser: 'try' })).wait().map(() => { }).orElse(() => ResultAsync.fromSafePromise(Promise.resolve()))
-    );
+  // restartSambaService(): ResultAsync<void, ProcessError> {
+  //   const proc = server.spawnProcess(new Command(['systemctl', 'restart', 'smb', 'nmb', 'winbind'], { superuser: 'try' }));
 
-    return ResultAsync.combine(attempts).map(() => { });
-  }
-
+  //   return proc.wait().map(() => { });
+  // }
 
   closeSambaShare(sharename: string): ResultAsync<void, ProcessError> {
     const proc = server.spawnProcess(new Command(['smbcontrol', 'smbd', 'close-share', sharename], { superuser: 'try' }));
@@ -274,26 +250,45 @@ export abstract class SambaManagerBase implements ISambaManager {
     return proc.wait().map(() => { });
   }
 
+  private possibleServices = ['smb', 'nmb', 'winbind'];
 
-  // restartSambaService(): ResultAsync<void, ProcessError> {
-  //   const proc = server.spawnProcess(new Command(['systemctl', 'restart', 'smb', 'nmb', 'winbind'], { superuser: 'try' }));
-
-  //   return proc.wait().map(() => { });
-  // }
-  restartSambaService(): ResultAsync<void, ProcessError> {
-    const restartCommands = [
-      ['systemctl', 'restart', 'smb', 'nmb', 'winbind', 'smbd', 'nmbd', 'winbindd', 'samba'],
-      ['service', 'smb', 'restart'],
-      ['service', 'smbd', 'restart'],
-      ['service', 'samba', 'restart']
-    ];
-
-    const attempts = restartCommands.map((cmd) =>
-      server.spawnProcess(new Command(cmd, { superuser: 'try' })).wait().map(() => { }).orElse(() => ResultAsync.fromSafePromise(Promise.resolve()))
-    );
-
-    return ResultAsync.combine(attempts).map(() => { });
+  private checkServiceExists(service: string): ResultAsync<boolean, ProcessError> {
+    return server
+      .spawnProcess(new Command(['systemctl', 'status', service], { superuser: 'try' }))
+      .wait()
+      .map(() => true)
+      .orElse(() => ResultAsync.fromSafePromise(Promise.resolve(false)));
   }
+
+  private manageServices(action: 'start' | 'stop' | 'restart'): ResultAsync<void, ProcessError> {
+    return ResultAsync.combine(
+      this.possibleServices.map((svc) =>
+        this.checkServiceExists(`${svc}.service`).andThen((exists) => {
+          if (exists) {
+            return server
+              .spawnProcess(new Command(['systemctl', action, svc], { superuser: 'try' }))
+              .wait()
+              .map(() => { });
+          } else {
+            return ResultAsync.fromSafePromise(Promise.resolve());
+          }
+        })
+      )
+    ).map(() => { });
+  }
+
+  stopSambaService(): ResultAsync<void, ProcessError> {
+    return this.manageServices('stop');
+  }
+
+  startSambaService(): ResultAsync<void, ProcessError> {
+    return this.manageServices('start');
+  }
+
+  restartSambaService(): ResultAsync<void, ProcessError> {
+    return this.manageServices('restart');
+  }
+
 
 }
 

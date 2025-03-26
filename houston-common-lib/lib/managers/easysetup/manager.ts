@@ -56,6 +56,8 @@ export class EasySetupConfigurator {
         await this.applySambaConfig(config);
         progressCallback({ message: "Network configured", step: 6, total });
 
+        // console.log('storeEasySetupConfig:', storeEasySetupConfig);
+        // console.log('config', config);
         await storeEasySetupConfig(config);
 
       } catch (error: any) {

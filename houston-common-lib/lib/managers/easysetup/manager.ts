@@ -182,9 +182,14 @@ export class EasySetupConfigurator {
 
     zfsConfig!.pool.vdevs[0]!.disks = baseDisks;
     await this.zfsManager.createPool(zfsConfig!.pool, zfsConfig!.poolOptions);
+    // await this.zfsManager.addDataset(
+    //   zfsConfig!.pool.name,
+    //   zfsConfig!.dataset.name,
+    //   zfsConfig!.datasetOptions
+    // );
     await this.zfsManager.addDataset(
       zfsConfig!.pool.name,
-      zfsConfig!.dataset.name,
+      _config.folderName!,
       zfsConfig!.datasetOptions
     );
   }
@@ -238,10 +243,11 @@ export class EasySetupConfigurator {
     const shares = config.sambaConfig!.shares;
     for (let i = 0; i < shares.length; i++) {
       let share = shares[i];
+      const sharePath = `/${config.zfsConfig!.pool.name}/${config.folderName!}`;
       if (share) {
         if (config.folderName && i === 0) {
-  
           share.name = config.folderName;
+          share.path = sharePath;
         }
         await unwrap(this.sambaManager.addShare(share));
         await this.setShareOwnershipAndPermissions(share.path);

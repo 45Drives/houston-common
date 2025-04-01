@@ -8,7 +8,7 @@
                 :style="{ top: commanderPosition.top, left: commanderPosition.left }" @mouseenter="cancelHideTimeout"
                 @mouseleave="startHideTimeout">
                 <CommanderPopup :message="message" :visible="showCommander" @close="showCommander = false"
-                    :position="commanderPosition" :arrow-offset="commanderPosition.arrowOffset"
+                    :position="commanderPosition" :arrowOffset="commanderPosition.arrowOffset"
                     :placement="commanderPosition.placement" :width="width" />
             </div>
         </teleport>

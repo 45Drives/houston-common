@@ -5,10 +5,10 @@
             :style="{ width: width + 'px', top: position.top,left: position.left }">
 
             <div class="absolute w-0 h-0 border-l-[12px] border-r-[12px] border-transparent" :class="{
-                'border-b-[12px] border-b-slate-800/95 -top-[12px]': position.placement === 'bottom',
-                'border-t-[12px] border-t-slate-800/95 -bottom-[12px]': position.placement === 'top'
+                'border-b-[12px] border-b-slate-800/95 -top-[12px]': placement === 'bottom',
+                'border-t-[12px] border-t-slate-800/95 -bottom-[12px]': placement === 'top'
             }" :style="{
-                left: `${position.arrowOffset}px`,
+                left: `${arrowOffset}px`,
                 transform: 'translateX(-50%)'
             }" />
 
@@ -38,11 +38,11 @@ interface CommanderPopupProps {
     message: string;
     visible: boolean;
     width?: number;
+    placement: 'top' | 'bottom';
+    arrowOffset: number;
     position: {
         top: string;
         left: string;
-        placement: 'top' | 'bottom';
-        arrowOffset: number;
     };
 }
 
@@ -52,9 +52,9 @@ const width = props.width || 700;
 
 const displayedText = ref("");
 const isTyping = ref(false);
-const arrowOffset = ref(props.position.arrowOffset);
+const arrowOffset = ref(props.arrowOffset);
 
-watch(() => props.position.arrowOffset, (newOffset) => {
+watch(() => props.arrowOffset, (newOffset) => {
     arrowOffset.value = newOffset;
 });
 

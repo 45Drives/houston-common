@@ -105,6 +105,7 @@ export class EasySetupConfigurator {
     if (config.srvrName) {
       await unwrap(server.setHostname(config.srvrName));
       await unwrap(server.writeHostnameFiles(config.srvrName));
+      await unwrap(server.execute(new Command(["systemctl", "restart", "houston-broadcaster.service"], this.commandOptions)))
     }
     await unwrap(
       server.execute(
@@ -131,44 +132,55 @@ export class EasySetupConfigurator {
   }
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
-    // try {
-    //   await unwrap(this.sambaManager.stopSambaService());
-    // } catch (error) {
-    //   console.log(error);
-    // }
 
-    const allShares = (await this.sambaManager.getShares())._unsafeUnwrap();
+    if (!config.zfsConfig) {
+      return;
+    }
 
-    try {
+    const poolName = config.zfsConfig.pool.name;
+    const datasetName = config.zfsConfig.dataset.name;
+    
+    const allShares = await (this.sambaManager.getShares().unwrapOr(undefined));
+    if (allShares) {
+
       console.log('existing samba shares:', allShares);
-      allShares.forEach(async share => {
-        console.log('existing share found:', share);
-        await unwrap(this.sambaManager.closeSambaShare(share.name));
-      });
-    } catch (error) {
-      console.log(error);
-    }
-
-    try {
-      console.log('existing pool found:', config.zfsConfig!.pool);
-      await this.zfsManager.destroyPool(config.zfsConfig!.pool, { force: true });
-    } catch (error) {
-      console.log(error);
-    }
-
-    for (let share of allShares) {
-      try {
-        await this.sambaManager.removeShare(share);
-      } catch (error) {
-        console.log(error);
+      for (let share of allShares) {
+        if (share.path.startsWith("/" + poolName + "/" + datasetName)) {
+          console.log('existing share found on pool:', share);
+          try {
+            await unwrap(this.sambaManager.closeSambaShare(share.name));
+            await unwrap(this.sambaManager.removeShare(share));
+          } catch (error) {
+            console.log(error);
+          }
+        } else {
+          console.log(`Share ${share} doesn't exist on pool/dataset ${poolName}/${datasetName} so we didn't removing it.`)
+        }
       }
-    }
+    } else {
 
+      console.log(`No shares found!`)
+    }
+    
+    console.log('existing pool found:', config.zfsConfig.pool);
     try {
-      await unwrap(this.sambaManager.restartSambaService());
+      server.execute(new Command(["umount", poolName + "/" + datasetName], this.commandOptions))
     } catch (error) {
       console.log(error);
     }
+
+    try {
+      server.execute(new Command(["umount", poolName], this.commandOptions))
+    } catch (error) {
+      console.log(error);
+    }
+
+    try {
+      await this.zfsManager.destroyPool(poolName, { force: true });
+    } catch (error) {
+      console.log(error);
+    }
+
   }
 
   private async applyZFSConfig(_config: EasySetupConfig) {

@@ -36,53 +36,33 @@ export class EasySetupConfigurator {
     config: EasySetupConfig,
     progressCallback: (progress: EasySetupProgress) => void
   ) {
-    if (true) {
-      try {
-        const total = 6;
-        progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
+    
+    try {
+      const total = 6;
+      progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
 
-        await this.deleteZFSPoolAndSMBShares(config);
-        progressCallback({ message: "Made sure your server is good to continue", step: 2, total });
+      await this.deleteZFSPoolAndSMBShares(config);
+      progressCallback({ message: "Made sure your server is good to continue", step: 2, total });
 
-        await this.updateHostname(config);
-        progressCallback({ message: "Updated Server Name", step: 3, total });
+      await this.updateHostname(config);
+      progressCallback({ message: "Updated Server Name", step: 3, total });
 
-        await this.createUser(config);
-        progressCallback({ message: "Created your User", step: 4, total });
+      await this.createUser(config);
+      progressCallback({ message: "Created your User", step: 4, total });
 
-        await this.applyZFSConfig(config);
-        progressCallback({ message: "Drive Configuration done", step: 5, total });
+      await this.applyZFSConfig(config);
+      progressCallback({ message: "Drive Configuration done", step: 5, total });
 
-        await this.applySambaConfig(config);
-        progressCallback({ message: "Network configured", step: 6, total });
+      await this.applySambaConfig(config);
+      progressCallback({ message: "Network configured", step: 6, total });
 
-        // console.log('storeEasySetupConfig:', storeEasySetupConfig);
-        // console.log('config', config);
-        await storeEasySetupConfig(config);
+      await storeEasySetupConfig(config);
 
-      } catch (error: any) {
-        console.error("Error in setupStorage:", error);
-        progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });
-      }
-    } else {
-      /**
-       * Simulated steps for setting up the storage system.
-       * In a real app, you might run actual async tasks or poll a backend API.
-       */
-      const steps: EasySetupProgress[] = [
-        { message: "Initializing", step: 1, total: 3 },
-        { message: "Creating Pools", step: 2, total: 3 },
-        { message: "Setting Network Storage", step: 3, total: 3 },
-      ];
-      let currentStep = 0;
-      const stepInterval = setInterval(() => {
-        if (currentStep < steps.length) {
-          progressCallback(steps[currentStep++]!);
-        } else {
-          clearInterval(stepInterval);
-        }
-      }, 2000);
+    } catch (error: any) {
+      console.error("Error in setupStorage:", error);
+      progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });
     }
+
   }
 
   private async createUser(config: EasySetupConfig) {
@@ -139,7 +119,7 @@ export class EasySetupConfigurator {
 
     const poolName = config.zfsConfig.pool.name;
     const datasetName = config.zfsConfig.dataset.name;
-    
+
     const allShares = await (this.sambaManager.getShares().unwrapOr(undefined));
     if (allShares) {
 
@@ -161,7 +141,7 @@ export class EasySetupConfigurator {
 
       console.log(`No shares found!`)
     }
-    
+
     console.log('existing pool found:', config.zfsConfig.pool);
     try {
       server.execute(new Command(["umount", poolName + "/" + datasetName], this.commandOptions))
@@ -186,22 +166,12 @@ export class EasySetupConfigurator {
   private async applyZFSConfig(_config: EasySetupConfig) {
     let zfsConfig = _config.zfsConfig;
 
-    let baseDisks = await this.zfsManager.getBaseDisks();
-    console.log("baseDisks:", baseDisks);
+    console.log(zfsConfig!.pool.vdevs[0]!.disks);
 
-    baseDisks = baseDisks.filter((b) => b.path.trim().length > 0);
-    console.log("baseDisks filtered", baseDisks);
-
-    zfsConfig!.pool.vdevs[0]!.disks = baseDisks;
     await this.zfsManager.createPool(zfsConfig!.pool, zfsConfig!.poolOptions);
-    // await this.zfsManager.addDataset(
-    //   zfsConfig!.pool.name,
-    //   zfsConfig!.dataset.name,
-    //   zfsConfig!.datasetOptions
-    // );
     await this.zfsManager.addDataset(
       zfsConfig!.pool.name,
-      _config.folderName!,
+      zfsConfig!.dataset.name,
       zfsConfig!.datasetOptions
     );
   }

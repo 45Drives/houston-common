@@ -226,17 +226,23 @@ export abstract class SambaManagerBase implements ISambaManager {
     );
   }
 
-  stopSambaService(): ResultAsync<void, ProcessError> {
-    const proc = server.spawnProcess(new Command(['systemctl', 'stop', 'smb', 'nmb', 'winbind'], { superuser: 'try' }));
+  // stopSambaService(): ResultAsync<void, ProcessError> {
+  //   const proc = server.spawnProcess(new Command(['systemctl', 'stop', 'smb', 'nmb', 'winbind'], { superuser: 'try' }));
 
-    return proc.wait().map(() => { });
-  }
+  //   return proc.wait().map(() => { });
+  // }
 
-  startSambaService(): ResultAsync<void, ProcessError> {
-    const proc = server.spawnProcess(new Command(['systemctl', 'start', 'smb', 'nmb', 'winbind'], { superuser: 'try' }));
+  // startSambaService(): ResultAsync<void, ProcessError> {
+  //   const proc = server.spawnProcess(new Command(['systemctl', 'start', 'smb', 'nmb', 'winbind'], { superuser: 'try' }));
 
-    return proc.wait().map(() => { });
-  }
+  //   return proc.wait().map(() => { });
+  // }
+
+  // restartSambaService(): ResultAsync<void, ProcessError> {
+  //   const proc = server.spawnProcess(new Command(['systemctl', 'restart', 'smb', 'nmb', 'winbind'], { superuser: 'try' }));
+
+  //   return proc.wait().map(() => { });
+  // }
 
   closeSambaShare(sharename: string): ResultAsync<void, ProcessError> {
     const proc = server.spawnProcess(new Command(['smbcontrol', 'smbd', 'close-share', sharename], { superuser: 'try' }));
@@ -244,12 +250,46 @@ export abstract class SambaManagerBase implements ISambaManager {
     return proc.wait().map(() => { });
   }
 
+  private possibleServices = ['smb', 'nmb', 'winbind'];
+
+  private checkServiceExists(service: string): ResultAsync<boolean, ProcessError> {
+    return server
+      .spawnProcess(new Command(['systemctl', 'status', service], { superuser: 'try' }))
+      .wait()
+      .map(() => true)
+      .orElse(() => ResultAsync.fromSafePromise(Promise.resolve(false)));
+  }
+
+  private manageServices(action: 'start' | 'stop' | 'restart'): ResultAsync<void, ProcessError> {
+    return ResultAsync.combine(
+      this.possibleServices.map((svc) =>
+        this.checkServiceExists(`${svc}.service`).andThen((exists) => {
+          if (exists) {
+            return server
+              .spawnProcess(new Command(['systemctl', action, svc], { superuser: 'try' }))
+              .wait()
+              .map(() => { });
+          } else {
+            return ResultAsync.fromSafePromise(Promise.resolve());
+          }
+        })
+      )
+    ).map(() => { });
+  }
+
+  stopSambaService(): ResultAsync<void, ProcessError> {
+    return this.manageServices('stop');
+  }
+
+  startSambaService(): ResultAsync<void, ProcessError> {
+    return this.manageServices('start');
+  }
 
   restartSambaService(): ResultAsync<void, ProcessError> {
-    const proc = server.spawnProcess(new Command(['systemctl', 'restart', 'smbd'], { superuser: 'try' }));
-
-    return proc.wait().map(() => { });
+    return this.manageServices('restart');
   }
+
+
 }
 
 export class SambaManagerNet extends SambaManagerBase implements ISambaManager {

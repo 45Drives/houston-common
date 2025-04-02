@@ -9,9 +9,11 @@ import {
   CommandOptions,
   ValueError,
 } from "@/index";
+import { storeEasySetupConfig } from './logConfig';
 import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
+
 
 export interface EasySetupProgress {
   message: string;
@@ -34,48 +36,33 @@ export class EasySetupConfigurator {
     config: EasySetupConfig,
     progressCallback: (progress: EasySetupProgress) => void
   ) {
-    if (true) {
-      try {
-        const total = 6;
-        progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
+    
+    try {
+      const total = 6;
+      progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
 
-        await this.deleteZFSPoolAndSMBShares(config);
-        progressCallback({ message: "Made sure your server is good to continue", step: 2, total });
+      await this.deleteZFSPoolAndSMBShares(config);
+      progressCallback({ message: "Made sure your server is good to continue", step: 2, total });
 
-        await this.updateHostname(config);
-        progressCallback({ message: "Updated Server Name", step: 3, total });
+      await this.updateHostname(config);
+      progressCallback({ message: "Updated Server Name", step: 3, total });
 
-        await this.createUser(config);
-        progressCallback({ message: "Created your User", step: 4, total });
+      await this.createUser(config);
+      progressCallback({ message: "Created your User", step: 4, total });
 
-        await this.applyZFSConfig(config);
-        progressCallback({ message: "Drive Configuration done", step: 5, total });
+      await this.applyZFSConfig(config);
+      progressCallback({ message: "Drive Configuration done", step: 5, total });
 
-        await this.applySambaConfig(config);
-        progressCallback({ message: "Network configured", step: 6, total });
-      } catch (error: any) {
-        console.error("Error in setupStorage:", error);
-        progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });
-      }
-    } else {
-      /**
-       * Simulated steps for setting up the storage system.
-       * In a real app, you might run actual async tasks or poll a backend API.
-       */
-      const steps: EasySetupProgress[] = [
-        { message: "Initializing", step: 1, total: 3 },
-        { message: "Creating Pools", step: 2, total: 3 },
-        { message: "Setting Network Storage", step: 3, total: 3 },
-      ];
-      let currentStep = 0;
-      const stepInterval = setInterval(() => {
-        if (currentStep < steps.length) {
-          progressCallback(steps[currentStep++]!);
-        } else {
-          clearInterval(stepInterval);
-        }
-      }, 2000);
+      await this.applySambaConfig(config);
+      progressCallback({ message: "Network configured", step: 6, total });
+
+      await storeEasySetupConfig(config);
+
+    } catch (error: any) {
+      console.error("Error in setupStorage:", error);
+      progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });
     }
+
   }
 
   private async createUser(config: EasySetupConfig) {
@@ -97,6 +84,8 @@ export class EasySetupConfigurator {
   private async updateHostname(config: EasySetupConfig) {
     if (config.srvrName) {
       await unwrap(server.setHostname(config.srvrName));
+      await unwrap(server.writeHostnameFiles(config.srvrName));
+      await unwrap(server.execute(new Command(["systemctl", "restart", "houston-broadcaster.service"], this.commandOptions)))
     }
     await unwrap(
       server.execute(
@@ -123,51 +112,62 @@ export class EasySetupConfigurator {
   }
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
-    // try {
-    //   await unwrap(this.sambaManager.stopSambaService());
-    // } catch (error) {
-    //   console.log(error);
-    // }
 
-    try {
-      config.sambaConfig?.shares.forEach(async share => {
-        await unwrap(this.sambaManager.closeSambaShare(share.name));
-      });
-    } catch (error) {
-      console.log(error);
+    if (!config.zfsConfig) {
+      return;
     }
 
-    try {
-      await this.zfsManager.destroyPool(config.zfsConfig!.pool, { force: true });
-    } catch (error) {
-      console.log(error);
-    }
+    const poolName = config.zfsConfig.pool.name;
+    const datasetName = config.zfsConfig.dataset.name;
 
-    for (let share of config.sambaConfig!.shares) {
-      try {
-        await this.sambaManager.removeShare(share);
-      } catch (error) {
-        console.log(error);
+    const allShares = await (this.sambaManager.getShares().unwrapOr(undefined));
+    if (allShares) {
+
+      console.log('existing samba shares:', allShares);
+      for (let share of allShares) {
+        if (share.path.startsWith("/" + poolName + "/" + datasetName)) {
+          console.log('existing share found on pool:', share);
+          try {
+            await unwrap(this.sambaManager.closeSambaShare(share.name));
+            await unwrap(this.sambaManager.removeShare(share));
+          } catch (error) {
+            console.log(error);
+          }
+        } else {
+          console.log(`Share ${share} doesn't exist on pool/dataset ${poolName}/${datasetName} so we didn't removing it.`)
+        }
       }
+    } else {
+
+      console.log(`No shares found!`)
     }
 
+    console.log('existing pool found:', config.zfsConfig.pool);
     try {
-      await unwrap(this.sambaManager.restartSambaService());
+      server.execute(new Command(["umount", poolName + "/" + datasetName], this.commandOptions))
     } catch (error) {
       console.log(error);
     }
+
+    try {
+      server.execute(new Command(["umount", poolName], this.commandOptions))
+    } catch (error) {
+      console.log(error);
+    }
+
+    try {
+      await this.zfsManager.destroyPool(poolName, { force: true });
+    } catch (error) {
+      console.log(error);
+    }
+
   }
 
   private async applyZFSConfig(_config: EasySetupConfig) {
     let zfsConfig = _config.zfsConfig;
 
-    let baseDisks = await this.zfsManager.getBaseDisks();
-    console.log("baseDisks:", baseDisks);
+    console.log(zfsConfig!.pool.vdevs[0]!.disks);
 
-    baseDisks = baseDisks.filter((b) => b.path.trim().length > 0);
-    console.log("baseDisks filtered", baseDisks);
-
-    zfsConfig!.pool.vdevs[0]!.disks = baseDisks;
     await this.zfsManager.createPool(zfsConfig!.pool, zfsConfig!.poolOptions);
     await this.zfsManager.addDataset(
       zfsConfig!.pool.name,
@@ -211,10 +211,29 @@ export class EasySetupConfigurator {
     //   }
     // }
 
+    // config.sambaConfig!.shares = [
+    //   {
+    //     ...SambaShareConfig.defaults(config.folderName),
+    //     path: `/mnt/${config.folderName}`,
+    //     description: `Auto-generated share for ${config.folderName}`,
+    //     readOnly: false,
+    //   },
+    // ];
+
+
     // Apply share configurations and ensure correct ownership/permissions
-    for (const share of config.sambaConfig!.shares) {
-      await unwrap(this.sambaManager.addShare(share));
-      await this.setShareOwnershipAndPermissions(share.path);
+    const shares = config.sambaConfig!.shares;
+    for (let i = 0; i < shares.length; i++) {
+      let share = shares[i];
+      const sharePath = `/${config.zfsConfig!.pool.name}/${config.folderName!}`;
+      if (share) {
+        if (config.folderName && i === 0) {
+          share.name = config.folderName;
+          share.path = sharePath;
+        }
+        await unwrap(this.sambaManager.addShare(share));
+        await this.setShareOwnershipAndPermissions(share.path);
+      }
     }
   }
 

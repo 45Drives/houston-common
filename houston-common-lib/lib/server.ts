@@ -436,45 +436,11 @@ export class Server {
     return `Server(${this.host ?? "localhost"})`;
   }
 
-  // isServerDomainJoined(): ResultAsync<boolean, ProcessError> {
-  //   return this.execute(new Command(["realm", "list"], { superuser: "try" }), true).map((proc) => {
-  //     const output = proc.getStdout().trim();
-  //     return output !== "";
-  //   });
-  // }
-
   isServerDomainJoined(): ResultAsync<boolean, ProcessError> {
-    // Helper to check for domain-related patterns
-    const isOutputDomainLike = (output: string) => {
-      const trimmed = output.trim();
-      return (
-        trimmed !== "" &&
-        !trimmed.startsWith("No default realm") &&
-        /\b(domain-name|realm-name|configured: yes)\b/i.test(trimmed)
-      );
-    };
-
-    // Fallback 1: check /etc/krb5.conf
-    const checkKrb5Conf = this.execute(new Command(["cat", "/etc/krb5.conf"], { superuser: "try" }), true).map((proc) => {
-      const content = proc.getStdout();
-      return /\[realms\]/i.test(content) && /[A-Z0-9.-]+\s*=\s*{/.test(content); // look for realm blocks
+    return this.execute(new Command(["net", "ads", "testjoin"], { superuser: "try" }), true).map((proc) => {
+      const out = proc.getStdout().toLowerCase();
+      return out.includes("join is ok") || out.includes("join to domain is not valid");
     }).orElse(() => ResultAsync.fromSafePromise(Promise.resolve(false)));
-
-    // Fallback 2: check /etc/sssd/sssd.conf
-    const checkSSSDConf = this.execute(new Command(["cat", "/etc/sssd/sssd.conf"], { superuser: "try" }), true).map((proc) => {
-      const content = proc.getStdout();
-      return /\[domain\/.+\]/i.test(content); // looks for [domain/your-domain]
-    }).orElse(() => ResultAsync.fromSafePromise(Promise.resolve(false)));
-
-    // Primary: realm list
-    const checkRealm = this.execute(new Command(["realm", "list"], { superuser: "try" }), true).map((proc) => {
-      return isOutputDomainLike(proc.getStdout());
-    }).orElse(() => ResultAsync.fromSafePromise(Promise.resolve(false)));
-
-    // Combine all checks
-    return ResultAsync.combine([checkRealm, checkKrb5Conf, checkSSSDConf]).map(([realm, krb5, sssd]) => {
-      return realm || krb5 || sssd;
-    });
   }
 
 }

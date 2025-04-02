@@ -437,10 +437,12 @@ export class Server {
   }
 
   isServerDomainJoined(): ResultAsync<boolean, ProcessError> {
-    return this.execute(new Command(["net", "ads", "testjoin"], { superuser: "try" }), true).map((proc) => {
-      const out = proc.getStdout().toLowerCase();
-      return out.includes("join is ok") || out.includes("join to domain is not valid");
-    }).orElse(() => ResultAsync.fromSafePromise(Promise.resolve(false)));
+    return this.execute(new Command(["net", "ads", "testjoin"], { superuser: "try" }), false)
+      .map((proc) => {
+        const output = (proc.getStdout() + proc.getStderr()).toLowerCase();
+        return output.includes("join is ok") || output.includes("join to domain is not valid");
+      });
   }
+
 
 }

@@ -114,12 +114,17 @@ export function useWizardSteps(id: string) {
   };
 
   const completeCurrentStep = (gotoNext: boolean = true, data: Record<string, any> = {}) => {
-    state.completedSteps.value![state.index.value] = true;
+    state.completedSteps.value[state.index.value] = true;
     state.data = data; // Store data for decision-making
     if (gotoNext) {
       nextStep();
     }
   };
+
+  const unCompleteCurrentStep = () => {
+    console.log("Uncompleting ", state.index.value);
+    state.completedSteps.value[state.index.value] = false;
+  }
 
   return {
     steps: state.labels,
@@ -131,5 +136,6 @@ export function useWizardSteps(id: string) {
     refresh,
     setStep,
     completeCurrentStep,
+    unCompleteCurrentStep,
   };
 }

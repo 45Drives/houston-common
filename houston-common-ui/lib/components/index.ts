@@ -26,10 +26,10 @@ export { default as Table } from "./Table.vue";
 export { default as ByteInput } from "./ByteInput.vue";
 export { default as ServerOverview } from "./ServerOverview.vue";
 export { default as DiskCanvas } from "./DiskCanvas.vue";
+export { default as DynamicBrandingLogo } from "./branding/DynamicBrandingLogo.vue";
 
 export * from "./tabs";
 export * from "./modals";
 export * from "./wizard";
 export * from "./commander";
 export * from "./calendar";
-export * from "./branding";

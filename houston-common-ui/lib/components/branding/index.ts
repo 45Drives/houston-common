@@ -1,1 +1,1 @@
-export { default as DynamicLogo } from "./DynamicBrandingLogo.vue";
+export { default as DynamicBrandingLogo } from "./DynamicBrandingLogo.vue";

@@ -1,6 +1,9 @@
 <template>
-    <img :src="logo" :alt="`${division} logo`" class="max-h-12 w-auto" v-if="logo" />
+    <div class="bg-white inline-flex items-center justify-center p-2 rounded">
+        <img :src="logo" :alt="`${division} logo`" class="max-h-12 w-auto" v-if="logo" />
+    </div>
 </template>
+
 
 <script setup lang="ts">
 import { computed } from 'vue';

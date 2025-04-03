@@ -95,16 +95,22 @@ export class EasySetupConfigurator {
     );
   }
 
-  private async setShareOwnershipAndPermissions(sharePath: string) {
+  private async setShareOwnershipAndPermissions(sharePath: string, smbUser: string ) {
     try {
-      console.log(`Setting ownership of ${sharePath} to root:smbusers...`);
+      console.log(`Setting ownership of ${sharePath} to ${smbUser}:smbusers...`);
       await unwrap(
-        server.execute(new Command(["chown", "-R", "root:smbusers", sharePath], this.commandOptions), true)
+        server.execute(
+          new Command(["chown", "-R", `${smbUser}:smbusers`, sharePath], this.commandOptions),
+          true
+        )
       );
 
-      console.log(`Setting permissions for ${sharePath}...`);
+      console.log(`Setting permissions for ${sharePath} to 775...`);
       await unwrap(
-        server.execute(new Command(["chmod", "-R", "g+rw", sharePath], this.commandOptions), true)
+        server.execute(
+          new Command(["chmod", "-R", "775", sharePath], this.commandOptions),
+          true
+        )
       );
     } catch (error) {
       console.error(`Error setting ownership and permissions for ${sharePath}:`, error);
@@ -134,7 +140,7 @@ export class EasySetupConfigurator {
             console.log(error);
           }
         } else {
-          console.log(`Share ${share} doesn't exist on pool/dataset ${poolName}/${datasetName} so we didn't removing it.`)
+          console.log(`Share ${share} doesn't exist on pool/dataset ${poolName}/${datasetName} so we didn't remove it.`)
         }
       }
     } else {
@@ -201,25 +207,6 @@ export class EasySetupConfigurator {
         )
     );
 
-    // const shareSamabaResults = config.sambaConfig!.shares.map((share) =>
-    //   this.sambaManager.addShare(share)
-    // );
-    // for (let i = 0; i < shareSamabaResults.length; i++) {
-    //   const shareSamabaResult = shareSamabaResults[i];
-    //   if (shareSamabaResult) {
-    //     await unwrap(shareSamabaResult);
-    //   }
-    // }
-
-    // config.sambaConfig!.shares = [
-    //   {
-    //     ...SambaShareConfig.defaults(config.folderName),
-    //     path: `/mnt/${config.folderName}`,
-    //     description: `Auto-generated share for ${config.folderName}`,
-    //     readOnly: false,
-    //   },
-    // ];
-
 
     // Apply share configurations and ensure correct ownership/permissions
     const shares = config.sambaConfig!.shares;
@@ -232,7 +219,7 @@ export class EasySetupConfigurator {
           share.path = sharePath;
         }
         await unwrap(this.sambaManager.addShare(share));
-        await this.setShareOwnershipAndPermissions(share.path);
+        await this.setShareOwnershipAndPermissions(share.path, config.smbUser);
       }
     }
   }

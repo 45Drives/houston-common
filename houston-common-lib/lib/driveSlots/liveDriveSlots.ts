@@ -1,5 +1,5 @@
 import { slotsCommand } from "./command";
-import { DriveSlot, LiveDriveSlotsHandle } from "./types";
+import { DriveSlot, LiveDriveSlotsHandle, LiveDriveSlotsOpts } from "./types";
 import { Process } from "@/process";
 import { Server } from "@/server";
 
@@ -48,10 +48,11 @@ function onStream(output: string, ctx: LiveDriveSlotsCtx, setter: (slots: DriveS
 
 export function startLiveDriveSlotsWatcher(
   server: Server,
-  setter: (slots: DriveSlot[]) => void
+  setter: (slots: DriveSlot[]) => void,
+  opts?: LiveDriveSlotsOpts
 ): LiveDriveSlotsHandle {
   const ctx: LiveDriveSlotsCtx = {
-    proc: server.spawnProcess(slotsCommand({ live: true }), true),
+    proc: server.spawnProcess(slotsCommand({ live: true, includeNonAliased: opts?.includeNonAliased }), true),
     slots: [],
     stop: false,
     retries: 3,

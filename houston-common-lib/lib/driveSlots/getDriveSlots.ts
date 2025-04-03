@@ -18,7 +18,7 @@ export function getDriveSlots(
   opts: GetDriveSlotsOpts = {}
 ): ResultAsync<DriveSlot[], ProcessError | SyntaxError> {
   return server
-    .execute(slotsCommand({ live: false }))
+    .execute(slotsCommand({ live: false, includeNonAliased: opts.includeNonAliased }))
     .map((proc) => proc.getStdout())
     .andThen((output) => safeJsonParse<DriveSlot[]>(output))
     .map((slots) => slots as DriveSlot[])

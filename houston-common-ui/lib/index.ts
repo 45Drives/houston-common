@@ -3,7 +3,7 @@ export * from "@/composables";
 
 import { reportError } from ".";
 
-window.onerror = (event) => {
+globalThis.onerror = (event) => {
   if (typeof event === "string") {
     reportError(new Error(event));
   } else {
@@ -17,4 +17,4 @@ window.onerror = (event) => {
   return false;
 };
 
-(globalThis as any).reportHoustonError = reportError
+(globalThis as any).reportHoustonError = reportError;

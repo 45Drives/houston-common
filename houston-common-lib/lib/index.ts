@@ -22,7 +22,7 @@
 /// <reference path="../typings/cockpit-typings/cockpit.d.ts" />
 /// <reference path="../typings/cockpit-typings/cockpit-extra.d.ts" />
 /// <reference path="../typings/cockpit-typings/cockpit-import-hack.d.ts" />
-/// <reference path="../typings/window.d.ts" />
+/// <reference path="../typings/globalThis.d.ts" />
 
 import { HoustonDriver as HoustonDriver_ } from "@/driver";
 
@@ -48,25 +48,7 @@ export * from "@/driveSlots/types";
 
 export * as legacy from "@/legacy";
 
-function setupReportHoustonError() {
-  const globalObj =
-    typeof window !== "undefined"
-      ? window // Browser
-      : typeof global !== "undefined"
-      ? global // Node.js
-      : globalThis; // Fallback (covers workers, Deno, etc.)
-
-  if (!("reportHoustonError" in globalObj)) {
-    Object.defineProperty(globalObj, "reportHoustonError", {
-      value: (e: unknown, ctx: string = "") => {
-        console.error(ctx, e);
-        return e;
-      },
-      writable: true, // Prevent accidental overwrites
-      configurable: true, // Allow redefining if needed
-    });
-  }
-}
-
-// Call it once to initialize
-setupReportHoustonError();
+globalThis.reportHoustonError ??= (e, ctx: string = "") => {
+  console.error(ctx, e);
+  return e;
+};

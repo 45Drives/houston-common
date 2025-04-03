@@ -70,7 +70,7 @@ export function startLiveDriveSlotsWatcher(
           ctx.retries -= 1;
           start();
         } else {
-          window.reportHoustonError(e, "Live drive slots watcher died.");
+          globalThis.reportHoustonError(e, "Live drive slots watcher died.");
         }
       }
     );

@@ -440,7 +440,11 @@ export class Server {
     return this.execute(new Command(["net", "ads", "testjoin"], { superuser: "try" }), false)
       .map((proc) => {
         const output = (proc.getStdout() + proc.getStderr()).toLowerCase();
-        return output.includes("join is ok") || output.includes("join to domain is not valid");
+        if (output.includes("join is ok")) {
+          return true;
+        } else {
+          return false;
+        }
       });
   }
 

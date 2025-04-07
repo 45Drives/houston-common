@@ -2,6 +2,7 @@ import * as hl4 from "./hl4"
 import * as q30 from "./q30"
 import * as f8x1 from "./f8x1"
 import * as fallback from './fallback';
+import * as branding_logos from './branding';
 
 const model_number_LUT: [ RegExp, typeof hl4] []  = [
     [ /^(Storinator|Destroyinator)-(H8-|H16-|H32-)?Q30/, q30 ],
@@ -20,3 +21,4 @@ export function lookupImages(modelNumber: string): typeof hl4 {
 }
 
 export { default as houstonPortrait } from './houston.png'
+export { branding_logos };

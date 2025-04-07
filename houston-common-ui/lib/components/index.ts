@@ -32,3 +32,4 @@ export * from "./modals";
 export * from "./wizard";
 export * from "./commander";
 export * from "./calendar";
+export * from "./branding";

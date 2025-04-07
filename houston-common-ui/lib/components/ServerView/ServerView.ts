@@ -43,14 +43,12 @@ export class ServerView extends THREE.EventDispatcher<
   private resetCameraControlsTimeoutHandle?: number;
   private static resetCameraControlsTimeout = 5000;
 
-  private slotInfoWatchHandle?: LiveDriveSlotsHandle;
-
   private parentResizeObserver: ResizeObserver;
 
   private componentSlots: ServerComponentSlot[];
 
   constructor(
-    public readonly server: Server,
+    public readonly serverModel: string,
     opts: {
       enableSelection?: boolean;
       enableRotate?: boolean;
@@ -117,8 +115,7 @@ export class ServerView extends THREE.EventDispatcher<
 
     this.componentSlots = [];
 
-    this.chassis = unwrap(this.server.getServerModel())
-      .then((modelNumber) => getChassisModel(modelNumber))
+    this.chassis = getChassisModel(serverModel)
       .then((chassis) => {
         const box = new THREE.Box3().setFromObject(chassis);
         const center = new THREE.Vector3();
@@ -141,13 +138,6 @@ export class ServerView extends THREE.EventDispatcher<
         });
         this.scene.add(chassis);
         return chassis;
-
-        // chassis.addEventListener("selected", (e) => {
-        //   this.dispatchEvent(e);
-        // });
-        // chassis.addEventListener("deselected", (e) => {
-        //   this.dispatchEvent(e);
-        // });
       });
 
     this.mouseEventTranslator = new MouseEventTranslator(
@@ -174,10 +164,6 @@ export class ServerView extends THREE.EventDispatcher<
   async start(parent: HTMLElement) {
     this.renderer.setAnimationLoop(() => this.animate());
     parent.appendChild(this.renderer.domElement);
-    this.slotInfoWatchHandle = this.server.setupLiveDriveSlotInfo((slotInfo) => {
-      this.dispatchEvent({ type: "driveslotchange", slots: slotInfo });
-      this.setDriveSlotInfo(slotInfo);
-    });
     this.parentResizeObserver.observe(parent);
   }
 
@@ -187,7 +173,6 @@ export class ServerView extends THREE.EventDispatcher<
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
     }
     this.renderer.setAnimationLoop(null);
-    this.slotInfoWatchHandle?.stop();
   }
 
   private fixCameraAspect(
@@ -264,6 +249,7 @@ export class ServerView extends THREE.EventDispatcher<
 
   async setDriveSlotInfo(slots: DriveSlot[]) {
     await this.chassis;
+    this.dispatchEvent({ type: "driveslotchange", slots });
     slots.forEach((slot) => {
       const componentSlot = this.componentSlots.find((s) => s.slotId === slot.slotId);
       if (componentSlot instanceof ServerDriveSlot) {

@@ -4,7 +4,7 @@
 
 <script setup lang="ts">
 import { useTemplateRef, onBeforeUnmount, watchEffect, type WatchHandle, onMounted } from "vue";
-import { Server, type DriveSlot } from "@45drives/houston-common-lib";
+import { Server, unwrap, type DriveSlot } from "@45drives/houston-common-lib";
 
 import { useDarkModeState } from "@/composables";
 
@@ -35,52 +35,56 @@ const driveSlots = defineModel<DriveSlot[]>("driveSlots", { default: [] });
 
 const darkMode = useDarkModeState();
 
-import("./ServerView").then(({ ServerView, ServerDriveSlot }) => {
-  const watchHandles: WatchHandle[] = [];
+Promise.all([import("./ServerView"), props.server.getServerModel()]).then(
+  async ([{ ServerView, ServerDriveSlot }, serverModel]) => {
+    const watchHandles: WatchHandle[] = [];
 
-  const serverView = new ServerView(props.server);
+    const serverView = new ServerView(await unwrap(serverModel));
 
-  serverView.addEventListener("selectionchange", (e) => {
-    selectedDriveSlots.value = e.components
-      .filter((c): c is InstanceType<typeof ServerDriveSlot> => c instanceof ServerDriveSlot)
-      .map((driveSlot) => driveSlot.driveSlot);
-  });
+    serverView.addEventListener("selectionchange", (e) => {
+      selectedDriveSlots.value = e.components
+        .filter((c): c is InstanceType<typeof ServerDriveSlot> => c instanceof ServerDriveSlot)
+        .map((driveSlot) => driveSlot.driveSlot);
+    });
 
-  serverView.addEventListener("driveslotchange", (e) => {
-    driveSlots.value = [...e.slots];
-  });
+    const liveDriveSlotsHandle = props.server.setupLiveDriveSlotInfo((slots) => {
+      driveSlots.value = slots;
+      serverView.setDriveSlotInfo(slots);
+    });
 
-  watchHandles.push(
-    watchEffect(() => {
-      if (!canvasParent.value) {
-        return;
+    watchHandles.push(
+      watchEffect(() => {
+        if (!canvasParent.value) {
+          return;
+        }
+        serverView.start(canvasParent.value);
+      })
+    );
+
+    watchHandles.push(
+      watchEffect(() => {
+        serverView.enableSelection = props.enableSelection;
+        serverView.enableRotate = props.enableRotate;
+        serverView.enablePan = props.enablePan;
+        serverView.enableZoom = props.enableZoom;
+      })
+    );
+
+    watchHandles.push(
+      watchEffect(() => {
+        serverView.setBackground(darkMode.value ? 0x262626 : 0xffffff);
+      })
+    );
+
+    unmountCallback = () => {
+      liveDriveSlotsHandle.stop();
+      serverView.stop();
+      for (const wh of watchHandles) {
+        wh.stop();
       }
-      serverView.start(canvasParent.value);
-    })
-  );
-
-  watchHandles.push(
-    watchEffect(() => {
-      serverView.enableSelection = props.enableSelection;
-      serverView.enableRotate = props.enableRotate;
-      serverView.enablePan = props.enablePan;
-      serverView.enableZoom = props.enableZoom;
-    })
-  );
-
-  watchHandles.push(
-    watchEffect(() => {
-      serverView.setBackground(darkMode.value ? 0x262626 : 0xffffff);
-    })
-  );
-
-  unmountCallback = () => {
-    serverView.stop();
-    for (const wh of watchHandles) {
-      wh.stop();
-    }
-  };
-});
+    };
+  }
+);
 
 onBeforeUnmount(() => {
   unmountCallback?.();

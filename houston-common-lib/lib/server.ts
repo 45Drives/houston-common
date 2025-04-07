@@ -9,7 +9,6 @@ import { safeJsonParse } from "./utils";
 import { assertProp } from "./utils";
 
 import DiskInfoPy from "@/scripts/disk_info.py?raw";
-import { lookupServerModel, ServerModel } from "@/serverModels";
 
 import {
   DriveSlot,
@@ -199,14 +198,8 @@ export class Server {
       .map((lsdev) => lsdev as { rows: LSDevDisk[][] });
   }
 
-  getServerModel(): ResultAsync<ServerModel, ProcessError | ParsingError> {
-    return this.getServerInfo().andThen((serverInfo) => {
-      const model = lookupServerModel(serverInfo.Model);
-      if (!model) {
-        return err(new ParsingError(`Model lookup failed: ${serverInfo.Model}`));
-      }
-      return ok(model);
-    });
+  getServerModel(): ResultAsync<string, ProcessError | ParsingError> {
+    return this.getServerInfo().map((serverInfo) => serverInfo.Model);
   }
 
   getHostname(cache: boolean = true): ResultAsync<string, ProcessError> {

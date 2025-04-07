@@ -1,8 +1,8 @@
 import {
-  ServerComponent,
-  type ServerComponentEventMap,
-  type ServerComponentMouseEvent,
-  type ServerComponentMouseEventTypes,
+  ServerComponentSlot,
+  type ServerComponentSlotEventMap,
+  type ServerComponentSlotMouseEvent,
+  type ServerComponentSlotMouseEventTypes,
 } from "./ServerComponent";
 import * as THREE from "three";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
@@ -17,13 +17,7 @@ export class SelectionBox extends LineSegments2 {
     // geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     const geometry = new LineSegmentsGeometry();
 
-    super(
-      geometry,
-      new LineMaterial({
-        color: 0x00ff00,
-        linewidth: 2,
-      })
-    );
+    super(geometry, new LineMaterial({ color: 0x00ff00, linewidth: 2 }));
 
     this.hide();
     this.layers.set(LAYER_NO_SELECT);
@@ -81,11 +75,11 @@ export class SelectionBox extends LineSegments2 {
 }
 
 export class MouseEventTranslator extends THREE.EventDispatcher<{
-  selectionchange: { type: "selectionchange"; components: ServerComponent[] };
+  selectionchange: { type: "selectionchange"; components: ServerComponentSlot[] };
 }> {
   private raycaster = new THREE.Raycaster();
 
-  private componentUnderCursor?: ServerComponent;
+  private componentUnderCursor?: ServerComponentSlot;
 
   private mouseDownCoordsNormalized?: THREE.Vector2;
 
@@ -97,7 +91,8 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
     public domElement: HTMLElement,
     public camera: THREE.Camera,
     public scene: THREE.Scene,
-    public enableSelection: boolean
+    public enableSelection: boolean,
+    private componentSlots: ServerComponentSlot[]
   ) {
     super();
     this.scene.add(this.selectionBox);
@@ -118,59 +113,69 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
   translateMouseOver(event: MouseEvent & { type: "mousemove" }) {
     const mouseCoords = this.normalizedMouseEventCoords(event);
     if (this.isDragging(mouseCoords)) {
+      this.componentUnderCursor = undefined;
       this.selectionBox.updateSelectionBox(
         this.camera,
         this.mouseDownCoordsNormalized!,
         mouseCoords
       );
+      const selectionBoxNormalized = new THREE.Box2().setFromPoints([
+        this.mouseDownCoordsNormalized!,
+        mouseCoords,
+      ]);
+      const frustum = this.createSelectionFrustum(selectionBoxNormalized);
+      const withinSelection = (selectable: ServerComponentSlot) => {
+        const boundsBox = new THREE.Box3().setFromObject(selectable.objectRef);
+        return frustum.intersectsBox(boundsBox);
+      };
+      this.componentSlots.forEach((slot) => (slot.highlight = withinSelection(slot)));
     } else {
       this.selectionBox.hide();
+      const obj = this.getMouseEventIntersections(event, mouseCoords)[0] as
+        | ServerComponentSlot
+        | undefined;
+      if (obj && obj instanceof ServerComponentSlot) {
+        this.domElement.style.cursor = "pointer";
+      } else {
+        this.domElement.style.cursor = "default";
+      }
+      if (this.componentUnderCursor) {
+        this.componentUnderCursor.highlight = false;
+      }
+      if (obj) {
+        obj.highlight = true;
+      }
+      this.componentUnderCursor = obj;
     }
-    const intersection = this.getMouseEventIntersections(event, mouseCoords)[0] as
-      | (THREE.Intersection & { object: ServerComponent })
-      | undefined;
-    const obj = intersection?.object;
-    if (obj && "selected" in obj) {
-      this.domElement.style.cursor = "pointer";
-    } else {
-      this.domElement.style.cursor = "default";
-    }
-    if (obj === this.componentUnderCursor) {
-      return;
-    }
-    this.componentUnderCursor?.dispatchEvent(this.makeEvent("mouseleave", event));
-    obj?.dispatchEvent(this.makeEvent("mouseenter", event, intersection?.point));
-    this.componentUnderCursor = obj;
   }
 
-  selectAll(filter?: (obj: THREE.Object3D) => boolean) {
+  selectAll(filter?: (slot: ServerComponentSlot) => boolean) {
     return this.setSelectedAll(true, filter);
   }
 
-  deselectAll(filter?: (obj: THREE.Object3D) => boolean) {
+  deselectAll(filter?: (slot: ServerComponentSlot) => boolean) {
     return this.setSelectedAll(false, filter);
   }
 
-  toggleSelectAll(filter?: (obj: THREE.Object3D) => boolean) {
-    const changed: THREE.Object3D[] = [];
-    this.scene.traverse((object) => {
-      if (!("selected" in object) || (filter && !filter(object))) {
+  toggleSelectAll(filter?: (slot: ServerComponentSlot) => boolean) {
+    const changed: ServerComponentSlot[] = [];
+
+    this.componentSlots.forEach((object) => {
+      if (filter && !filter(object)) {
         return;
       }
-      if (typeof object.selected === "boolean") {
-        object.selected = !object.selected;
-        changed.push(object);
-      }
+      object.selected = !object.selected;
+      changed.push(object);
     });
     return changed;
   }
 
   animate() {}
 
-  private setSelectedAll(selected: boolean, filter?: (obj: THREE.Object3D) => boolean) {
-    const unfiltered = this.scene.getObjectsByProperty("selected", !selected);
+  private setSelectedAll(selected: boolean, filter?: (slot: ServerComponentSlot) => boolean) {
+    const unfiltered = this.componentSlots.filter((slot) => slot.selected === !selected);
     return (filter ? unfiltered.filter(filter) : unfiltered).map((obj) => {
-      (obj as any as { selected: boolean }).selected = selected;
+      obj.selected = selected;
       return obj;
     });
   }
@@ -189,9 +194,9 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
       return;
     }
 
-    let selectedBefore: ServerComponent[];
+    let selectedBefore: ServerComponentSlot[];
     if (this.enableSelection) {
-      selectedBefore = this.scene.getObjectsByProperty("selected", true) as ServerComponent[];
+      selectedBefore = this.componentSlots.filter((slot) => slot.selected);
     }
 
     // deselect if not ctrl or shift TODO: fix toggle select on regular click
@@ -203,6 +208,7 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
     if (this.isDragging(mouseUpCoordsNormalized)) {
       // drag select
       if (this.enableSelection) {
+        this.componentSlots.forEach((slot) => (slot.highlight = false));
         const selectionBoxNormalized = new THREE.Box2().setFromPoints([
           this.mouseDownCoordsNormalized,
           mouseUpCoordsNormalized,
@@ -217,15 +223,12 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
     this.mouseDownCoordsNormalized = undefined;
 
     if (this.enableSelection) {
-      const selectedAfter = this.scene.getObjectsByProperty("selected", true) as ServerComponent[];
+      const selectedAfter = this.componentSlots.filter((slot) => slot.selected);
       if (
         selectedAfter.length !== selectedBefore!.length ||
         !selectedBefore!.every((obj) => selectedAfter.includes(obj))
       ) {
-        this.dispatchEvent({
-          type: "selectionchange",
-          components: selectedAfter,
-        });
+        this.dispatchEvent({ type: "selectionchange", components: selectedAfter });
       }
     }
   }
@@ -235,19 +238,12 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
     mouseUpCoordsNormalized: THREE.Vector2
   ) {
     const intersection = this.getMouseEventIntersections(event, mouseUpCoordsNormalized)[0] as
-      | (THREE.Intersection & { object: ServerComponent })
+      | ServerComponentSlot
       | undefined;
 
-    if (
-      this.enableSelection &&
-      intersection?.object &&
-      "selected" in intersection.object &&
-      typeof intersection.object.selected === "boolean"
-    ) {
-      intersection.object.selected = event.shiftKey || !intersection.object.selected;
+    if (this.enableSelection && intersection) {
+      intersection.selected = event.shiftKey || !intersection.selected;
     }
-
-    intersection?.object.dispatchEvent(this.makeEvent("click", event, intersection.point));
   }
 
   private createSelectionFrustum(selectionBoxNormalized: THREE.Box2): THREE.Frustum {
@@ -285,8 +281,8 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
   private handleDragSelect(selectionBoxNormalized: THREE.Box2, ctrlKey: boolean) {
     const frustum = this.createSelectionFrustum(selectionBoxNormalized);
 
-    const withinSelection = (selectable: THREE.Object3D) => {
-      const boundsBox = new THREE.Box3().setFromObject(selectable);
+    const withinSelection = (slot: ServerComponentSlot) => {
+      const boundsBox = new THREE.Box3().setFromObject(slot.boundingBox);
       return frustum.intersectsBox(boundsBox);
     };
 
@@ -297,23 +293,23 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
     }
   }
 
-  private makeEvent<Type extends ServerComponentMouseEventTypes>(
-    type: Type,
-    event: MouseEvent,
-    intersectionPoint?: THREE.Vector3
-  ): ServerComponentMouseEvent<Type> {
-    return {
-      type,
-      ctrlKey: event.ctrlKey,
-      altKey: event.altKey,
-      button: event.button,
-      buttons: event.buttons,
-      metaKey: event.metaKey,
-      shiftKey: event.shiftKey,
-      ray: this.raycaster.ray.clone(),
-      point: intersectionPoint,
-    };
-  }
+  // private makeEvent<Type extends ServerComponentSlotMouseEventTypes>(
+  //   type: Type,
+  //   event: MouseEvent,
+  //   intersectionPoint?: THREE.Vector3
+  // ): ServerComponentSlotMouseEvent<Type> {
+  //   return {
+  //     type,
+  //     ctrlKey: event.ctrlKey,
+  //     altKey: event.altKey,
+  //     button: event.button,
+  //     buttons: event.buttons,
+  //     metaKey: event.metaKey,
+  //     shiftKey: event.shiftKey,
+  //     ray: this.raycaster.ray.clone(),
+  //     point: intersectionPoint,
+  //   };
+  // }
 
   private normalizedMouseEventCoords(event: MouseEvent): THREE.Vector2 {
     const canvasRect = this.domElement.getBoundingClientRect();
@@ -323,28 +319,31 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
     );
   }
 
-  private static getServerComponentParent(obj: THREE.Object3D): ServerComponent | null {
-    if (obj instanceof ServerComponent) {
-      return obj;
-    }
-    if (obj.parent) {
-      return MouseEventTranslator.getServerComponentParent(obj.parent);
-    }
-    return null;
-  }
+  // private static getServerComponentSlotParent(obj: THREE.Object3D): ServerComponentSlot | null {
+  //   if (obj instanceof ServerComponentSlot) {
+  //     return obj;
+  //   }
+  //   if (obj.parent) {
+  //     return MouseEventTranslator.getServerComponentSlotParent(obj.parent);
+  //   }
+  //   return null;
+  // }
 
-  private getMouseEventIntersections(event: MouseEvent, mouseUpCoordsNormalized?: THREE.Vector2) {
+  private getMouseEventIntersections(
+    event: MouseEvent,
+    mouseUpCoordsNormalized?: THREE.Vector2
+  ): ServerComponentSlot[] {
     this.raycaster.setFromCamera(
       mouseUpCoordsNormalized ?? this.normalizedMouseEventCoords(event),
       this.camera
     );
-    return this.raycaster
-      .intersectObjects(this.scene.children)
-      .map((intersection) => {
-        const object = MouseEventTranslator.getServerComponentParent(intersection.object);
-        if (!object) return null;
-        return { ...intersection, object };
-      })
-      .filter((i): i is THREE.Intersection & { object: ServerComponent } => i !== null);
+    const result = [];
+    for (const slot of this.componentSlots) {
+      const intersections = this.raycaster.intersectObject(slot.boundingBox, false);
+      if (intersections.length > 0) {
+        result.push(slot);
+      }
+    }
+    return result;
   }
 }

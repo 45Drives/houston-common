@@ -35,20 +35,15 @@ const driveSlots = defineModel<DriveSlot[]>("driveSlots", { default: [] });
 
 const darkMode = useDarkModeState();
 
-
-import("./ServerView").then(({ ServerView }) => {
+import("./ServerView").then(({ ServerView, ServerDriveSlot }) => {
   const watchHandles: WatchHandle[] = [];
 
   const serverView = new ServerView(props.server);
 
-  import("./ServerView/DriveSlot").then(({ DriveSlotComponent }) => {
-    serverView.addEventListener("selectionchange", (e) => {
-      selectedDriveSlots.value = e.components
-        .filter(
-          (c): c is InstanceType<typeof DriveSlotComponent> => c instanceof DriveSlotComponent
-        )
-        .map((driveSlot) => driveSlot.userData);
-    });
+  serverView.addEventListener("selectionchange", (e) => {
+    selectedDriveSlots.value = e.components
+      .filter((c): c is InstanceType<typeof ServerDriveSlot> => c instanceof ServerDriveSlot)
+      .map((driveSlot) => driveSlot.driveSlot);
   });
 
   serverView.addEventListener("driveslotchange", (e) => {

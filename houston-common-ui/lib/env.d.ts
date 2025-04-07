@@ -7,4 +7,9 @@
 //   export default component
 // }
 
-declare module '@heroicons/*';
+declare module "@heroicons/*";
+
+declare module "*.glb" {
+  const src: string;
+  export default src;
+}

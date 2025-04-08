@@ -14,7 +14,7 @@ import {
 import type { DivisionType } from './types';
 
 const props = defineProps<{
-    division: DivisionType;
+    division?: DivisionType;
 }>();
 
 const logo = computed(() => {

@@ -34,9 +34,5 @@ const logo = computed(() => {
 </script>
 
 <style scoped>
-/* Adds a fallback background color to ensure visibility */
-img {
-    background-color: white;
-    border-radius: 0.25rem;
-}
+
 </style>

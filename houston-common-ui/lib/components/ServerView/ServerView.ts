@@ -342,10 +342,10 @@ class CameraSetpointController {
       const initialView: CameraSetPoint = getView(position, focusPoint, 0.75);
       switch (driveOrientation) {
         case "FrontLoader":
-          position.set(0, 0, 2);
+          position.set(-0.1, 0.1, 2);
           break;
         case "TopLoader":
-          position.set(0, 2, 0);
+          position.set(0, 2, 0.1);
           break;
         default:
           throw new Error(`DriveOrientation not implemented: ${driveOrientation}`);

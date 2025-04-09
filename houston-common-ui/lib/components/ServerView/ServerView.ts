@@ -26,92 +26,92 @@ import {
   type ServerComponentSlotEventMap,
 } from "./ServerComponent";
 
-export type PIDParams = {
-  kp: number;
-  ki: number;
-  kd: number;
-};
+// export type PIDParams = {
+//   kp: number;
+//   ki: number;
+//   kd: number;
+// };
 
-class PIDController {
-  private i: number;
-  private e0: number;
-  private t0: number;
-  public setpoint: number;
+// class PIDController {
+//   private i: number;
+//   private e0: number;
+//   private t0: number;
+//   public setpoint: number;
 
-  constructor(
-    public params: PIDParams,
-    initial: number
-  ) {
-    this.i = 0;
-    this.e0 = 0;
-    this.setpoint = initial;
-    this.t0 = performance.now();
-  }
+//   constructor(
+//     public params: PIDParams,
+//     initial: number
+//   ) {
+//     this.i = 0;
+//     this.e0 = 0;
+//     this.setpoint = initial;
+//     this.t0 = performance.now();
+//   }
 
-  reset(value?: number, time?: number) {
-    this.i = 0;
-    this.e0 = 0;
-    this.t0 = time ?? performance.now();
-    this.setpoint = value ?? this.setpoint;
-  }
+//   reset(value?: number, time?: number) {
+//     this.i = 0;
+//     this.e0 = 0;
+//     this.t0 = time ?? performance.now();
+//     this.setpoint = value ?? this.setpoint;
+//   }
 
-  next(n1: number, time?: number): number {
-    const t1 = time ?? performance.now();
-    const dt = t1 - this.t0;
+//   next(n1: number, time?: number): number {
+//     const t1 = time ?? performance.now();
+//     const dt = t1 - this.t0;
 
-    const e1 = this.setpoint - n1;
+//     const e1 = this.setpoint - n1;
 
-    const p = e1;
-    this.i += e1 * dt;
-    this.i = Math.min(Math.max(-1000, this.i), 1000);
-    const d = (e1 - this.e0) / dt;
+//     const p = e1;
+//     this.i += e1 * dt;
+//     this.i = Math.min(Math.max(-1000, this.i), 1000);
+//     const d = (e1 - this.e0) / dt;
 
-    this.e0 = e1;
-    this.t0 = t1;
+//     this.e0 = e1;
+//     this.t0 = t1;
 
-    return this.params.kp * p + this.params.ki * this.i + this.params.kd * d;
-  }
-}
+//     return this.params.kp * p + this.params.ki * this.i + this.params.kd * d;
+//   }
+// }
 
-class PIDController3 {
-  private x: PIDController;
-  private y: PIDController;
-  private z: PIDController;
+// class PIDController3 {
+//   private x: PIDController;
+//   private y: PIDController;
+//   private z: PIDController;
 
-  constructor(params: PIDParams, initial: THREE.Vector3Like) {
-    this.x = new PIDController(params, initial.x);
-    this.y = new PIDController(params, initial.y);
-    this.z = new PIDController(params, initial.z);
-  }
+//   constructor(params: PIDParams, initial: THREE.Vector3Like) {
+//     this.x = new PIDController(params, initial.x);
+//     this.y = new PIDController(params, initial.y);
+//     this.z = new PIDController(params, initial.z);
+//   }
 
-  reset(value?: THREE.Vector3Like, time?: number) {
-    this.x.reset(value?.x, time);
-    this.y.reset(value?.y, time);
-    this.z.reset(value?.z, time);
-  }
+//   reset(value?: THREE.Vector3Like, time?: number) {
+//     this.x.reset(value?.x, time);
+//     this.y.reset(value?.y, time);
+//     this.z.reset(value?.z, time);
+//   }
 
-  next(n1: THREE.Vector3Like, time?: number): THREE.Vector3 {
-    return new THREE.Vector3(
-      this.x.next(n1.x, time),
-      this.y.next(n1.y, time),
-      this.z.next(n1.z, time)
-    );
-  }
+//   next(n1: THREE.Vector3Like, time?: number): THREE.Vector3 {
+//     return new THREE.Vector3(
+//       this.x.next(n1.x, time),
+//       this.y.next(n1.y, time),
+//       this.z.next(n1.z, time)
+//     );
+//   }
 
-  get setpoint() {
-    return new THREE.Vector3(this.x.setpoint, this.y.setpoint, this.z.setpoint);
-  }
+//   get setpoint() {
+//     return new THREE.Vector3(this.x.setpoint, this.y.setpoint, this.z.setpoint);
+//   }
 
-  set setpoint(value: THREE.Vector3Like) {
-    this.x.setpoint = value.x;
-    this.y.setpoint = value.y;
-    this.z.setpoint = value.z;
-  }
-}
+//   set setpoint(value: THREE.Vector3Like) {
+//     this.x.setpoint = value.x;
+//     this.y.setpoint = value.y;
+//     this.z.setpoint = value.z;
+//   }
+// }
 
 type CameraSetPoint = {
   position: THREE.Vector3;
-  rotation: THREE.Euler;
+  focusPoint: THREE.Vector3;
   zoom: number;
 };
 
@@ -121,126 +121,192 @@ class CameraSetpointController {
   private initialView: Promise<CameraSetPoint>;
   private driveView: Promise<CameraSetPoint>;
   private view: CameraView;
-  private positionPID: PIDController3;
-  private rotationPID: PIDController3;
-  private zoomPID: PIDController;
-  private t0: number;
+  private t0?: number;
+  private setpoint: Promise<CameraSetPoint>;
+  private lambda: number;
+  private focusPoint: THREE.Vector3;
   constructor(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
     chassis: Promise<THREE.Object3D>,
-    driveOrientation: DriveOrientation,
-    pidParams: PIDParams,
-    zoomMargin: number = 0.9
+    driveOrientation: DriveOrientation
   ) {
+    this.lambda = 0.005;
+    this.focusPoint = new THREE.Vector3(0, 0, 0);
     this.view = "InitialView";
-    const views = this.getViews(camera, chassis, driveOrientation, zoomMargin);
+    const views = this.getViews(camera, chassis, driveOrientation);
     this.initialView = views.then(({ initialView }) => initialView);
     this.driveView = views.then(({ driveView }) => driveView);
-    this.positionPID = new PIDController3(pidParams, camera.position);
-    this.rotationPID = new PIDController3(pidParams, camera.rotation);
-    this.zoomPID = new PIDController(pidParams, 1);
-    this.t0 = performance.now();
-    this.setView(this.view);
-  }
-
-  reset() {
-    this.positionPID.reset();
-    this.rotationPID.reset();
-    this.zoomPID.reset();
+    this.setpoint = this.lookupSetpoint(this.view);
   }
 
   setView(view: CameraView) {
     this.view = view;
+    this.setpoint = this.lookupSetpoint(this.view);
+  }
+
+  private lookupSetpoint(view: CameraView) {
     switch (view) {
       case "InitialView":
-        return this.initialView.then((cameraSetpoint) => {
-          this.positionPID.setpoint = cameraSetpoint.position.clone();
-          this.rotationPID.setpoint = cameraSetpoint.rotation.clone();
-          this.zoomPID.setpoint = cameraSetpoint.zoom;
-        });
+        return this.initialView;
       case "DriveView":
-        return this.driveView.then((cameraSetpoint) => {
-          this.positionPID.setpoint = cameraSetpoint.position;
-          this.rotationPID.setpoint = cameraSetpoint.rotation;
-          this.zoomPID.setpoint = cameraSetpoint.zoom;
-        });
+        return this.driveView;
       default:
-        return Promise.resolve();
+        throw new Error(`Invalid camera view: ${this.view}`);
     }
   }
 
-  updateCameraPosition(
+  async updateCameraPosition(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
     time: number,
     force: boolean = false
   ) {
-    console.log(
-      "camera position in:",
-      JSON.stringify(camera.position),
-      JSON.stringify(camera.rotation),
-      camera.zoom
-    );
+    // console.log(
+    //   "camera position in:",
+    //   JSON.stringify(camera.position),
+    //   JSON.stringify(camera.rotation),
+    //   camera.zoom
+    // );
+    const setpoint = await this.setpoint;
+
     if (force) {
-      camera.position.copy(this.positionPID.setpoint);
-      camera.rotation.set(
-        this.rotationPID.setpoint.x,
-        this.rotationPID.setpoint.y,
-        this.rotationPID.setpoint.z
-      );
-      camera.zoom = this.zoomPID.setpoint;
-      this.positionPID.reset(undefined, time);
-      this.rotationPID.reset(undefined, time);
-      this.zoomPID.reset(undefined, time);
+      camera.position.copy(setpoint.position);
+      this.focusPoint = setpoint.focusPoint;
+      camera.lookAt(this.focusPoint);
+      camera.zoom = setpoint.zoom;
+      return;
+    }
+    if (this.t0 === undefined) {
+      this.t0 = performance.now();
       return;
     }
     const dt = time - this.t0;
     this.t0 = time;
-    const positionDelta = this.positionPID.next(camera.position, time).multiplyScalar(dt);
-    const rotationDelta = this.rotationPID.next(camera.rotation, time).multiplyScalar(dt);
-    const zoomDelta = this.zoomPID.next(camera.zoom, time) * dt;
-
-    camera.position.add(positionDelta);
-    // camera.rotation.x += rotationDelta.x;
-    // camera.rotation.y += rotationDelta.y;
-    // camera.rotation.z += rotationDelta.z;
-    camera.lookAt(0, 0, 0);
-    camera.zoom += zoomDelta;
-    camera.updateMatrix();
-    camera.updateProjectionMatrix();
-    console.log(
-      "camera position out:",
-      JSON.stringify(camera.position),
-      JSON.stringify(camera.rotation),
-      camera.zoom
+    const relSpherical = new THREE.Spherical()
+      .setFromVector3(camera.position.clone().sub(setpoint.focusPoint))
+      .makeSafe();
+    const targetRelSpherical = new THREE.Spherical()
+      .setFromVector3(setpoint.position.clone().sub(setpoint.focusPoint))
+      .makeSafe();
+    relSpherical.radius = THREE.MathUtils.damp(
+      relSpherical.radius,
+      targetRelSpherical.radius,
+      this.lambda,
+      dt
     );
+    relSpherical.phi = THREE.MathUtils.damp(
+      relSpherical.phi,
+      targetRelSpherical.phi,
+      this.lambda,
+      dt
+    );
+    relSpherical.theta = THREE.MathUtils.damp(
+      relSpherical.theta,
+      targetRelSpherical.theta,
+      this.lambda,
+      dt
+    );
+
+    camera.position.copy(
+      new THREE.Vector3().setFromSpherical(relSpherical).add(setpoint.focusPoint)
+    );
+    camera.zoom = THREE.MathUtils.damp(camera.zoom, setpoint.zoom, this.lambda, dt);
+
+    this.focusPoint.x = THREE.MathUtils.damp(
+      this.focusPoint.x,
+      setpoint.focusPoint.x,
+      this.lambda,
+      dt
+    );
+    this.focusPoint.y = THREE.MathUtils.damp(
+      this.focusPoint.y,
+      setpoint.focusPoint.y,
+      this.lambda,
+      dt
+    );
+    this.focusPoint.z = THREE.MathUtils.damp(
+      this.focusPoint.z,
+      setpoint.focusPoint.z,
+      this.lambda,
+      dt
+    );
+
+    camera.lookAt(this.focusPoint);
+
+    // const targetDirection = new THREE.Vector3()
+    //   .setFromSpherical(targetRelSpherical)
+    //   .negate()
+    //   .normalize();
+    // console.log("target direction:", targetDirection);
+    // camera.updateMatrix();
+    // const currentDirection = camera.localToWorld(new THREE.Vector3(0, 0, -1)).sub(camera.position);
+    // console.log("current direction:", currentDirection);
+    // currentDirection.x = THREE.MathUtils.damp(
+    //   currentDirection.x,
+    //   targetDirection.x,
+    //   this.lambda,
+    //   dt
+    // );
+    // currentDirection.y = THREE.MathUtils.damp(
+    //   currentDirection.y,
+    //   targetDirection.y,
+    //   this.lambda,
+    //   dt
+    // );
+    // currentDirection.z = THREE.MathUtils.damp(
+    //   currentDirection.z,
+    //   targetDirection.z,
+    //   this.lambda,
+    //   dt
+    // );
+
+    // camera.lookAt(currentDirection.normalize().add(camera.position));
+
+    // const targetQuat = new THREE.Quaternion().setFromEuler(
+    //   new THREE.Euler().setFromVector3(
+    //     new THREE.Vector3().setFromSpherical(targetRelSpherical).negate().normalize()
+    //   )
+    // );
+    // camera.quaternion.rotateTowards(targetQuat, 0.01);
+
+    // camera.lookAt(setpoint.focusPoint);
+
+    camera.updateProjectionMatrix();
+    // console.log(
+    //   "camera position out:",
+    //   JSON.stringify(camera.position),
+    //   JSON.stringify(camera.rotation),
+    //   camera.zoom
+    // );
   }
 
   updateViews(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
     chassis: Promise<THREE.Object3D>,
-    driveOrientation: DriveOrientation,
-    zoomMargin: number = 0.9
+    driveOrientation: DriveOrientation
   ) {
-    const views = this.getViews(camera, chassis, driveOrientation, zoomMargin);
+    const views = this.getViews(camera, chassis, driveOrientation);
     this.initialView = views.then(({ initialView }) => initialView);
     this.driveView = views.then(({ driveView }) => driveView);
-    this.setView(this.view);
+    this.setpoint = this.lookupSetpoint(this.view);
   }
 
   private getViews(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
     chassis: Promise<THREE.Object3D>,
-    driveOrientation: DriveOrientation,
-    zoomMargin: number
+    driveOrientation: DriveOrientation
   ) {
-    camera = camera.clone(); // don't affect passed in camera
+    camera = camera.clone(false); // don't affect passed in camera
     const views = chassis.then((chassis) => {
       const origin = new THREE.Vector3(0, 0, 0);
-      const getView = (position: THREE.Vector3): CameraSetPoint => {
+      const getView = (
+        position: THREE.Vector3,
+        focusPoint: THREE.Vector3,
+        zoomMargin: number
+      ): CameraSetPoint => {
         const chassisBounds = new THREE.Box3().setFromObject(chassis);
 
         camera.position.copy(position);
-        camera.lookAt(origin);
+        camera.lookAt(focusPoint);
 
         if (camera instanceof THREE.OrthographicCamera) {
           camera.zoom = 1;
@@ -266,13 +332,14 @@ class CameraSetpointController {
 
         return {
           position: camera.position.clone(),
-          rotation: camera.rotation.clone(),
+          focusPoint: new THREE.Vector3(),
           zoom: camera.zoom,
         };
       };
       const position = new THREE.Vector3();
-      position.set(2, 2, 2);
-      const initialView: CameraSetPoint = getView(position);
+      const focusPoint = new THREE.Vector3();
+      position.set(3, 3, 3);
+      const initialView: CameraSetPoint = getView(position, focusPoint, 0.75);
       switch (driveOrientation) {
         case "FrontLoader":
           position.set(0, 0, 2);
@@ -283,7 +350,8 @@ class CameraSetpointController {
         default:
           throw new Error(`DriveOrientation not implemented: ${driveOrientation}`);
       }
-      const driveView: CameraSetPoint = getView(position);
+
+      const driveView: CameraSetPoint = getView(position, focusPoint, 0.9);
       return {
         initialView,
         driveView,
@@ -374,7 +442,6 @@ export class ServerView extends THREE.EventDispatcher<
       enableRotate?: boolean;
       enablePan?: boolean;
       enableZoom?: boolean;
-      pidParams?: PIDParams;
       view?: CameraView;
     } = {}
   ) {
@@ -383,7 +450,6 @@ export class ServerView extends THREE.EventDispatcher<
     opts.enableRotate ??= false;
     opts.enablePan ??= false;
     opts.enableZoom ??= false;
-    opts.pidParams ??= { kp: 0.00, ki: 0.00001, kd: 0.01 };
 
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
@@ -486,19 +552,13 @@ export class ServerView extends THREE.EventDispatcher<
     this.cameraSetpointController = new CameraSetpointController(
       this.camera,
       this.chassis,
-      this.driveOrientation,
-      opts.pidParams
+      this.driveOrientation
     );
-    this.cameraSetpointController.setView("InitialView").then(() => {
-      this.cameraSetpointController.updateCameraPosition(this.camera, 0, true);
-      this.controls.update();
+    this.cameraSetpointController.setView("InitialView");
+    this.cameraSetpointController.updateCameraPosition(this.camera, 0, true).then(() => {
       if (opts.view) {
         this.cameraSetpointController.setView(opts.view);
       }
-    });
-
-    this.controls.addEventListener("end", () => {
-      this.cameraSetpointController.reset();
     });
   }
 

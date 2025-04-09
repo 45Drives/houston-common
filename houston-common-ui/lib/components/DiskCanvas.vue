@@ -1,27 +1,5 @@
 <template>
-  <div>
-    <div ref="canvasParent" class="overflow-hidden"></div>
-    <div>
-      <label
-        >kp
-        <input type="number" v-model.number.lazy="pidParams.kp" min="0" max="0.1" step="0.001" />
-      </label>
-      <label
-        >ki
-        <input
-          type="number"
-          v-model.number.lazy="pidParams.ki"
-          min="0"
-          max="0.001"
-          step="0.00001"
-        />
-      </label>
-      <label
-        >kd
-        <input type="number" v-model.number.lazy="pidParams.kd" min="0" max="0.1" step="0.0001" />
-      </label>
-    </div>
-  </div>
+  <div ref="canvasParent" class="overflow-hidden"></div>
 </template>
 
 <script setup lang="ts">
@@ -37,7 +15,7 @@ import { Server, unwrap, type DriveSlot } from "@45drives/houston-common-lib";
 
 import { useDarkModeState } from "@/composables";
 
-const pidParams = reactive({ kp: 0.005, ki: 0, kd: 0 });
+// const pidParams = reactive({ kp: 0.005, ki: 0, kd: 0 });
 
 const props = withDefaults(
   defineProps<{
@@ -71,7 +49,6 @@ Promise.all([import("./ServerView"), props.server.getServerModel()]).then(
     const watchHandles: WatchHandle[] = [];
 
     const serverView = new ServerView(await unwrap(serverModel), {
-      pidParams: pidParams,
       view: "DriveView",
     });
 

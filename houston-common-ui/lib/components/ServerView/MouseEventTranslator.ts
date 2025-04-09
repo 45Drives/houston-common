@@ -9,6 +9,7 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { LAYER_NO_SELECT } from "./constants";
+import { intersection } from "zod";
 
 export class SelectionBox extends LineSegments2 {
   constructor() {
@@ -337,13 +338,22 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
       mouseUpCoordsNormalized ?? this.normalizedMouseEventCoords(event),
       this.camera
     );
-    const result = [];
-    for (const slot of this.componentSlots) {
-      const intersections = this.raycaster.intersectObject(slot.boundingBox, false);
-      if (intersections.length > 0) {
-        result.push(slot);
-      }
-    }
-    return result;
+    return this.raycaster
+      .intersectObjects(
+        this.componentSlots.map((slot) => slot.boundingBox),
+        false
+      )
+      .map((intersection) =>
+        this.componentSlots.find((slot) => slot.boundingBox === intersection.object)
+      )
+      .filter((slot): slot is ServerComponentSlot => slot !== undefined);
+    // const result = [];
+    // for (const slot of this.componentSlots) {
+    //   const intersections = this.raycaster.intersectObject(slot.boundingBox, false);
+    //   if (intersections.length > 0) {
+    //     result.push(slot);
+    //   }
+    // }
+    // return result;
   }
 }

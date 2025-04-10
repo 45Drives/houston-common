@@ -98,6 +98,7 @@ export interface VDevDisk {
   poolName?: string;
   vDevType?: string;
   children?: VDevDisk[];
+  replacingTarget?: boolean;
 }
 
 

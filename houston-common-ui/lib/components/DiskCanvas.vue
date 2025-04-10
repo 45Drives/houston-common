@@ -48,9 +48,11 @@ Promise.all([import("./ServerView"), props.server.getServerModel()]).then(
   async ([{ ServerView, ServerDriveSlot }, serverModel]) => {
     const watchHandles: WatchHandle[] = [];
 
-    const serverView = new ServerView(await unwrap(serverModel), {
-      view: "DriveView",
-    });
+    const serverView = new ServerView(await unwrap(serverModel));
+
+    serverView
+      .setView("InitialView")
+      .then(() => serverView.setView("DriveView"));
 
     serverView.addEventListener("selectionchange", (e) => {
       selectedDriveSlots.value = e.components

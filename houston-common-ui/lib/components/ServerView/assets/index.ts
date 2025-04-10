@@ -105,17 +105,21 @@ export function getChassisModel(modelNumber: string): {
   return { model: notFoundModelLoader(), driveOrientation: "FrontLoader" };
 }
 
+const genericDrive = new THREE.Mesh(
+  new THREE.BoxGeometry(1, 1, 1),
+  new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5, roughness: 0.5 })
+);
+genericDrive.castShadow = true;
+genericDrive.receiveShadow = true;
+genericDrive.material.dithering = true;
+
 const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader }[]> = {
   HDD: [
     {
       re: /^/,
       modelLoader: lazyModelLoader(() => {
-        const model = new THREE.Mesh(
-          new THREE.BoxGeometry(0.0254, 0.1016, 0.14605),
-          new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.5, roughness: 0.5 })
-        );
-        model.castShadow = true;
-        model.receiveShadow = true;
+        const model = genericDrive.clone();
+        model.geometry.scale(0.0254, 0.1016, 0.14605);
         model.geometry.computeBoundingBox();
         return Promise.resolve(model);
       }),
@@ -126,13 +130,8 @@ const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader }[]
     {
       re: /^/,
       modelLoader: lazyModelLoader(() => {
-        const model = new THREE.Mesh(
-          new THREE.BoxGeometry(0.015, 0.06985, 0.1016),
-          new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.5, roughness: 0.5 })
-        );
-        model.castShadow = true;
-        model.receiveShadow = true;
-        model.material.dithering = true;
+        const model = genericDrive.clone();
+        model.geometry.scale(0.015, 0.06985, 0.1016);
         model.geometry.computeBoundingBox();
         return Promise.resolve(model);
       }),
@@ -143,13 +142,8 @@ const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader }[]
     {
       re: /^/,
       modelLoader: lazyModelLoader(() => {
-        const model = new THREE.Mesh(
-          new THREE.BoxGeometry(0.007, 0.06985, 0.1016),
-          new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.5, roughness: 0.5 })
-        );
-        model.castShadow = true;
-        model.receiveShadow = true;
-        model.material.dithering = true;
+        const model = genericDrive.clone();
+        model.geometry.scale(0.007, 0.06985, 0.1016);
         model.geometry.computeBoundingBox();
         return Promise.resolve(model);
       }),

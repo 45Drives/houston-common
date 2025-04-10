@@ -1,12 +1,6 @@
 import * as THREE from "three";
-// import { Chassis } from "@/components/ServerView/Chassis";
 
 import { MouseEventTranslator } from "@/components/ServerView/MouseEventTranslator";
-// import {
-//   ServerComponent,
-//   type ServerComponentEventMap,
-//   type ServerComponentMouseEvent,
-// } from "@/components/ServerView/ServerComponent";
 import {
   Server,
   unwrap,
@@ -26,89 +20,6 @@ import {
   type ServerComponentSlotEventMap,
 } from "./ServerComponent";
 
-// export type PIDParams = {
-//   kp: number;
-//   ki: number;
-//   kd: number;
-// };
-
-// class PIDController {
-//   private i: number;
-//   private e0: number;
-//   private t0: number;
-//   public setpoint: number;
-
-//   constructor(
-//     public params: PIDParams,
-//     initial: number
-//   ) {
-//     this.i = 0;
-//     this.e0 = 0;
-//     this.setpoint = initial;
-//     this.t0 = performance.now();
-//   }
-
-//   reset(value?: number, time?: number) {
-//     this.i = 0;
-//     this.e0 = 0;
-//     this.t0 = time ?? performance.now();
-//     this.setpoint = value ?? this.setpoint;
-//   }
-
-//   next(n1: number, time?: number): number {
-//     const t1 = time ?? performance.now();
-//     const dt = t1 - this.t0;
-
-//     const e1 = this.setpoint - n1;
-
-//     const p = e1;
-//     this.i += e1 * dt;
-//     this.i = Math.min(Math.max(-1000, this.i), 1000);
-//     const d = (e1 - this.e0) / dt;
-
-//     this.e0 = e1;
-//     this.t0 = t1;
-
-//     return this.params.kp * p + this.params.ki * this.i + this.params.kd * d;
-//   }
-// }
-
-// class PIDController3 {
-//   private x: PIDController;
-//   private y: PIDController;
-//   private z: PIDController;
-
-//   constructor(params: PIDParams, initial: THREE.Vector3Like) {
-//     this.x = new PIDController(params, initial.x);
-//     this.y = new PIDController(params, initial.y);
-//     this.z = new PIDController(params, initial.z);
-//   }
-
-//   reset(value?: THREE.Vector3Like, time?: number) {
-//     this.x.reset(value?.x, time);
-//     this.y.reset(value?.y, time);
-//     this.z.reset(value?.z, time);
-//   }
-
-//   next(n1: THREE.Vector3Like, time?: number): THREE.Vector3 {
-//     return new THREE.Vector3(
-//       this.x.next(n1.x, time),
-//       this.y.next(n1.y, time),
-//       this.z.next(n1.z, time)
-//     );
-//   }
-
-//   get setpoint() {
-//     return new THREE.Vector3(this.x.setpoint, this.y.setpoint, this.z.setpoint);
-//   }
-
-//   set setpoint(value: THREE.Vector3Like) {
-//     this.x.setpoint = value.x;
-//     this.y.setpoint = value.y;
-//     this.z.setpoint = value.z;
-//   }
-// }
-
 type CameraSetPoint = {
   position: THREE.Vector3;
   focusPoint: THREE.Vector3;
@@ -125,15 +36,17 @@ class CameraSetpointController {
   private setpoint: Promise<CameraSetPoint>;
   private lambda: number;
   private focusPoint: THREE.Vector3;
+  private atFocusPointResolver?: () => void;
   constructor(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
     chassis: Promise<THREE.Object3D>,
+    componentSlots: ServerComponentSlot[],
     driveOrientation: DriveOrientation
   ) {
     this.lambda = 0.005;
     this.focusPoint = new THREE.Vector3(0, 0, 0);
     this.view = "InitialView";
-    const views = this.getViews(camera, chassis, driveOrientation);
+    const views = this.getViews(camera, chassis, componentSlots, driveOrientation);
     this.initialView = views.then(({ initialView }) => initialView);
     this.driveView = views.then(({ driveView }) => driveView);
     this.setpoint = this.lookupSetpoint(this.view);
@@ -142,6 +55,17 @@ class CameraSetpointController {
   setView(view: CameraView) {
     this.view = view;
     this.setpoint = this.lookupSetpoint(this.view);
+    return this.setpoint.then(() =>
+      new Promise<void>((resolve) => {
+        this.atFocusPointResolver = resolve;
+      })
+        .then(() => {
+          console.log("at setpoint", view);
+        })
+        .finally(() => {
+          this.atFocusPointResolver = undefined;
+        })
+    );
   }
 
   private lookupSetpoint(view: CameraView) {
@@ -160,12 +84,6 @@ class CameraSetpointController {
     time: number,
     force: boolean = false
   ) {
-    // console.log(
-    //   "camera position in:",
-    //   JSON.stringify(camera.position),
-    //   JSON.stringify(camera.rotation),
-    //   camera.zoom
-    // );
     const setpoint = await this.setpoint;
 
     if (force) {
@@ -173,6 +91,7 @@ class CameraSetpointController {
       this.focusPoint = setpoint.focusPoint;
       camera.lookAt(this.focusPoint);
       camera.zoom = setpoint.zoom;
+      this.atFocusPointResolver?.();
       return;
     }
     if (this.t0 === undefined) {
@@ -181,110 +100,68 @@ class CameraSetpointController {
     }
     const dt = time - this.t0;
     this.t0 = time;
+    const dampClamp = (
+      x: number,
+      y: number,
+      lambda: number,
+      dt: number,
+      maxSpeed: number
+    ): number => {
+      const damped = THREE.MathUtils.damp(x, y, lambda, dt);
+      const dx = THREE.MathUtils.clamp(damped - x, -maxSpeed * dt, maxSpeed * dt);
+      return x + dx;
+    };
+
+    this.focusPoint.x = dampClamp(this.focusPoint.x, setpoint.focusPoint.x, this.lambda, dt, 0.001);
+    this.focusPoint.y = dampClamp(this.focusPoint.y, setpoint.focusPoint.y, this.lambda, dt, 0.001);
+    this.focusPoint.z = dampClamp(this.focusPoint.z, setpoint.focusPoint.z, this.lambda, dt, 0.001);
+
     const relSpherical = new THREE.Spherical()
-      .setFromVector3(camera.position.clone().sub(setpoint.focusPoint))
+      .setFromVector3(camera.position.clone().sub(this.focusPoint))
       .makeSafe();
     const targetRelSpherical = new THREE.Spherical()
       .setFromVector3(setpoint.position.clone().sub(setpoint.focusPoint))
       .makeSafe();
-    relSpherical.radius = THREE.MathUtils.damp(
+    relSpherical.radius = dampClamp(
       relSpherical.radius,
       targetRelSpherical.radius,
       this.lambda,
-      dt
+      dt,
+      0.0005
     );
-    relSpherical.phi = THREE.MathUtils.damp(
-      relSpherical.phi,
-      targetRelSpherical.phi,
-      this.lambda,
-      dt
-    );
-    relSpherical.theta = THREE.MathUtils.damp(
+    relSpherical.phi = dampClamp(relSpherical.phi, targetRelSpherical.phi, this.lambda, dt, 0.001);
+    relSpherical.theta = dampClamp(
       relSpherical.theta,
       targetRelSpherical.theta,
       this.lambda,
-      dt
+      dt,
+      0.0005
     );
 
-    camera.position.copy(
-      new THREE.Vector3().setFromSpherical(relSpherical).add(setpoint.focusPoint)
-    );
-    camera.zoom = THREE.MathUtils.damp(camera.zoom, setpoint.zoom, this.lambda, dt);
-
-    this.focusPoint.x = THREE.MathUtils.damp(
-      this.focusPoint.x,
-      setpoint.focusPoint.x,
-      this.lambda,
-      dt
-    );
-    this.focusPoint.y = THREE.MathUtils.damp(
-      this.focusPoint.y,
-      setpoint.focusPoint.y,
-      this.lambda,
-      dt
-    );
-    this.focusPoint.z = THREE.MathUtils.damp(
-      this.focusPoint.z,
-      setpoint.focusPoint.z,
-      this.lambda,
-      dt
-    );
+    camera.position.copy(new THREE.Vector3().setFromSpherical(relSpherical).add(this.focusPoint));
+    camera.zoom = dampClamp(camera.zoom, setpoint.zoom, this.lambda, dt, 0.01);
 
     camera.lookAt(this.focusPoint);
 
-    // const targetDirection = new THREE.Vector3()
-    //   .setFromSpherical(targetRelSpherical)
-    //   .negate()
-    //   .normalize();
-    // console.log("target direction:", targetDirection);
-    // camera.updateMatrix();
-    // const currentDirection = camera.localToWorld(new THREE.Vector3(0, 0, -1)).sub(camera.position);
-    // console.log("current direction:", currentDirection);
-    // currentDirection.x = THREE.MathUtils.damp(
-    //   currentDirection.x,
-    //   targetDirection.x,
-    //   this.lambda,
-    //   dt
-    // );
-    // currentDirection.y = THREE.MathUtils.damp(
-    //   currentDirection.y,
-    //   targetDirection.y,
-    //   this.lambda,
-    //   dt
-    // );
-    // currentDirection.z = THREE.MathUtils.damp(
-    //   currentDirection.z,
-    //   targetDirection.z,
-    //   this.lambda,
-    //   dt
-    // );
-
-    // camera.lookAt(currentDirection.normalize().add(camera.position));
-
-    // const targetQuat = new THREE.Quaternion().setFromEuler(
-    //   new THREE.Euler().setFromVector3(
-    //     new THREE.Vector3().setFromSpherical(targetRelSpherical).negate().normalize()
-    //   )
-    // );
-    // camera.quaternion.rotateTowards(targetQuat, 0.01);
-
-    // camera.lookAt(setpoint.focusPoint);
-
     camera.updateProjectionMatrix();
-    // console.log(
-    //   "camera position out:",
-    //   JSON.stringify(camera.position),
-    //   JSON.stringify(camera.rotation),
-    //   camera.zoom
-    // );
+
+    const threshSq = 0.002 ** 2;
+
+    if (
+      camera.position.distanceToSquared(setpoint.position) < threshSq &&
+      this.focusPoint.distanceToSquared(setpoint.focusPoint) < threshSq
+    ) {
+      this.atFocusPointResolver?.();
+    }
   }
 
   updateViews(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
     chassis: Promise<THREE.Object3D>,
+    componentSlots: ServerComponentSlot[],
     driveOrientation: DriveOrientation
   ) {
-    const views = this.getViews(camera, chassis, driveOrientation);
+    const views = this.getViews(camera, chassis, componentSlots, driveOrientation);
     this.initialView = views.then(({ initialView }) => initialView);
     this.driveView = views.then(({ driveView }) => driveView);
     this.setpoint = this.lookupSetpoint(this.view);
@@ -293,19 +170,32 @@ class CameraSetpointController {
   private getViews(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
     chassis: Promise<THREE.Object3D>,
+    componentSlots: ServerComponentSlot[],
     driveOrientation: DriveOrientation
   ) {
     camera = camera.clone(false); // don't affect passed in camera
     const views = chassis.then((chassis) => {
-      const origin = new THREE.Vector3(0, 0, 0);
       const getView = (
         position: THREE.Vector3,
-        focusPoint: THREE.Vector3,
-        zoomMargin: number
+        zoomMargin: number,
+        ...focusOn: THREE.Object3D[]
       ): CameraSetPoint => {
-        const chassisBounds = new THREE.Box3().setFromObject(chassis);
-
         camera.position.copy(position);
+
+        const bounds = focusOn
+          .map((obj) => {
+            obj.updateMatrixWorld(true);
+            return new THREE.Box3().setFromObject(obj);
+          })
+          .reduce(
+            (bounds, objBounds, index) =>
+              index === 0 ? bounds.copy(objBounds) : bounds.union(objBounds),
+            new THREE.Box3()
+          );
+
+        const focusPoint = new THREE.Vector3();
+        bounds.getCenter(focusPoint);
+
         camera.lookAt(focusPoint);
 
         if (camera instanceof THREE.OrthographicCamera) {
@@ -315,7 +205,7 @@ class CameraSetpointController {
           throw new Error("not implemented");
         }
 
-        const projectedBounds = chassisBounds.clone().applyMatrix4(camera.projectionMatrix);
+        const projectedBounds = bounds.clone().applyMatrix4(camera.projectionMatrix);
         console.log("projected bounds:", projectedBounds);
 
         const projectedSize = new THREE.Vector3();
@@ -332,17 +222,16 @@ class CameraSetpointController {
 
         return {
           position: camera.position.clone(),
-          focusPoint: new THREE.Vector3(),
+          focusPoint,
           zoom: camera.zoom,
         };
       };
       const position = new THREE.Vector3();
-      const focusPoint = new THREE.Vector3();
-      position.set(3, 3, 3);
-      const initialView: CameraSetPoint = getView(position, focusPoint, 0.75);
+      position.set(2, 2, 2);
+      const initialView: CameraSetPoint = getView(position, 0.75, chassis);
       switch (driveOrientation) {
         case "FrontLoader":
-          position.set(-0.1, 0.1, 2);
+          position.set(0, 0, 2);
           break;
         case "TopLoader":
           position.set(0, 2, 0.1);
@@ -351,7 +240,13 @@ class CameraSetpointController {
           throw new Error(`DriveOrientation not implemented: ${driveOrientation}`);
       }
 
-      const driveView: CameraSetPoint = getView(position, focusPoint, 0.9);
+      const driveView: CameraSetPoint = getView(
+        position,
+        0.75,
+        ...componentSlots
+          .filter((slot) => slot instanceof ServerDriveSlot)
+          .map((slot) => slot.boundingBox)
+      );
       return {
         initialView,
         driveView,
@@ -359,49 +254,6 @@ class CameraSetpointController {
     });
     return views;
   }
-
-  // private getCurrentCameraLocation(
-  //   camera: THREE.OrthographicCamera | THREE.PerspectiveCamera
-  // ): CameraSetPoint {
-  //   return {
-  //     position: camera.position,
-  //     rotation: camera.rotation,
-  //     zoom: camera.zoom,
-  //   };
-  // }
-
-  // private getError(camera: THREE.OrthographicCamera | THREE.PerspectiveCamera): CameraSetPoint {
-  //   if (this.setPoint === null) {
-  //     return {
-  //       position: new THREE.Vector3(),
-  //       rotation: new THREE.Euler(),
-  //       zoom: 1,
-  //     };
-  //   }
-  //   const current = this.getCurrentCameraLocation(camera);
-  //   const setPoint = this.setPoint;
-  //   return {
-  //     position: setPoint.position.sub(current.position),
-  //     rotation: new THREE.Euler(
-  //       setPoint.rotation.x - current.rotation.x,
-  //       setPoint.rotation.y - current.rotation.y,
-  //       setPoint.rotation.z - current.rotation.z
-  //     ),
-  //     zoom: setPoint.zoom / current.zoom,
-  //   };
-  // }
-
-  // private scaleError(error: CameraSetPoint, factor: number) {
-  //   return {
-  //     position: error.position.multiplyScalar(factor),
-  //     rotation: new THREE.Euler(
-  //       error.rotation.x * factor,
-  //       error.rotation.y * factor,
-  //       error.rotation.z * factor
-  //     ),
-  //     zoom: error.zoom * factor,
-  //   };
-  // }
 }
 
 export class ServerView extends THREE.EventDispatcher<
@@ -410,7 +262,7 @@ export class ServerView extends THREE.EventDispatcher<
     driveslotchange: { type: "driveslotchange"; slots: DriveSlot[] };
   }
 > {
-  private renderer = new THREE.WebGLRenderer();
+  private renderer = new THREE.WebGLRenderer({ antialias: false });
   private camera: THREE.OrthographicCamera | THREE.PerspectiveCamera = new THREE.OrthographicCamera(
     -1,
     1,
@@ -433,7 +285,7 @@ export class ServerView extends THREE.EventDispatcher<
   private componentSlots: ServerComponentSlot[];
 
   private driveOrientation: DriveOrientation;
-  private cameraSetpointController: CameraSetpointController;
+  private cameraSetpointController: Promise<CameraSetpointController>;
 
   constructor(
     public readonly serverModel: string,
@@ -442,7 +294,6 @@ export class ServerView extends THREE.EventDispatcher<
       enableRotate?: boolean;
       enablePan?: boolean;
       enableZoom?: boolean;
-      view?: CameraView;
     } = {}
   ) {
     super();
@@ -491,17 +342,7 @@ export class ServerView extends THREE.EventDispatcher<
     // this.controls.zoomToCursor = true;
     this.scene.add(this.camera);
 
-    this.scene.add(new THREE.AmbientLight(0xffffff, 1));
-    const light = new THREE.PointLight();
-    light.castShadow = true;
-    //Set up shadow properties for the light
-    light.shadow.mapSize.width = 1024;
-    light.shadow.mapSize.height = 1024;
-    light.shadow.camera.near = 0;
-    light.shadow.camera.far = 500;
-    light.position.set(-0.1, 0.1, 0);
-    light.intensity = 2;
-    this.camera.add(light);
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.75));
 
     this.componentSlots = [];
 
@@ -525,6 +366,24 @@ export class ServerView extends THREE.EventDispatcher<
           }
         }
       });
+      const light = new THREE.PointLight();
+      light.castShadow = true;
+      //Set up shadow properties for the light
+      light.shadow.mapSize.width = 512;
+      light.shadow.mapSize.height = 512;
+      light.shadow.camera.near = 0;
+      light.shadow.camera.far = 10;
+      light.intensity = 1;
+      for (const [position, intensity] of [
+        [new THREE.Vector3(-0.25, 0, 1), 1], // front
+        [new THREE.Vector3(0, 0.5, 0), 0.5], // top
+        [new THREE.Vector3(0, 0.25, -1), 1], // rear
+      ] as [THREE.Vector3, number][]) {
+        light.position.copy(position);
+        light.intensity = intensity;
+        chassis.add(light.clone());
+      }
+      light.dispose();
       this.scene.add(chassis);
       return chassis;
     });
@@ -541,25 +400,19 @@ export class ServerView extends THREE.EventDispatcher<
     this.parentResizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         this.fixCameraAspect(entry.contentRect.width, entry.contentRect.height, true);
-        // this.chassis
-        //   // .then((chassis) => chassis.loaded)
-        //   .then(() => {
-        //     this.zoomFit();
-        //   });
       }
     });
 
-    this.cameraSetpointController = new CameraSetpointController(
+    const cameraSetpointController = new CameraSetpointController(
       this.camera,
       this.chassis,
+      this.componentSlots,
       this.driveOrientation
     );
-    this.cameraSetpointController.setView("InitialView");
-    this.cameraSetpointController.updateCameraPosition(this.camera, 0, true).then(() => {
-      if (opts.view) {
-        this.cameraSetpointController.setView(opts.view);
-      }
-    });
+    cameraSetpointController.setView("InitialView");
+    this.cameraSetpointController = cameraSetpointController
+      .updateCameraPosition(this.camera, 0, true)
+      .then(() => cameraSetpointController);
   }
 
   async start(parent: HTMLElement) {
@@ -577,7 +430,7 @@ export class ServerView extends THREE.EventDispatcher<
   }
 
   setView(view: CameraView) {
-    this.cameraSetpointController.setView(view);
+    return this.cameraSetpointController.then((c) => c.setView(view));
   }
 
   private fixCameraAspect(
@@ -613,40 +466,12 @@ export class ServerView extends THREE.EventDispatcher<
 
     this.camera.updateProjectionMatrix();
 
-    this.cameraSetpointController.updateViews(this.camera, this.chassis, this.driveOrientation);
+    this.cameraSetpointController.then((c) =>
+      c.updateViews(this.camera, this.chassis, this.componentSlots, this.driveOrientation)
+    );
 
     // this.controls.update();
   }
-
-  // async zoomFit(margin: number = 0.9) {
-  //   const chassisBounds = new THREE.Box3().setFromObject(await this.chassis);
-
-  //   if (this.camera instanceof THREE.OrthographicCamera) {
-  //     this.camera.zoom = 1;
-  //     this.camera.updateProjectionMatrix();
-  //   } else {
-  //     throw new Error("not implemented");
-  //   }
-
-  //   const projectedBounds = chassisBounds.clone().applyMatrix4(this.camera.projectionMatrix);
-  //   console.log("projected bounds:", projectedBounds);
-
-  //   const projectedSize = new THREE.Vector3();
-  //   projectedBounds.getSize(projectedSize);
-  //   console.log("projected size:", projectedSize);
-
-  //   if (this.camera instanceof THREE.OrthographicCamera) {
-  //     this.camera.zoom = (2 / Math.max(projectedSize.x, projectedSize.y)) * margin;
-  //   } else {
-  //     throw new Error("not implemented");
-  //   }
-
-  //   this.camera.updateProjectionMatrix();
-
-  //   this.controls.update();
-
-  //   console.log("camera position:", this.camera.position);
-  // }
 
   /**
    * Set background color hex
@@ -717,10 +542,10 @@ export class ServerView extends THREE.EventDispatcher<
   }
 
   private animate(time: number) {
-    this.cameraSetpointController.updateCameraPosition(this.camera, time);
-    this.controls.object = new THREE.Object3D();
-    this.controls.update();
-    this.controls.object = this.camera;
+    this.cameraSetpointController.then((c) => c.updateCameraPosition(this.camera, time));
+    // this.controls.object = new THREE.Object3D();
+    // this.controls.update();
+    // this.controls.object = this.camera;
     // this.controls.update();
     this.mouseEventTranslator.animate();
     this.renderer.render(this.scene, this.camera);

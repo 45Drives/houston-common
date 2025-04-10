@@ -112,7 +112,7 @@ const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader }[]
       modelLoader: lazyModelLoader(() => {
         const model = new THREE.Mesh(
           new THREE.BoxGeometry(0.0254, 0.1016, 0.14605),
-          new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.5 })
+          new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.5, roughness: 0.5 })
         );
         model.castShadow = true;
         model.receiveShadow = true;
@@ -128,7 +128,7 @@ const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader }[]
       modelLoader: lazyModelLoader(() => {
         const model = new THREE.Mesh(
           new THREE.BoxGeometry(0.015, 0.06985, 0.1016),
-          new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.5 })
+          new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.5, roughness: 0.5 })
         );
         model.castShadow = true;
         model.receiveShadow = true;
@@ -145,7 +145,7 @@ const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader }[]
       modelLoader: lazyModelLoader(() => {
         const model = new THREE.Mesh(
           new THREE.BoxGeometry(0.007, 0.06985, 0.1016),
-          new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.5 })
+          new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.5, roughness: 0.5 })
         );
         model.castShadow = true;
         model.receiveShadow = true;

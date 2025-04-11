@@ -147,10 +147,15 @@ export class ServerDriveSlot extends ServerComponentSlot {
     scene: THREE.Scene,
     objectRef: THREE.Object3D,
     slotId: string,
-    public driveType: DriveSlotType
+    public driveType: DriveSlotType,
+    public driveOrientation: DriveOrientation
   ) {
     super(scene, objectRef, slotId);
     this.driveModel = new THREE.Object3D();
+    if (driveOrientation === "TopLoader") {
+      this.driveModel.rotateX(THREE.MathUtils.degToRad(-90));
+      this.driveModel.updateMatrix();
+    }
     this.driveModel.visible = false;
     this.modelBoxHelper = new THREE.BoxHelper(this.driveModel, 0x0000ff);
     this.modelBoxHelper.visible = DEBUG_BOXES;
@@ -162,7 +167,7 @@ export class ServerDriveSlot extends ServerComponentSlot {
     return { slotId: this.slotId, drive: this.drive };
   }
 
-  setDrive(drive: DriveSlot["drive"], driveOrientation: DriveOrientation) {
+  setDrive(drive: DriveSlot["drive"]) {
     this.drive = drive;
     if (drive) {
       getDriveModel(this.driveType, drive.model).then((driveModel) => {
@@ -193,10 +198,17 @@ export class ServerDriveSlot extends ServerComponentSlot {
         );
         console.log("slot size:", slotSize, "model size:", modelSize);
 
-        const cornerOffset = slotSize
-          .multiplyScalar(0.5)
-          .addScaledVector(modelSize, -0.5)
-          .multiply({ x: 1, y: 1, z: -1 });
+        const cornerOffset = slotSize.multiplyScalar(0.5).addScaledVector(modelSize, -0.5);
+        switch (this.driveOrientation) {
+          case "FrontLoader":
+            cornerOffset.multiply({ x: 1, y: 1, z: -1 });
+            break;
+          case "TopLoader":
+            cornerOffset.multiply({ x: 1, y: -1, z: -1 });
+            break;
+          default:
+            break;
+        }
 
         this.driveModel.position.subVectors(slotCenter, modelCenter).add(cornerOffset);
 
@@ -206,8 +218,6 @@ export class ServerDriveSlot extends ServerComponentSlot {
         this.driveModel.updateMatrixWorld(true);
 
         this.modelBoxHelper.update();
-
-        // this.selectionHighlightBox.resizeTo(this.driveModel, this.SelectionHighlightMargin);
 
         this.driveModel.visible = true;
       });

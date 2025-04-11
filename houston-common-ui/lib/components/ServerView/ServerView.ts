@@ -88,7 +88,15 @@ class CameraSetpointController {
     time: number,
     force: boolean = false
   ) {
-    if (force) {
+    const threshSq = 0.001 ** 2;
+    const zoomThresh = 0.001;
+
+    if (
+      force ||
+      (camera.position.distanceToSquared(this.setpoint.position) < threshSq &&
+        this.focusPoint.distanceToSquared(this.setpoint.focusPoint) < threshSq &&
+        Math.abs(camera.zoom - this.setpoint.zoom) < zoomThresh)
+    ) {
       camera.position.copy(this.setpoint.position);
       camera.updateMatrix();
       this.focusPoint = this.setpoint.focusPoint;
@@ -163,19 +171,10 @@ class CameraSetpointController {
     camera.position.copy(new THREE.Vector3().setFromSpherical(relSpherical).add(this.focusPoint));
     camera.zoom = dampClamp(camera.zoom, this.setpoint.zoom, this.lambda, dt, 0.01);
 
+    camera.updateMatrix();
     camera.lookAt(this.focusPoint);
 
     camera.updateProjectionMatrix();
-
-    const threshSq = 0.002 ** 2;
-
-    if (
-      camera.position.distanceToSquared(this.setpoint.position) < threshSq &&
-      this.focusPoint.distanceToSquared(this.setpoint.focusPoint) < threshSq &&
-      Math.abs(camera.zoom - this.setpoint.zoom) < 0.01
-    ) {
-      this.atFocusPointResolver?.();
-    }
   }
 
   updateViews(
@@ -282,7 +281,7 @@ export class ServerView extends THREE.EventDispatcher<
     driveslotchange: { type: "driveslotchange"; slots: DriveSlot[] };
   }
 > {
-  private renderer = new THREE.WebGLRenderer({ antialias: false });
+  private renderer = new THREE.WebGLRenderer({ antialias: true });
   private camera: THREE.OrthographicCamera | THREE.PerspectiveCamera = new THREE.OrthographicCamera(
     -1,
     1,

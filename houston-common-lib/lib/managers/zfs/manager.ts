@@ -14,7 +14,8 @@ import {
   VDevDisk,
   ZPoolDestroyOptions,
   convertToBytes,
-  ExitedProcess
+  ExitedProcess, 
+  formatBytes
 } from "@/index";
 
 export interface IZFSManager {
@@ -168,55 +169,53 @@ export class ZFSManager implements IZFSManager {
    */
   async getBaseDisks(): Promise<VDevDisk[]> {
     return unwrap(
-      this.server.getDiskInfo()
-        .map((diskInfoData) =>
-          diskInfoData.rows!.map((disk: any): VDevDisk => ({
-            path: disk["dev"],
-          }))
-        )
+      this.server.getDriveSlots({ excludeEmpty: true }).map((slots) =>
+        slots.map((slot): VDevDisk => ({
+          // path: slot.drive.path,
+          path: `/dev/disk/by-vdev/${slot.slotId}`
+        }))
+      )
     );
   }
+
 
   /**
    * Fetches full disk information by merging fetchLsdev() and fetchDiskInfo()
    */
   async getFullDisks(): Promise<VDevDisk[]> {
-    return Promise.all([
-      unwrap(this.server.getLsDev()),
-      unwrap(this.server.getDiskInfo()),
-    ])
-      .then(([lsdevData, diskInfoData]) => {
-        const lsdevRows = lsdevData.rows.flat(); // Flatten nested arrays in `lsdev`
-        const diskInfoRows = diskInfoData.rows!;
-        // console.log('lsdevRows:', lsdevRows);
-        // console.log('diskInfoRows:', diskInfoRows);
-        return diskInfoRows.map((disk: any): VDevDisk => {
-          const matchingDisk = lsdevRows.find((lsdev: any) => lsdev.dev === disk.dev);
+    return unwrap(
+      this.server.getDriveSlots({ excludeEmpty: true }).map((slots) =>
+        slots.map((slot): VDevDisk => {
+          const drive = slot.drive;
 
           return {
-            path: `/dev/disk/by-vdev/${disk["bay-id"]}`,
-            name: matchingDisk?.["bay-id"] || "Unknown",
-            capacity: matchingDisk?.capacity || "Unknown",
-            model: matchingDisk?.["model-name"] || "Unknown",
-            guid: matchingDisk?.serial || "Unknown",
-            type: (matchingDisk?.disk_type as "SSD" | "HDD" | "NVMe") || "HDD",
-            health: matchingDisk?.health || "Unknown",
+            path: `/dev/disk/by-vdev/${slot.slotId}`,
+            name: slot.slotId,
+            capacity: formatBytes(drive.capacity, "both"),
+            model: drive.model,
+            guid: drive.serial,
+            type: drive.rotationRate ? "HDD" : "SSD",
+            health: drive.smartInfo?.health ?? "Unknown",
             stats: {},
-            phy_path: disk["dev-by-path"],
-            sd_path: disk.dev,
-            vdev_path: `/dev/disk/by-vdev/${disk["bay-id"]}`,
-            serial: matchingDisk?.serial || "Unknown",
-            temp: matchingDisk?.["temp-c"] || "N/A",
-            powerOnCount: matchingDisk?.["power-cycle-count"] || "0",
-            powerOnHours: Number(matchingDisk?.["power-on-time"]) || 0,
-            rotationRate: Number(matchingDisk?.["rotation-rate"]) || 0,
+            phy_path: drive.pathByPath,
+            sd_path: drive.path,
+            vdev_path: `/dev/disk/by-vdev/${slot.slotId}`,
+            serial: drive.serial,
+            temp: drive.smartInfo ? this.formatTemperature(drive.smartInfo.temperature) : "N/A",
+            powerOnCount: drive.smartInfo?.powerCycleCount?.toString() ?? "0",
+            powerOnHours: drive.smartInfo?.powerOnHours ?? 0,
+            rotationRate: drive.rotationRate ?? 0,
           };
-        });
-      })
-      .catch((error) => {
-        console.error("Error fetching full disks:", error);
-        return [];
-      });
+        })
+      )
+    ).catch((error) => {
+      console.error("Error fetching full disks:", error);
+      return [];
+    });
+  }
+
+  private formatTemperature(tempC: number): string {
+    return `${tempC}°C / ${(tempC * 9) / 5 + 32}°F`;
   }
 
   /**

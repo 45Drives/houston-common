@@ -128,10 +128,9 @@ export class EasySetupConfigurator {
 
     const allShares = await (this.sambaManager.getShares().unwrapOr(undefined));
     if (allShares) {
-
       console.log('existing samba shares:', allShares);
       for (let share of allShares) {
-        if (share.path.startsWith("/" + poolName + "/" + datasetName)) {
+        if (share.path.startsWith("/" + poolName )) {
           console.log('existing share found on pool:', share);
           try {
             await unwrap(this.sambaManager.closeSambaShare(share.name));
@@ -140,7 +139,7 @@ export class EasySetupConfigurator {
             console.log(error);
           }
         } else {
-          console.log(`Share ${share} doesn't exist on pool/dataset ${poolName}/${datasetName} so we didn't remove it.`)
+          console.log(`Share ${share} doesn't exist on pool ${poolName} so we didn't remove it.`)
         }
       }
     } else {
@@ -172,7 +171,15 @@ export class EasySetupConfigurator {
   private async applyZFSConfig(_config: EasySetupConfig) {
     let zfsConfig = _config.zfsConfig;
 
-    console.log(zfsConfig!.pool.vdevs[0]!.disks);
+    let baseDisks = await this.zfsManager.getBaseDisks();
+    console.log("baseDisks:", baseDisks);
+
+    baseDisks = baseDisks.filter((b) => b.path.trim().length > 0);
+    console.log("baseDisks filtered", baseDisks);
+
+    zfsConfig!.pool.vdevs[0]!.disks = baseDisks;
+
+    console.log('zfsConfig vdev disks:', zfsConfig!.pool.vdevs[0]!.disks);
 
     await this.zfsManager.createPool(zfsConfig!.pool, zfsConfig!.poolOptions);
     await this.zfsManager.addDataset(
@@ -240,4 +247,5 @@ export class EasySetupConfigurator {
       })
       .unwrapOr(null);
   }
+
 }

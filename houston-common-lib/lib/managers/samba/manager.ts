@@ -228,44 +228,6 @@ export abstract class SambaManagerBase implements ISambaManager {
       .execute(new Command(["smbcontrol", "smbd", "close-share", sharename], { superuser: "try" }))
       .map(() => {});
   }
-
-  // private possibleServices = ['smb', 'smbd']; // Only include known-working ones
-
-  // private checkServiceExists(service: string): ResultAsync<boolean, ProcessError> {
-  //   return server
-  //     .execute(new Command(['systemctl', 'status', `${service}.service`], { superuser: 'try' }))
-  //     .map(() => true)
-  //     .orElse(() => ok(false));
-  // }
-
-  // private manageServices(action: 'start' | 'stop' | 'restart'): ResultAsync<void, ProcessError> {
-  //   return ResultAsync.combine(
-  //     this.possibleServices.map((svc) =>
-  //       this.checkServiceExists(svc).andThen((exists) => {
-  //         if (exists) {
-  //           return server
-  //             .spawnProcess(new Command(['systemctl', action, `${svc}.service`], { superuser: 'try' }))
-  //             .wait()
-  //             .map(() => { });
-  //         } else {
-  //           return ResultAsync.fromSafePromise(Promise.resolve());
-  //         }
-  //       })
-  //     )
-  //   ).map(() => { });
-  // }
-
-  // stopSambaService(): ResultAsync<void, ProcessError> {
-  //   return this.manageServices('stop');
-  // }
-
-  // startSambaService(): ResultAsync<void, ProcessError> {
-  //   return this.manageServices('start');
-  // }
-
-  // restartSambaService(): ResultAsync<void, ProcessError> {
-  //   return this.manageServices('restart');
-  // }
 }
 
 export class SambaManagerNet extends SambaManagerBase implements ISambaManager {

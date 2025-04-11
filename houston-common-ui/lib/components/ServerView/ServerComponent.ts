@@ -80,7 +80,7 @@ export class ServerComponentSlot {
   private boxHelper: THREE.BoxHelper;
 
   readonly BoundingBoxMargin = 0.001;
-  readonly SelectionHighlightMargin = 0.0005;
+  readonly SelectionHighlightMargin = 0.0001;
 
   constructor(
     public scene: THREE.Scene,
@@ -175,7 +175,7 @@ export class ServerDriveSlot extends ServerComponentSlot {
         const slotSize = new THREE.Vector3();
         const slotCenter = new THREE.Vector3();
         bound.getSize(slotSize);
-        slotSize.subScalar(this.BoundingBoxMargin * 2);
+        slotSize.subScalar(this.BoundingBoxMargin);
         bound.getCenter(slotCenter);
 
         bound.setFromObject(this.driveModel);
@@ -207,7 +207,7 @@ export class ServerDriveSlot extends ServerComponentSlot {
 
         this.modelBoxHelper.update();
 
-        this.selectionHighlightBox.resizeTo(this.driveModel, this.SelectionHighlightMargin);
+        // this.selectionHighlightBox.resizeTo(this.driveModel, this.SelectionHighlightMargin);
 
         this.driveModel.visible = true;
       });

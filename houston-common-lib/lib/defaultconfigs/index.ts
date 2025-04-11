@@ -1,3 +1,6 @@
 export * as HomeLab_HL4 from "./HomeLab_HL4"
+export * as Professional_PRO4 from "./Professional_PRO4"
+export * as HomeLab_HL8 from "./HomeLab_HL8"
+export * as Professional_PRO8 from "./Professional_PRO8"
 export * as Storinator_Q30_Turbo from "./Storinator-Q30-Turbo"
 export * as Storinator_F8X1_Enhanced_S from "./Storinator-F8X1-Enhanced-S"

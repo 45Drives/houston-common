@@ -67,7 +67,10 @@ Promise.all([import("./ServerView"), props.server.getServerModel()]).then(
           return;
         }
         serverView.start(canvasParent.value);
-        serverView.setView("DriveView");
+        serverView
+          .setView("InitialView")
+          .then(() => new Promise((resolve) => setTimeout(resolve, 1000)))
+          .then(() => serverView.setView("DriveView"));
       })
     );
 

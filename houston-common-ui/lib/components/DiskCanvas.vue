@@ -50,10 +50,6 @@ Promise.all([import("./ServerView"), props.server.getServerModel()]).then(
 
     const serverView = new ServerView(await unwrap(serverModel));
 
-    serverView
-      .setView("InitialView")
-      .then(() => serverView.setView("DriveView"));
-
     serverView.addEventListener("selectionchange", (e) => {
       selectedDriveSlots.value = e.components
         .filter((c): c is InstanceType<typeof ServerDriveSlot> => c instanceof ServerDriveSlot)
@@ -71,6 +67,7 @@ Promise.all([import("./ServerView"), props.server.getServerModel()]).then(
           return;
         }
         serverView.start(canvasParent.value);
+        serverView.setView("DriveView");
       })
     );
 

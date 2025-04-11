@@ -305,7 +305,8 @@ export class ServerView extends THREE.EventDispatcher<
   private componentSlots: ServerComponentSlot[];
 
   private driveOrientation: DriveOrientation;
-  private cameraSetpointController: Promise<CameraSetpointController>;
+  private cameraSetpointControllerPromise: Promise<CameraSetpointController>;
+  private cameraSetpointController?: CameraSetpointController;
 
   constructor(
     public readonly serverModel: string,
@@ -395,9 +396,9 @@ export class ServerView extends THREE.EventDispatcher<
       light.shadow.camera.far = 10;
       light.intensity = 1;
       for (const [position, intensity] of [
-        [new THREE.Vector3(-0.25, 0, 1), 1], // front
-        [new THREE.Vector3(0, 0.5, 0), 0.5], // top
-        [new THREE.Vector3(0, 0.25, -1), 1], // rear
+        [new THREE.Vector3(-0.125, 0, 1), 1], // front
+        [new THREE.Vector3(0, 0.5, -0.25), 0.5], // top
+        // [new THREE.Vector3(0, 0.25, -1), 1], // rear
       ] as [THREE.Vector3, number][]) {
         light.position.copy(position);
         light.intensity = intensity;
@@ -423,7 +424,7 @@ export class ServerView extends THREE.EventDispatcher<
       }
     });
 
-    this.cameraSetpointController = this.chassis.then((chassis) => {
+    this.cameraSetpointControllerPromise = this.chassis.then((chassis) => {
       const ctrlr = new CameraSetpointController(
         this.camera,
         chassis,
@@ -431,6 +432,7 @@ export class ServerView extends THREE.EventDispatcher<
         this.driveOrientation
       );
       ctrlr.forceView("InitialView", this.camera);
+      this.cameraSetpointController = ctrlr;
       return ctrlr;
     });
   }
@@ -450,7 +452,7 @@ export class ServerView extends THREE.EventDispatcher<
   }
 
   setView(view: CameraView) {
-    return this.cameraSetpointController.then((c) => c.setView(view));
+    return this.cameraSetpointControllerPromise.then((c) => c.setView(view));
   }
 
   private fixCameraAspect(
@@ -487,7 +489,7 @@ export class ServerView extends THREE.EventDispatcher<
     this.camera.updateProjectionMatrix();
 
     this.chassis.then((chassis) => {
-      this.cameraSetpointController.then((c) =>
+      this.cameraSetpointControllerPromise.then((c) =>
         c.updateViews(this.camera, chassis, this.componentSlots, this.driveOrientation)
       );
     });
@@ -562,7 +564,7 @@ export class ServerView extends THREE.EventDispatcher<
   }
 
   private animate(time: number) {
-    this.cameraSetpointController.then((c) => c.updateCameraPosition(this.camera, time));
+    this.cameraSetpointController?.updateCameraPosition(this.camera, time);
     // this.controls.object = new THREE.Object3D();
     // this.controls.update();
     // this.controls.object = this.camera;

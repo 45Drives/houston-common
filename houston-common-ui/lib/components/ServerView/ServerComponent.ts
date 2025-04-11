@@ -75,9 +75,12 @@ export class SelectionPreviewHighlight extends BoundingBox {
 
 export class ServerComponentSlot {
   private _selected = false;
-  private selectionHighlightBox: SelectionHighlight;
+  protected selectionHighlightBox: SelectionHighlight;
   public boundingBox: SlotBoundingBox;
   private boxHelper: THREE.BoxHelper;
+
+  readonly BoundingBoxMargin = 0.001;
+  readonly SelectionHighlightMargin = 0.0005;
 
   constructor(
     public scene: THREE.Scene,
@@ -103,12 +106,8 @@ export class ServerComponentSlot {
     this.boxHelper.visible = DEBUG_BOXES;
     this.scene.add(this.boxHelper);
 
-    this.updateBounds();
-  }
-
-  updateBounds() {
-    this.selectionHighlightBox.resizeTo(this.objectRef, 0.0005);
-    this.boundingBox.resizeTo(this.objectRef, 0.001);
+    this.selectionHighlightBox.resizeTo(this.objectRef, this.SelectionHighlightMargin);
+    this.boundingBox.resizeTo(this.objectRef, this.BoundingBoxMargin);
     this.boxHelper.update();
   }
 
@@ -176,6 +175,7 @@ export class ServerDriveSlot extends ServerComponentSlot {
         const slotSize = new THREE.Vector3();
         const slotCenter = new THREE.Vector3();
         bound.getSize(slotSize);
+        slotSize.subScalar(this.BoundingBoxMargin * 2);
         bound.getCenter(slotCenter);
 
         bound.setFromObject(this.driveModel);
@@ -193,7 +193,12 @@ export class ServerDriveSlot extends ServerComponentSlot {
         );
         console.log("slot size:", slotSize, "model size:", modelSize);
 
-        this.driveModel.position.copy(slotCenter.sub(modelCenter));
+        const cornerOffset = slotSize
+          .multiplyScalar(0.5)
+          .addScaledVector(modelSize, -0.5)
+          .multiply({ x: 1, y: 1, z: -1 });
+
+        this.driveModel.position.subVectors(slotCenter, modelCenter).add(cornerOffset);
 
         console.log("model location after:", this.driveModel.position);
 
@@ -201,6 +206,8 @@ export class ServerDriveSlot extends ServerComponentSlot {
         this.driveModel.updateMatrixWorld(true);
 
         this.modelBoxHelper.update();
+
+        this.selectionHighlightBox.resizeTo(this.driveModel, this.SelectionHighlightMargin);
 
         this.driveModel.visible = true;
       });

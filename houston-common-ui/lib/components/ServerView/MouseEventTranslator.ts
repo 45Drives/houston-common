@@ -36,7 +36,7 @@ export class SelectionBox extends LineSegments2 {
     camera: THREE.Camera,
     mouseDownCoordsNormalized: THREE.Vector2,
     currentMouseCoordsNormalized: THREE.Vector2,
-    depth = -0.99
+    depth = -0.9999
   ) {
     // const positions = this.geometry.attributes.position.array;
 

@@ -535,7 +535,7 @@ export class ServerView extends THREE.EventDispatcher<
     slots.forEach((slot) => {
       const componentSlot = this.componentSlots.find((s) => s.slotId === slot.slotId);
       if (componentSlot instanceof ServerDriveSlot) {
-        componentSlot.setDrive(slot.drive);
+        componentSlot.setDrive(slot.drive, this.driveOrientation);
       } else if (componentSlot !== undefined) {
         console.log("not a drive slot:", componentSlot);
         console.log("is component slot:", componentSlot instanceof ServerComponentSlot);

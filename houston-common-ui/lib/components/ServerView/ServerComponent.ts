@@ -5,7 +5,7 @@ import {
   type DriveSlot,
   type LiveDriveSlotsHandle,
 } from "@45drives/houston-common-lib";
-import { getDriveModel } from "@/components/ServerView/assets";
+import { getDriveModel, type DriveOrientation } from "@/components/ServerView/assets";
 
 export type DriveSlotType = "HDD" | "SSD_7mm" | "SSD_15mm";
 export function isDriveSlotType(driveSlotType: string): driveSlotType is DriveSlotType {
@@ -14,24 +14,36 @@ export function isDriveSlotType(driveSlotType: string): driveSlotType is DriveSl
 
 const DEBUG_BOXES = false;
 
-export class BoundingBox extends THREE.Mesh {
+export class BoundingBox extends THREE.Mesh<THREE.BoxGeometry> {
+  readonly bound = new THREE.Box3();
+  private size = new THREE.Vector3();
+  private center = new THREE.Vector3();
+
   constructor() {
     super();
   }
 
   resizeTo(object: THREE.Object3D, margin: number = 0) {
-    const bound = new THREE.Box3().setFromObject(object);
-    const size = new THREE.Vector3();
-    const center = new THREE.Vector3();
-    bound.getSize(size);
-    bound.getCenter(center);
+    this.bound.setFromObject(object);
+    this.bound.getSize(this.size);
+    this.bound.getCenter(this.center);
     this.geometry?.dispose();
-    this.geometry = new THREE.BoxGeometry(size.x + margin, size.y + margin, size.z + margin);
-    this.position.copy(center);
+    this.geometry = new THREE.BoxGeometry(
+      this.size.x + margin,
+      this.size.y + margin,
+      this.size.z + margin
+    );
+    this.position.copy(this.center);
     console.log("resizeTo");
-    console.log("selection box pos:", this.getWorldPosition(new THREE.Vector3()));
-    console.log("objectRef pos:", object.getWorldPosition(new THREE.Vector3()));
-    console.log("box size:", size);
+    console.log("selection box pos:", this.position);
+    console.log("objectRef pos:", object.position);
+    console.log("box size:", this.size);
+  }
+}
+
+export class SlotBoundingBox extends BoundingBox {
+  constructor(public slotRef: ServerComponentSlot) {
+    super();
   }
 }
 
@@ -64,7 +76,7 @@ export class SelectionPreviewHighlight extends BoundingBox {
 export class ServerComponentSlot {
   private _selected = false;
   private selectionHighlightBox: SelectionHighlight;
-  public boundingBox: BoundingBox;
+  public boundingBox: SlotBoundingBox;
   private boxHelper: THREE.BoxHelper;
 
   constructor(
@@ -78,7 +90,7 @@ export class ServerComponentSlot {
     this.selectionHighlightBox.visible = false;
     this.scene.add(this.selectionHighlightBox);
 
-    this.boundingBox = new BoundingBox();
+    this.boundingBox = new SlotBoundingBox(this);
     this.boundingBox.material = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
@@ -151,7 +163,7 @@ export class ServerDriveSlot extends ServerComponentSlot {
     return { slotId: this.slotId, drive: this.drive };
   }
 
-  setDrive(drive: DriveSlot["drive"]) {
+  setDrive(drive: DriveSlot["drive"], driveOrientation: DriveOrientation) {
     this.drive = drive;
     if (drive) {
       getDriveModel(this.driveType, drive.model).then((driveModel) => {
@@ -160,7 +172,7 @@ export class ServerDriveSlot extends ServerComponentSlot {
         this.driveModel.add(driveModel.clone());
         this.driveModel.updateMatrixWorld(true);
         this.boundingBox.updateMatrixWorld(true);
-        const bound = new THREE.Box3().setFromObject(this.boundingBox);
+        const bound = this.boundingBox.bound.clone();
         const slotSize = new THREE.Vector3();
         const slotCenter = new THREE.Vector3();
         bound.getSize(slotSize);

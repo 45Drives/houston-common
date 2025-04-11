@@ -1,5 +1,6 @@
 import {
   ServerComponentSlot,
+  SlotBoundingBox,
   type ServerComponentSlotEventMap,
   type ServerComponentSlotMouseEvent,
   type ServerComponentSlotMouseEventTypes,
@@ -12,6 +13,13 @@ import { LAYER_NO_SELECT } from "./constants";
 import { intersection } from "zod";
 
 export class SelectionBox extends LineSegments2 {
+  private corners = [
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+  ];
+
   constructor() {
     // const positions = new Float32Array(8 * 3);
     // const geometry = new THREE.BufferGeometry();
@@ -33,28 +41,26 @@ export class SelectionBox extends LineSegments2 {
     // const positions = this.geometry.attributes.position.array;
 
     // Convert NDC coordinates to world space at a fixed depth in front of the camera
-    const corners = [
-      new THREE.Vector3(mouseDownCoordsNormalized.x, mouseDownCoordsNormalized.y, depth),
-      new THREE.Vector3(currentMouseCoordsNormalized.x, mouseDownCoordsNormalized.y, depth),
-      new THREE.Vector3(currentMouseCoordsNormalized.x, currentMouseCoordsNormalized.y, depth),
-      new THREE.Vector3(mouseDownCoordsNormalized.x, currentMouseCoordsNormalized.y, depth),
-    ];
+    this.corners[0].set(mouseDownCoordsNormalized.x, mouseDownCoordsNormalized.y, depth);
+    this.corners[1].set(currentMouseCoordsNormalized.x, mouseDownCoordsNormalized.y, depth);
+    this.corners[2].set(currentMouseCoordsNormalized.x, currentMouseCoordsNormalized.y, depth);
+    this.corners[3].set(mouseDownCoordsNormalized.x, currentMouseCoordsNormalized.y, depth);
 
     // Convert to world space
-    for (let i = 0; i < corners.length; i++) {
-      corners[i].unproject(camera);
+    for (let i = 0; i < this.corners.length; i++) {
+      this.corners[i].unproject(camera);
     }
 
     // Define line segments to connect corners
     const edges = [
-      corners[0],
-      corners[1], // Bottom
-      corners[1],
-      corners[2], // Right
-      corners[2],
-      corners[3], // Top
-      corners[3],
-      corners[0], // Left
+      this.corners[0],
+      this.corners[1], // Bottom
+      this.corners[1],
+      this.corners[2], // Right
+      this.corners[2],
+      this.corners[3], // Top
+      this.corners[3],
+      this.corners[0], // Left
     ].flatMap((vec) => [vec.x, vec.y, vec.z]);
 
     // Update positions in geometry
@@ -125,11 +131,9 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
         mouseCoords,
       ]);
       const frustum = this.createSelectionFrustum(selectionBoxNormalized);
-      const withinSelection = (selectable: ServerComponentSlot) => {
-        const boundsBox = new THREE.Box3().setFromObject(selectable.objectRef);
-        return frustum.intersectsBox(boundsBox);
-      };
-      this.componentSlots.forEach((slot) => (slot.highlight = withinSelection(slot)));
+      for (const slot of this.componentSlots) {
+        slot.highlight = frustum.intersectsBox(slot.boundingBox.bound);
+      }
     } else {
       this.selectionBox.hide();
       const obj = this.getMouseEventIntersections(event, mouseCoords)[0] as
@@ -184,7 +188,7 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
   private isDragging(currentMouseCoordsNormalized: THREE.Vector2) {
     return (
       this.mouseDownCoordsNormalized &&
-      Math.abs(currentMouseCoordsNormalized.distanceToSquared(this.mouseDownCoordsNormalized)) >
+      currentMouseCoordsNormalized.distanceToSquared(this.mouseDownCoordsNormalized) >
         this.clickDeltaThreshold ** 2
     );
   }
@@ -209,7 +213,9 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
     if (this.isDragging(mouseUpCoordsNormalized)) {
       // drag select
       if (this.enableSelection) {
-        this.componentSlots.forEach((slot) => (slot.highlight = false));
+        for (const slot of this.componentSlots) {
+          slot.highlight = false;
+        }
         const selectionBoxNormalized = new THREE.Box2().setFromPoints([
           this.mouseDownCoordsNormalized,
           mouseUpCoordsNormalized,
@@ -247,44 +253,75 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
     }
   }
 
+  private _selectionCorners = [
+    new THREE.Vector3(), // Near-bottom-left
+    new THREE.Vector3(), // Near-bottom-right
+    new THREE.Vector3(), // Near-top-right
+    new THREE.Vector3(), // Near-top-left
+    new THREE.Vector3(), // Far-bottom-left
+    new THREE.Vector3(), // Far-bottom-right
+    new THREE.Vector3(), // Far-top-right
+    new THREE.Vector3(), // Far-top-left
+  ];
+  private _selectionFrustum = new THREE.Frustum();
   private createSelectionFrustum(selectionBoxNormalized: THREE.Box2): THREE.Frustum {
     // Define the 8 corners of the selection box in NDC space
-    const corners = [
-      new THREE.Vector3(selectionBoxNormalized.min.x, selectionBoxNormalized.min.y, -1), // Near-bottom-left
-      new THREE.Vector3(selectionBoxNormalized.max.x, selectionBoxNormalized.min.y, -1), // Near-bottom-right
-      new THREE.Vector3(selectionBoxNormalized.max.x, selectionBoxNormalized.max.y, -1), // Near-top-right
-      new THREE.Vector3(selectionBoxNormalized.min.x, selectionBoxNormalized.max.y, -1), // Near-top-left
-      new THREE.Vector3(selectionBoxNormalized.min.x, selectionBoxNormalized.min.y, 1), // Far-bottom-left
-      new THREE.Vector3(selectionBoxNormalized.max.x, selectionBoxNormalized.min.y, 1), // Far-bottom-right
-      new THREE.Vector3(selectionBoxNormalized.max.x, selectionBoxNormalized.max.y, 1), // Far-top-right
-      new THREE.Vector3(selectionBoxNormalized.min.x, selectionBoxNormalized.max.y, 1), // Far-top-left
-    ];
+    this._selectionCorners[0].set(selectionBoxNormalized.min.x, selectionBoxNormalized.min.y, -1); // Near-bottom-left
+    this._selectionCorners[1].set(selectionBoxNormalized.max.x, selectionBoxNormalized.min.y, -1); // Near-bottom-right
+    this._selectionCorners[2].set(selectionBoxNormalized.max.x, selectionBoxNormalized.max.y, -1); // Near-top-right
+    this._selectionCorners[3].set(selectionBoxNormalized.min.x, selectionBoxNormalized.max.y, -1); // Near-top-left
+    this._selectionCorners[4].set(selectionBoxNormalized.min.x, selectionBoxNormalized.min.y, 1); // Far-bottom-left
+    this._selectionCorners[5].set(selectionBoxNormalized.max.x, selectionBoxNormalized.min.y, 1); // Far-bottom-right
+    this._selectionCorners[6].set(selectionBoxNormalized.max.x, selectionBoxNormalized.max.y, 1); // Far-top-right
+    this._selectionCorners[7].set(selectionBoxNormalized.min.x, selectionBoxNormalized.max.y, 1); // Far-top-left
 
     // Convert from NDC space to world space
-    for (let i = 0; i < corners.length; i++) {
-      corners[i].unproject(this.camera);
+    for (let i = 0; i < this._selectionCorners.length; i++) {
+      this._selectionCorners[i].unproject(this.camera);
     }
 
     // Create frustum planes ensuring they face inward
-    const frustum = new THREE.Frustum();
-    frustum.planes = [
-      new THREE.Plane().setFromCoplanarPoints(corners[0], corners[2], corners[1]), // Near
-      new THREE.Plane().setFromCoplanarPoints(corners[5], corners[6], corners[4]), // Far
-      new THREE.Plane().setFromCoplanarPoints(corners[4], corners[3], corners[0]), // Left
-      new THREE.Plane().setFromCoplanarPoints(corners[1], corners[2], corners[5]), // Right
-      new THREE.Plane().setFromCoplanarPoints(corners[3], corners[6], corners[2]), // Top
-      new THREE.Plane().setFromCoplanarPoints(corners[4], corners[1], corners[5]), // Bottom
+    this._selectionFrustum.planes = [
+      new THREE.Plane().setFromCoplanarPoints(
+        this._selectionCorners[0],
+        this._selectionCorners[2],
+        this._selectionCorners[1]
+      ), // Near
+      new THREE.Plane().setFromCoplanarPoints(
+        this._selectionCorners[5],
+        this._selectionCorners[6],
+        this._selectionCorners[4]
+      ), // Far
+      new THREE.Plane().setFromCoplanarPoints(
+        this._selectionCorners[4],
+        this._selectionCorners[3],
+        this._selectionCorners[0]
+      ), // Left
+      new THREE.Plane().setFromCoplanarPoints(
+        this._selectionCorners[1],
+        this._selectionCorners[2],
+        this._selectionCorners[5]
+      ), // Right
+      new THREE.Plane().setFromCoplanarPoints(
+        this._selectionCorners[3],
+        this._selectionCorners[6],
+        this._selectionCorners[2]
+      ), // Top
+      new THREE.Plane().setFromCoplanarPoints(
+        this._selectionCorners[4],
+        this._selectionCorners[1],
+        this._selectionCorners[5]
+      ), // Bottom
     ];
 
-    return frustum;
+    return this._selectionFrustum;
   }
 
   private handleDragSelect(selectionBoxNormalized: THREE.Box2, ctrlKey: boolean) {
     const frustum = this.createSelectionFrustum(selectionBoxNormalized);
 
     const withinSelection = (slot: ServerComponentSlot) => {
-      const boundsBox = new THREE.Box3().setFromObject(slot.boundingBox);
-      return frustum.intersectsBox(boundsBox);
+      return frustum.intersectsBox(slot.boundingBox.bound);
     };
 
     if (ctrlKey) {
@@ -343,17 +380,21 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
         this.componentSlots.map((slot) => slot.boundingBox),
         false
       )
-      .map((intersection) =>
-        this.componentSlots.find((slot) => slot.boundingBox === intersection.object)
-      )
+      .map((intersection) => {
+        if (!(intersection.object instanceof SlotBoundingBox)) {
+          return;
+        }
+        return intersection.object.slotRef;
+      })
       .filter((slot): slot is ServerComponentSlot => slot !== undefined);
-    // const result = [];
-    // for (const slot of this.componentSlots) {
-    //   const intersections = this.raycaster.intersectObject(slot.boundingBox, false);
-    //   if (intersections.length > 0) {
-    //     result.push(slot);
-    //   }
-    // }
-    // return result;
+    // return this.raycaster
+    //   .intersectObjects(
+    //     this.componentSlots.map((slot) => slot.boundingBox),
+    //     false
+    //   )
+    //   .map((intersection) =>
+    //     this.componentSlots.find((slot) => slot.boundingBox === intersection.object)
+    //   )
+    //   .filter((slot): slot is ServerComponentSlot => slot !== undefined);
   }
 }

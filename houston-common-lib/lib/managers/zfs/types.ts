@@ -217,6 +217,7 @@ export interface ZFSFileSystemInfo {
   };
   parentFS?: string;
   children?: ZFSFileSystemInfo[];
+  usedBySnapshots: string;
 }
 
 //object for tracking pool scan (scrub/resilver) data

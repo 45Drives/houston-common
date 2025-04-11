@@ -52,6 +52,12 @@ class CameraSetpointController {
     this.setpoint = this.lookupSetpoint(this.view);
   }
 
+  forceView(view: CameraView, camera: THREE.OrthographicCamera | THREE.PerspectiveCamera) {
+    this.view = view;
+    this.setpoint = this.lookupSetpoint(this.view);
+    return this.setpoint.then(() => this.updateCameraPosition(camera, 0, true));
+  }
+
   setView(view: CameraView) {
     this.view = view;
     this.setpoint = this.lookupSetpoint(this.view);
@@ -91,6 +97,7 @@ class CameraSetpointController {
       this.focusPoint = setpoint.focusPoint;
       camera.lookAt(this.focusPoint);
       camera.zoom = setpoint.zoom;
+      camera.updateProjectionMatrix();
       this.atFocusPointResolver?.();
       return;
     }
@@ -149,7 +156,8 @@ class CameraSetpointController {
 
     if (
       camera.position.distanceToSquared(setpoint.position) < threshSq &&
-      this.focusPoint.distanceToSquared(setpoint.focusPoint) < threshSq
+      this.focusPoint.distanceToSquared(setpoint.focusPoint) < threshSq &&
+      Math.abs(camera.zoom - setpoint.zoom) < 0.01
     ) {
       this.atFocusPointResolver?.();
     }
@@ -409,13 +417,13 @@ export class ServerView extends THREE.EventDispatcher<
       this.componentSlots,
       this.driveOrientation
     );
-    cameraSetpointController.setView("InitialView");
+
     this.cameraSetpointController = cameraSetpointController
-      .updateCameraPosition(this.camera, 0, true)
+      .forceView("InitialView", this.camera)
       .then(() => cameraSetpointController);
   }
 
-  async start(parent: HTMLElement) {
+  start(parent: HTMLElement) {
     this.renderer.setAnimationLoop((time) => this.animate(time));
     parent.appendChild(this.renderer.domElement);
     this.parentResizeObserver.observe(parent);

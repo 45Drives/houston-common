@@ -51,9 +51,9 @@ const gltfLoader = new GLTFLoader();
 
 const notFoundModelLoader = lazyModelLoader(imageModelLoader(import("./notFound.png")));
 
-function lazyGLBLoader(glbImport: Promise<typeof import(".glb?inline")>) {
+function lazyGLBLoader(glbImport: () => Promise<typeof import(".glb?inline")>) {
   return lazyModelLoader(() =>
-    glbImport
+    glbImport()
       .then((url) => gltfLoader.loadAsync(url.default))
       .then((gltf) => {
         gltf.scene.traverse((obj) => {
@@ -86,7 +86,7 @@ const chassisModelLUT: {
 }[] = [
   {
     re: /^HomeLab-HL4/,
-    modelLoader: lazyGLBLoader(import("./chassis/HL4/HL4.glb?inline")),
+    modelLoader: lazyGLBLoader(() => import("./chassis/HL4/HL4.glb?inline")),
     driveOrientation: "FrontLoader",
   },
 ];
@@ -124,7 +124,7 @@ const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader }[]
         return Promise.resolve(model);
       }),
     },
-    // { re: /^/, modelLoader: lazyGLBLoader(import("./drive/HDD_generic.glb?inline")) }, // keep at end of list
+    // { re: /^/, modelLoader: lazyGLBLoader(() => import("./drive/HDD_generic.glb?inline")) }, // keep at end of list
   ],
   SSD_15mm: [
     {
@@ -136,7 +136,7 @@ const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader }[]
         return Promise.resolve(model);
       }),
     },
-    // { re: /^/, modelLoader: lazyGLBLoader(import("./drive/SDD_15mm_generic.glb?inline")) }, // keep at end of list
+    // { re: /^/, modelLoader: lazyGLBLoader(() => import("./drive/SDD_15mm_generic.glb?inline")) }, // keep at end of list
   ],
   SSD_7mm: [
     {
@@ -148,7 +148,7 @@ const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader }[]
         return Promise.resolve(model);
       }),
     },
-    // { re: /^/, modelLoader: lazyGLBLoader(import("./drive/SDD_7mm_generic.glb?inline")) }, // keep at end of list
+    // { re: /^/, modelLoader: lazyGLBLoader(() => import("./drive/SDD_7mm_generic.glb?inline")) }, // keep at end of list
   ],
 };
 

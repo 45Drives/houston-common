@@ -29,17 +29,17 @@ type CameraSetPoint = {
 type CameraView = "InitialView" | "DriveView";
 
 class CameraSetpointController {
-  private initialView: Promise<CameraSetPoint>;
-  private driveView: Promise<CameraSetPoint>;
+  private initialView: CameraSetPoint;
+  private driveView: CameraSetPoint;
   private view: CameraView;
   private t0?: number;
-  private setpoint: Promise<CameraSetPoint>;
+  private setpoint: CameraSetPoint;
   private lambda: number;
   private focusPoint: THREE.Vector3;
   private atFocusPointResolver?: () => void;
   constructor(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
-    chassis: Promise<THREE.Object3D>,
+    chassis: THREE.Object3D,
     componentSlots: ServerComponentSlot[],
     driveOrientation: DriveOrientation
   ) {
@@ -47,31 +47,29 @@ class CameraSetpointController {
     this.focusPoint = new THREE.Vector3(0, 0, 0);
     this.view = "InitialView";
     const views = this.getViews(camera, chassis, componentSlots, driveOrientation);
-    this.initialView = views.then(({ initialView }) => initialView);
-    this.driveView = views.then(({ driveView }) => driveView);
+    this.initialView = views.initialView;
+    this.driveView = views.driveView;
     this.setpoint = this.lookupSetpoint(this.view);
   }
 
   forceView(view: CameraView, camera: THREE.OrthographicCamera | THREE.PerspectiveCamera) {
     this.view = view;
     this.setpoint = this.lookupSetpoint(this.view);
-    return this.setpoint.then(() => this.updateCameraPosition(camera, 0, true));
+    this.updateCameraPosition(camera, 0, true);
   }
 
   setView(view: CameraView) {
     this.view = view;
     this.setpoint = this.lookupSetpoint(this.view);
-    return this.setpoint.then(() =>
-      new Promise<void>((resolve) => {
-        this.atFocusPointResolver = resolve;
+    return new Promise<void>((resolve) => {
+      this.atFocusPointResolver = resolve;
+    })
+      .then(() => {
+        console.log("at setpoint", view);
       })
-        .then(() => {
-          console.log("at setpoint", view);
-        })
-        .finally(() => {
-          this.atFocusPointResolver = undefined;
-        })
-    );
+      .finally(() => {
+        this.atFocusPointResolver = undefined;
+      });
   }
 
   private lookupSetpoint(view: CameraView) {
@@ -85,24 +83,23 @@ class CameraSetpointController {
     }
   }
 
-  async updateCameraPosition(
+  updateCameraPosition(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
     time: number,
     force: boolean = false
   ) {
-    const setpoint = await this.setpoint;
-
     if (force) {
-      camera.position.copy(setpoint.position);
-      this.focusPoint = setpoint.focusPoint;
+      camera.position.copy(this.setpoint.position);
+      camera.updateMatrix();
+      this.focusPoint = this.setpoint.focusPoint;
       camera.lookAt(this.focusPoint);
-      camera.zoom = setpoint.zoom;
+      camera.zoom = this.setpoint.zoom;
       camera.updateProjectionMatrix();
       this.atFocusPointResolver?.();
       return;
     }
     if (this.t0 === undefined) {
-      this.t0 = performance.now();
+      this.t0 = time;
       return;
     }
     const dt = time - this.t0;
@@ -119,15 +116,33 @@ class CameraSetpointController {
       return x + dx;
     };
 
-    this.focusPoint.x = dampClamp(this.focusPoint.x, setpoint.focusPoint.x, this.lambda, dt, 0.001);
-    this.focusPoint.y = dampClamp(this.focusPoint.y, setpoint.focusPoint.y, this.lambda, dt, 0.001);
-    this.focusPoint.z = dampClamp(this.focusPoint.z, setpoint.focusPoint.z, this.lambda, dt, 0.001);
+    this.focusPoint.x = dampClamp(
+      this.focusPoint.x,
+      this.setpoint.focusPoint.x,
+      this.lambda,
+      dt,
+      0.001
+    );
+    this.focusPoint.y = dampClamp(
+      this.focusPoint.y,
+      this.setpoint.focusPoint.y,
+      this.lambda,
+      dt,
+      0.001
+    );
+    this.focusPoint.z = dampClamp(
+      this.focusPoint.z,
+      this.setpoint.focusPoint.z,
+      this.lambda,
+      dt,
+      0.001
+    );
 
     const relSpherical = new THREE.Spherical()
       .setFromVector3(camera.position.clone().sub(this.focusPoint))
       .makeSafe();
     const targetRelSpherical = new THREE.Spherical()
-      .setFromVector3(setpoint.position.clone().sub(setpoint.focusPoint))
+      .setFromVector3(this.setpoint.position.clone().sub(this.setpoint.focusPoint))
       .makeSafe();
     relSpherical.radius = dampClamp(
       relSpherical.radius,
@@ -146,7 +161,7 @@ class CameraSetpointController {
     );
 
     camera.position.copy(new THREE.Vector3().setFromSpherical(relSpherical).add(this.focusPoint));
-    camera.zoom = dampClamp(camera.zoom, setpoint.zoom, this.lambda, dt, 0.01);
+    camera.zoom = dampClamp(camera.zoom, this.setpoint.zoom, this.lambda, dt, 0.01);
 
     camera.lookAt(this.focusPoint);
 
@@ -155,9 +170,9 @@ class CameraSetpointController {
     const threshSq = 0.002 ** 2;
 
     if (
-      camera.position.distanceToSquared(setpoint.position) < threshSq &&
-      this.focusPoint.distanceToSquared(setpoint.focusPoint) < threshSq &&
-      Math.abs(camera.zoom - setpoint.zoom) < 0.01
+      camera.position.distanceToSquared(this.setpoint.position) < threshSq &&
+      this.focusPoint.distanceToSquared(this.setpoint.focusPoint) < threshSq &&
+      Math.abs(camera.zoom - this.setpoint.zoom) < 0.01
     ) {
       this.atFocusPointResolver?.();
     }
@@ -165,102 +180,99 @@ class CameraSetpointController {
 
   updateViews(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
-    chassis: Promise<THREE.Object3D>,
+    chassis: THREE.Object3D,
     componentSlots: ServerComponentSlot[],
     driveOrientation: DriveOrientation
   ) {
     const views = this.getViews(camera, chassis, componentSlots, driveOrientation);
-    this.initialView = views.then(({ initialView }) => initialView);
-    this.driveView = views.then(({ driveView }) => driveView);
+    this.initialView = views.initialView;
+    this.driveView = views.driveView;
     this.setpoint = this.lookupSetpoint(this.view);
   }
 
   private getViews(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
-    chassis: Promise<THREE.Object3D>,
+    chassis: THREE.Object3D,
     componentSlots: ServerComponentSlot[],
     driveOrientation: DriveOrientation
   ) {
     camera = camera.clone(false); // don't affect passed in camera
-    const views = chassis.then((chassis) => {
-      const getView = (
-        position: THREE.Vector3,
-        zoomMargin: number,
-        ...focusOn: THREE.Object3D[]
-      ): CameraSetPoint => {
-        camera.position.copy(position);
+    const getView = (
+      position: THREE.Vector3,
+      zoomMargin: number,
+      ...focusOn: THREE.Object3D[]
+    ): CameraSetPoint => {
+      camera.position.copy(position);
 
-        const bounds = focusOn
-          .map((obj) => {
-            obj.updateMatrixWorld(true);
-            return new THREE.Box3().setFromObject(obj);
-          })
-          .reduce(
-            (bounds, objBounds, index) =>
-              index === 0 ? bounds.copy(objBounds) : bounds.union(objBounds),
-            new THREE.Box3()
-          );
+      const bounds = focusOn
+        .map((obj) => {
+          obj.updateMatrixWorld(true);
+          return new THREE.Box3().setFromObject(obj);
+        })
+        .reduce(
+          (bounds, objBounds, index) =>
+            index === 0 ? bounds.copy(objBounds) : bounds.union(objBounds),
+          new THREE.Box3()
+        );
 
-        const focusPoint = new THREE.Vector3();
-        bounds.getCenter(focusPoint);
+      const focusPoint = new THREE.Vector3();
+      bounds.getCenter(focusPoint);
 
-        camera.lookAt(focusPoint);
+      camera.lookAt(focusPoint);
 
-        if (camera instanceof THREE.OrthographicCamera) {
-          camera.zoom = 1;
-          camera.updateProjectionMatrix();
-        } else {
-          throw new Error("not implemented");
-        }
-
-        const projectedBounds = bounds.clone().applyMatrix4(camera.projectionMatrix);
-        console.log("projected bounds:", projectedBounds);
-
-        const projectedSize = new THREE.Vector3();
-        projectedBounds.getSize(projectedSize);
-        console.log("projected size:", projectedSize);
-
-        if (camera instanceof THREE.OrthographicCamera) {
-          camera.zoom = (2 / Math.max(projectedSize.x, projectedSize.y)) * zoomMargin;
-        } else {
-          throw new Error("not implemented");
-        }
-
+      if (camera instanceof THREE.OrthographicCamera) {
+        camera.zoom = 1;
         camera.updateProjectionMatrix();
-
-        return {
-          position: camera.position.clone(),
-          focusPoint,
-          zoom: camera.zoom,
-        };
-      };
-      const position = new THREE.Vector3();
-      position.set(2, 2, 2);
-      const initialView: CameraSetPoint = getView(position, 0.75, chassis);
-      switch (driveOrientation) {
-        case "FrontLoader":
-          position.set(0, 0, 2);
-          break;
-        case "TopLoader":
-          position.set(0, 2, 0.1);
-          break;
-        default:
-          throw new Error(`DriveOrientation not implemented: ${driveOrientation}`);
+      } else {
+        throw new Error("not implemented");
       }
 
-      const driveView: CameraSetPoint = getView(
-        position,
-        0.75,
-        ...componentSlots
-          .filter((slot) => slot instanceof ServerDriveSlot)
-          .map((slot) => slot.boundingBox)
-      );
+      const projectedBounds = bounds.clone().applyMatrix4(camera.projectionMatrix);
+      console.log("projected bounds:", projectedBounds);
+
+      const projectedSize = new THREE.Vector3();
+      projectedBounds.getSize(projectedSize);
+      console.log("projected size:", projectedSize);
+
+      if (camera instanceof THREE.OrthographicCamera) {
+        camera.zoom = (2 / Math.max(projectedSize.x, projectedSize.y)) * zoomMargin;
+      } else {
+        throw new Error("not implemented");
+      }
+
+      camera.updateProjectionMatrix();
+
       return {
-        initialView,
-        driveView,
+        position: camera.position.clone(),
+        focusPoint,
+        zoom: camera.zoom,
       };
-    });
-    return views;
+    };
+    const position = new THREE.Vector3();
+    position.set(2, 2, 2);
+    const initialView: CameraSetPoint = getView(position, 0.75, chassis);
+    switch (driveOrientation) {
+      case "FrontLoader":
+        position.set(0, 0, 2);
+        break;
+      case "TopLoader":
+        position.set(0, 2, 0.1);
+        break;
+      default:
+        throw new Error(`DriveOrientation not implemented: ${driveOrientation}`);
+    }
+
+    const driveView: CameraSetPoint = getView(
+      position,
+      0.75,
+      ...componentSlots
+        .filter((slot) => slot instanceof ServerDriveSlot)
+        .map((slot) => slot.boundingBox)
+    );
+    return {
+      initialView,
+      driveView,
+    };
   }
 }
 
@@ -411,16 +423,16 @@ export class ServerView extends THREE.EventDispatcher<
       }
     });
 
-    const cameraSetpointController = new CameraSetpointController(
-      this.camera,
-      this.chassis,
-      this.componentSlots,
-      this.driveOrientation
-    );
-
-    this.cameraSetpointController = cameraSetpointController
-      .forceView("InitialView", this.camera)
-      .then(() => cameraSetpointController);
+    this.cameraSetpointController = this.chassis.then((chassis) => {
+      const ctrlr = new CameraSetpointController(
+        this.camera,
+        chassis,
+        this.componentSlots,
+        this.driveOrientation
+      );
+      ctrlr.forceView("InitialView", this.camera);
+      return ctrlr;
+    });
   }
 
   start(parent: HTMLElement) {
@@ -474,11 +486,11 @@ export class ServerView extends THREE.EventDispatcher<
 
     this.camera.updateProjectionMatrix();
 
-    this.cameraSetpointController.then((c) =>
-      c.updateViews(this.camera, this.chassis, this.componentSlots, this.driveOrientation)
-    );
-
-    // this.controls.update();
+    this.chassis.then((chassis) => {
+      this.cameraSetpointController.then((c) =>
+        c.updateViews(this.camera, chassis, this.componentSlots, this.driveOrientation)
+      );
+    });
   }
 
   /**

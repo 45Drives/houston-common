@@ -59,18 +59,18 @@ function lazyGLBLoader(glbImport: Promise<typeof import(".glb?inline")>) {
         gltf.scene.traverse((obj) => {
           obj.castShadow = true;
           obj.receiveShadow = true;
-          if (
-            "material" in obj &&
-            typeof obj.material === "object" &&
-            obj.material !== null &&
-            "dithering" in obj.material &&
-            typeof obj.material.dithering === "boolean"
-          ) {
-            obj.material.dithering = true;
-            console.log("added dithering");
-          } else {
-            console.error("failed to add dithering");
-          }
+          // if (
+          //   "material" in obj &&
+          //   typeof obj.material === "object" &&
+          //   obj.material !== null &&
+          //   "dithering" in obj.material &&
+          //   typeof obj.material.dithering === "boolean"
+          // ) {
+          //   obj.material.dithering = true;
+          //   console.log("added dithering");
+          // } else {
+          //   console.error("failed to add dithering");
+          // }
         });
         return gltf.scene;
       })
@@ -111,7 +111,7 @@ const genericDrive = new THREE.Mesh(
 );
 genericDrive.castShadow = true;
 genericDrive.receiveShadow = true;
-genericDrive.material.dithering = true;
+// genericDrive.material.dithering = true;
 
 const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader }[]> = {
   HDD: [

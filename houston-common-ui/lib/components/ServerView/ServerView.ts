@@ -37,6 +37,7 @@ class CameraSetpointController {
   private lambda: number;
   private focusPoint: THREE.Vector3;
   private atFocusPointResolver?: () => void;
+
   constructor(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
     chassis: THREE.Object3D,
@@ -83,6 +84,16 @@ class CameraSetpointController {
     }
   }
 
+  private relSpherical = new THREE.Spherical();
+  private targetRelSpherical = new THREE.Spherical();
+  private workingVector = new THREE.Vector3();
+
+  private dampClamp(x: number, y: number, lambda: number, dt: number, maxSpeed: number) {
+    const damped = THREE.MathUtils.damp(x, y, lambda, dt);
+    const dx = THREE.MathUtils.clamp(damped - x, -maxSpeed * dt, maxSpeed * dt);
+    return x + dx;
+  }
+
   updateCameraPosition(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
     time: number,
@@ -112,33 +123,33 @@ class CameraSetpointController {
     }
     const dt = time - this.t0;
     this.t0 = time;
-    const dampClamp = (
-      x: number,
-      y: number,
-      lambda: number,
-      dt: number,
-      maxSpeed: number
-    ): number => {
-      const damped = THREE.MathUtils.damp(x, y, lambda, dt);
-      const dx = THREE.MathUtils.clamp(damped - x, -maxSpeed * dt, maxSpeed * dt);
-      return x + dx;
-    };
+    // const dampClamp = (
+    //   x: number,
+    //   y: number,
+    //   lambda: number,
+    //   dt: number,
+    //   maxSpeed: number
+    // ): number => {
+    //   const damped = THREE.MathUtils.damp(x, y, lambda, dt);
+    //   const dx = THREE.MathUtils.clamp(damped - x, -maxSpeed * dt, maxSpeed * dt);
+    //   return x + dx;
+    // };
 
-    this.focusPoint.x = dampClamp(
+    this.focusPoint.x = this.dampClamp(
       this.focusPoint.x,
       this.setpoint.focusPoint.x,
       this.lambda,
       dt,
       0.001
     );
-    this.focusPoint.y = dampClamp(
+    this.focusPoint.y = this.dampClamp(
       this.focusPoint.y,
       this.setpoint.focusPoint.y,
       this.lambda,
       dt,
       0.001
     );
-    this.focusPoint.z = dampClamp(
+    this.focusPoint.z = this.dampClamp(
       this.focusPoint.z,
       this.setpoint.focusPoint.z,
       this.lambda,
@@ -146,30 +157,42 @@ class CameraSetpointController {
       0.001
     );
 
-    const relSpherical = new THREE.Spherical()
-      .setFromVector3(camera.position.clone().sub(this.focusPoint))
-      .makeSafe();
-    const targetRelSpherical = new THREE.Spherical()
-      .setFromVector3(this.setpoint.position.clone().sub(this.setpoint.focusPoint))
-      .makeSafe();
-    relSpherical.radius = dampClamp(
-      relSpherical.radius,
-      targetRelSpherical.radius,
+    this.workingVector.subVectors(camera.position, this.focusPoint);
+    this.relSpherical.setFromVector3(this.workingVector).makeSafe();
+    this.workingVector.subVectors(this.setpoint.position, this.setpoint.focusPoint);
+    this.targetRelSpherical.setFromVector3(this.workingVector).makeSafe();
+
+    // const relSpherical = new THREE.Spherical()
+    //   .setFromVector3(camera.position.clone().sub(this.focusPoint))
+    //   .makeSafe();
+    // const targetRelSpherical = new THREE.Spherical()
+    //   .setFromVector3(this.setpoint.position.clone().sub(this.setpoint.focusPoint))
+    //   .makeSafe();
+
+    this.relSpherical.radius = this.dampClamp(
+      this.relSpherical.radius,
+      this.targetRelSpherical.radius,
       this.lambda,
       dt,
       0.0005
     );
-    relSpherical.phi = dampClamp(relSpherical.phi, targetRelSpherical.phi, this.lambda, dt, 0.001);
-    relSpherical.theta = dampClamp(
-      relSpherical.theta,
-      targetRelSpherical.theta,
+    this.relSpherical.phi = this.dampClamp(
+      this.relSpherical.phi,
+      this.targetRelSpherical.phi,
+      this.lambda,
+      dt,
+      0.001
+    );
+    this.relSpherical.theta = this.dampClamp(
+      this.relSpherical.theta,
+      this.targetRelSpherical.theta,
       this.lambda,
       dt,
       0.0005
     );
 
-    camera.position.copy(new THREE.Vector3().setFromSpherical(relSpherical).add(this.focusPoint));
-    camera.zoom = dampClamp(camera.zoom, this.setpoint.zoom, this.lambda, dt, 0.01);
+    camera.position.setFromSpherical(this.relSpherical).add(this.focusPoint);
+    camera.zoom = this.dampClamp(camera.zoom, this.setpoint.zoom, this.lambda, dt, 0.01);
 
     camera.updateMatrix();
     camera.lookAt(this.focusPoint);
@@ -199,20 +222,18 @@ class CameraSetpointController {
     const getView = (
       position: THREE.Vector3,
       zoomMargin: number,
-      ...focusOn: THREE.Object3D[]
+      ...focusOn: [THREE.Object3D, ...THREE.Object3D[]]
     ): CameraSetPoint => {
       camera.position.copy(position);
 
-      const bounds = focusOn
-        .map((obj) => {
-          obj.updateMatrixWorld(true);
-          return new THREE.Box3().setFromObject(obj);
-        })
-        .reduce(
-          (bounds, objBounds, index) =>
-            index === 0 ? bounds.copy(objBounds) : bounds.union(objBounds),
-          new THREE.Box3()
-        );
+      const bounds = new THREE.Box3().setFromObject(focusOn[0]);
+      const objBounds = new THREE.Box3();
+
+      for (const obj of focusOn) {
+        obj.updateMatrixWorld(true);
+        objBounds.setFromObject(obj);
+        bounds.union(objBounds);
+      }
 
       const focusPoint = new THREE.Vector3();
       bounds.getCenter(focusPoint);
@@ -226,10 +247,10 @@ class CameraSetpointController {
         throw new Error("not implemented");
       }
 
-      const projectedBounds = bounds.clone().applyMatrix4(camera.projectionMatrix);
+      const projectedBounds = bounds.applyMatrix4(camera.projectionMatrix);
       console.log("projected bounds:", projectedBounds);
 
-      const projectedSize = new THREE.Vector3();
+      const projectedSize = this.workingVector;
       projectedBounds.getSize(projectedSize);
       console.log("projected size:", projectedSize);
 
@@ -247,7 +268,7 @@ class CameraSetpointController {
         zoom: camera.zoom,
       };
     };
-    const position = new THREE.Vector3();
+    const position = this.workingVector;
     position.set(2, 2, 2);
     const initialView: CameraSetPoint = getView(position, 0.75, chassis);
     switch (driveOrientation) {
@@ -261,12 +282,18 @@ class CameraSetpointController {
         throw new Error(`DriveOrientation not implemented: ${driveOrientation}`);
     }
 
+    let driveSlotFocus: THREE.Object3D[] = componentSlots
+      .filter((slot) => slot instanceof ServerDriveSlot)
+      .map((slot) => slot.boundingBox);
+
+    if (driveSlotFocus.length === 0) {
+      driveSlotFocus = [chassis];
+    }
+
     const driveView: CameraSetPoint = getView(
       position,
       0.75,
-      ...componentSlots
-        .filter((slot) => slot instanceof ServerDriveSlot)
-        .map((slot) => slot.boundingBox)
+      ...(driveSlotFocus as [THREE.Object3D, ...THREE.Object3D[]])
     );
     return {
       initialView,
@@ -513,7 +540,7 @@ export class ServerView extends THREE.EventDispatcher<
         console.log("not a drive slot:", componentSlot);
         console.log("is component slot:", componentSlot instanceof ServerComponentSlot);
       } else {
-        console.log(Object.fromEntries(this.componentSlots.entries()));
+        console.log(this.componentSlots);
         globalThis.reportHoustonError(new Error(`Drive slot not found: ${slot.slotId}`));
       }
     });

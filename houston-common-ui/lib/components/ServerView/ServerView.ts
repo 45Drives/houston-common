@@ -10,9 +10,14 @@ import {
 
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
 import { LAYER_DEFAULT, LAYER_NO_SELECT } from "./constants";
 
-import { getChassisModel, type DriveOrientation } from "@/components/ServerView/assets";
+import {
+  getChassisModel,
+  type DriveOrientation,
+} from "@/components/ServerView/assets";
 import {
   isDriveSlotType,
   ServerComponentSlot,
@@ -32,7 +37,6 @@ class CameraSetpointController {
   private initialView: CameraSetPoint;
   private driveView: CameraSetPoint;
   private view: CameraView;
-  private t0?: number;
   private setpoint: CameraSetPoint;
   private lambda: number;
   private focusPoint: THREE.Vector3;
@@ -96,7 +100,7 @@ class CameraSetpointController {
 
   updateCameraPosition(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
-    time: number,
+    dt: number,
     force: boolean = false
   ) {
     const threshSq = 0.001 ** 2;
@@ -117,12 +121,7 @@ class CameraSetpointController {
       this.atFocusPointResolver?.();
       return;
     }
-    if (this.t0 === undefined) {
-      this.t0 = time;
-      return;
-    }
-    const dt = time - this.t0;
-    this.t0 = time;
+
     // const dampClamp = (
     //   x: number,
     //   y: number,
@@ -334,6 +333,27 @@ export class ServerView extends THREE.EventDispatcher<
   private cameraSetpointControllerPromise: Promise<CameraSetpointController>;
   private cameraSetpointController?: CameraSetpointController;
 
+  private animations: {
+    revealDrives: Promise<THREE.AnimationAction | undefined>;
+  };
+
+  private animationMixer: THREE.AnimationMixer;
+
+  private t0?: number;
+
+  private materials = {
+    powdercoat: new THREE.MeshPhysicalMaterial({ roughness: 0.5, color: 0x000000 }),
+    acrylic: new THREE.MeshPhysicalMaterial({
+      roughness: 0.1,
+      color: 0xffffff,
+      transmission: 0.9,
+    }),
+    aluminum: new THREE.MeshPhysicalMaterial({ roughness: 0.25, metalness: 1, color: 0xe7e7e7ff }),
+    steel: new THREE.MeshPhysicalMaterial({ roughness: 0.125, metalness: 1, color: 0xe7e7e7ff }),
+    plastic: new THREE.MeshPhysicalMaterial({ roughness: 0.125, color: 0x000000 }),
+    labels: new THREE.MeshPhysicalMaterial({ roughness: 0.8, color: 0xffffff }),
+  };
+
   constructor(
     public readonly serverModel: string,
     opts: {
@@ -374,6 +394,8 @@ export class ServerView extends THREE.EventDispatcher<
     });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1;
 
     this.camera.position.z = 1;
     this.camera.layers.enable(LAYER_DEFAULT);
@@ -389,11 +411,44 @@ export class ServerView extends THREE.EventDispatcher<
     // this.controls.zoomToCursor = true;
     this.scene.add(this.camera);
 
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.125));
+    const light = new THREE.PointLight();
+    light.castShadow = true;
+    //Set up shadow properties for the light
+    light.shadow.mapSize.width = 512;
+    light.shadow.mapSize.height = 512;
+    light.shadow.camera.near = 0;
+    light.shadow.camera.far = 10;
+    light.intensity = 1;
+    for (const [position, intensity] of [
+      [new THREE.Vector3(-0.125, 0.07, 1), 1], // front
+      [new THREE.Vector3(0, 2.5, 0), 90], // ceil
+    ] as [THREE.Vector3, number][]) {
+      light.position.copy(position);
+      light.intensity = intensity;
+      this.scene.add(light.clone());
+    }
+    light.dispose();
+
+    // generate env map
+    const roomCube = new THREE.Mesh(
+      new THREE.BoxGeometry(10, 5.1, 10),
+      new THREE.MeshStandardMaterial({ color: 0x807774, side: THREE.BackSide, roughness: 1 })
+    );
+    this.scene.add(roomCube);
+    this.scene.environment = new THREE.PMREMGenerator(this.renderer).fromScene(
+      this.scene,
+      0.05
+    ).texture;
+    this.scene.remove(roomCube);
 
     this.componentSlots = [];
 
-    const { model: chassisModelPromise, driveOrientation } = getChassisModel(serverModel);
+    const {
+      model: chassisModelPromise,
+      animations,
+      driveOrientation,
+    } = getChassisModel(serverModel);
     this.driveOrientation = driveOrientation;
     this.chassis = chassisModelPromise.then((chassis) => {
       const box = new THREE.Box3().setFromObject(chassis);
@@ -403,37 +458,63 @@ export class ServerView extends THREE.EventDispatcher<
       chassis.updateMatrix();
       chassis.updateMatrixWorld(true);
       chassis.traverse((obj) => {
-        if (typeof obj.userData.Slot === "string") {
-          if (isDriveSlotType(obj.userData.DriveType)) {
+        if (typeof obj.userData.SLOT === "string") {
+          if (isDriveSlotType(obj.userData.DRIVE_TYPE)) {
             this.componentSlots.push(
-              new ServerDriveSlot(this.scene, obj, obj.userData.Slot, obj.userData.DriveType, this.driveOrientation)
+              new ServerDriveSlot(
+                this.scene,
+                obj,
+                obj.userData.SLOT,
+                obj.userData.DRIVE_TYPE,
+                this.driveOrientation
+              )
             );
           } else {
-            this.componentSlots.push(new ServerComponentSlot(this.scene, obj, obj.userData.Slot));
+            this.componentSlots.push(new ServerComponentSlot(this.scene, obj, obj.userData.SLOT));
+          }
+        }
+        if (obj instanceof THREE.Mesh && obj.material instanceof THREE.Material) {
+          switch (obj.material.name) {
+            case "POWDER_COAT":
+              obj.material = this.materials.powdercoat;
+              break;
+            case "ALUMINUM":
+              obj.material = this.materials.aluminum;
+              break;
+            case "ACRYLIC":
+              obj.material = this.materials.acrylic;
+              break;
+            case "PLASTIC":
+              obj.material = this.materials.plastic;
+              break;
+            case "STEEL":
+              obj.material = this.materials.steel;
+              break;
+            default:
+              break;
           }
         }
       });
-      const light = new THREE.PointLight();
-      light.castShadow = true;
-      //Set up shadow properties for the light
-      light.shadow.mapSize.width = 512;
-      light.shadow.mapSize.height = 512;
-      light.shadow.camera.near = 0;
-      light.shadow.camera.far = 10;
-      light.intensity = 1;
-      for (const [position, intensity] of [
-        [new THREE.Vector3(-0.125, 0, 1), 1], // front
-        [new THREE.Vector3(0, 0.5, -0.25), 0.5], // top
-        // [new THREE.Vector3(0, 0.25, -1), 1], // rear
-      ] as [THREE.Vector3, number][]) {
-        light.position.copy(position);
-        light.intensity = intensity;
-        chassis.add(light.clone());
-      }
-      light.dispose();
       this.scene.add(chassis);
       return chassis;
     });
+
+    this.animationMixer = new THREE.AnimationMixer(this.scene);
+    this.animationMixer.timeScale = 0.001;
+
+    this.animations = {
+      revealDrives: animations.then((animations) => {
+        const revealDrives = THREE.AnimationClip.findByName(animations, "REVEAL_DRIVES");
+        if (revealDrives) {
+          const action = this.animationMixer.clipAction(revealDrives);
+          action.setLoop(THREE.LoopOnce, 0);
+          action.clampWhenFinished = true;
+          action.enabled = false;
+          return action;
+        }
+        return undefined;
+      }),
+    };
 
     this.mouseEventTranslator = new MouseEventTranslator(
       this.renderer.domElement,
@@ -475,6 +556,48 @@ export class ServerView extends THREE.EventDispatcher<
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
     }
     this.renderer.setAnimationLoop(null);
+  }
+
+  private waitForAction(action: THREE.AnimationAction) {
+    return new Promise<void>((resolve) => {
+      const cb = (
+        e: {
+          action: THREE.AnimationAction;
+          direction: number;
+        } & THREE.Event<"finished", THREE.AnimationMixer>
+      ) => {
+        if (e.action === action) {
+          this.animationMixer.removeEventListener("finished", cb);
+          resolve();
+        }
+      };
+      this.animationMixer.addEventListener("finished", cb);
+    });
+  }
+
+  revealDrives() {
+    return this.animations.revealDrives.then((action) => {
+      if (action) {
+        action.reset();
+        action.enabled = true;
+        action.timeScale = 1;
+        action.play();
+        return this.waitForAction(action);
+      }
+    });
+  }
+
+  hideDrives() {
+    return this.animations.revealDrives.then((action) => {
+      if (action) {
+        action.reset();
+        action.time = action.getClip().duration;
+        action.enabled = true;
+        action.timeScale = -1;
+        action.play();
+        return this.waitForAction(action);
+      }
+    });
   }
 
   setView(view: CameraView) {
@@ -527,6 +650,15 @@ export class ServerView extends THREE.EventDispatcher<
    */
   setBackground(bg: number) {
     this.scene.background = new THREE.Color(bg);
+  }
+
+  setPowdercoatColor(color: number, gloss: boolean) {
+    this.materials.powdercoat.color.set(color);
+    this.materials.powdercoat.roughness = gloss ? 0 : 0.5;
+  }
+
+  setLabelColor(color: number) {
+    this.materials.labels.color.set(color);
   }
 
   async setDriveSlotInfo(slots: DriveSlot[]) {
@@ -590,7 +722,18 @@ export class ServerView extends THREE.EventDispatcher<
   }
 
   private animate(time: number) {
-    this.cameraSetpointController?.updateCameraPosition(this.camera, time);
+    if (this.t0 === undefined) {
+      this.t0 = time;
+      return;
+    }
+
+    const dt = time - this.t0;
+    this.t0 = time;
+
+    // this.materials.powdercoat.color.setHSL((time / 1000) % 1, 1, 0.5);
+
+    this.animationMixer.update(dt);
+    this.cameraSetpointController?.updateCameraPosition(this.camera, dt);
     // this.controls.object = new THREE.Object3D();
     // this.controls.update();
     // this.controls.object = this.camera;

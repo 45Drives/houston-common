@@ -1,12 +1,14 @@
 import type { DriveSlotType } from "@/components/ServerView/ServerComponent";
 import { ValueError } from "@45drives/houston-common-lib";
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 
-type ModelLoader = () => Promise<THREE.Object3D>;
+export { type GLTF };
 
-function lazyModelLoader(loader: ModelLoader): ModelLoader {
-  let model: Promise<THREE.Object3D> | null = null;
+type ModelLoader<T extends THREE.Object3D | GLTF> = () => Promise<T>;
+
+function lazyModelLoader<T extends THREE.Object3D | GLTF>(loader: ModelLoader<T>): ModelLoader<T> {
+  let model: Promise<T> | null = null;
 
   return () => (model ? model : (model = loader()));
 }
@@ -41,15 +43,15 @@ export function loadImageModel(
 }
 
 export function imageModelLoader(
-  imp: Promise<typeof import("*.png") | typeof import("*.jpg") | typeof import("*.svg")>,
+  imp: () => Promise<typeof import("*.png") | typeof import("*.jpg") | typeof import("*.svg")>,
   size?: { width?: number; height?: number }
-): ModelLoader {
-  return () => loadImageModel(imp, size);
+): ModelLoader<THREE.Object3D> {
+  return () => loadImageModel(imp(), size);
 }
 
 const gltfLoader = new GLTFLoader();
 
-const notFoundModelLoader = lazyModelLoader(imageModelLoader(import("./notFound.png")));
+const notFoundModelLoader = lazyModelLoader(imageModelLoader(() => import("./notFound.png")));
 
 function lazyGLBLoader(glbImport: () => Promise<typeof import(".glb?inline")>) {
   return lazyModelLoader(() =>
@@ -72,7 +74,7 @@ function lazyGLBLoader(glbImport: () => Promise<typeof import(".glb?inline")>) {
           //   console.error("failed to add dithering");
           // }
         });
-        return gltf.scene;
+        return gltf;
       })
   );
 }
@@ -81,7 +83,7 @@ export type DriveOrientation = "TopLoader" | "FrontLoader";
 
 const chassisModelLUT: {
   re: RegExp;
-  modelLoader: ModelLoader;
+  modelLoader: ModelLoader<GLTF>;
   driveOrientation: DriveOrientation;
 }[] = [
   {
@@ -91,73 +93,119 @@ const chassisModelLUT: {
   },
 ];
 
-export function getChassisModel(modelNumber: string): {
+export type ChassisModel = {
   model: Promise<THREE.Object3D>;
+  animations: Promise<THREE.AnimationClip[]>;
   driveOrientation: DriveOrientation;
-} {
+};
+
+export function getChassisModel(modelNumber: string): ChassisModel {
   for (const { re, modelLoader, driveOrientation } of chassisModelLUT) {
-    if (re.test(modelNumber))
+    if (re.test(modelNumber)) {
+      const gltf = modelLoader();
       return {
-        model: modelLoader(),
+        model: gltf.then((gltf) => gltf.scene),
+        animations: gltf.then((gltf) => gltf.animations),
         driveOrientation,
       };
+    }
   }
-  return { model: notFoundModelLoader(), driveOrientation: "FrontLoader" };
+  return {
+    model: notFoundModelLoader(),
+    animations: Promise.resolve([]),
+    driveOrientation: "FrontLoader",
+  };
 }
 
-const genericDrive = new THREE.Mesh(
-  new THREE.BoxGeometry(1, 1, 1),
-  new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5, roughness: 0.5 })
-);
-genericDrive.castShadow = true;
-genericDrive.receiveShadow = true;
+// const genericDrive = new THREE.Mesh(
+//   new THREE.BoxGeometry(1, 1, 1),
+//   new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5, roughness: 0.5 })
+// );
+// genericDrive.castShadow = true;
+// genericDrive.receiveShadow = true;
 // genericDrive.material.dithering = true;
 
-const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader }[]> = {
-  HDD: [
-    {
-      re: /^/,
-      modelLoader: lazyModelLoader(() => {
-        const model = genericDrive.clone();
-        model.geometry.scale(0.0254, 0.1016, 0.14605);
-        model.geometry.computeBoundingBox();
-        return Promise.resolve(model);
-      }),
-    },
-    // { re: /^/, modelLoader: lazyGLBLoader(() => import("./drive/HDD_generic.glb?inline")) }, // keep at end of list
-  ],
-  SSD_15mm: [
-    {
-      re: /^/,
-      modelLoader: lazyModelLoader(() => {
-        const model = genericDrive.clone();
-        model.geometry.scale(0.015, 0.06985, 0.1016);
-        model.geometry.computeBoundingBox();
-        return Promise.resolve(model);
-      }),
-    },
-    // { re: /^/, modelLoader: lazyGLBLoader(() => import("./drive/SDD_15mm_generic.glb?inline")) }, // keep at end of list
-  ],
-  SSD_7mm: [
-    {
-      re: /^/,
-      modelLoader: lazyModelLoader(() => {
-        const model = genericDrive.clone();
-        model.geometry.scale(0.007, 0.06985, 0.1016);
-        model.geometry.computeBoundingBox();
-        return Promise.resolve(model);
-      }),
-    },
-    // { re: /^/, modelLoader: lazyGLBLoader(() => import("./drive/SDD_7mm_generic.glb?inline")) }, // keep at end of list
-  ],
-};
+const genericDrive = () =>
+  lazyGLBLoader(() => import("./drive/HDD.glb?inline"))().then((gltf) => gltf.scene);
+
+const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader<THREE.Object3D> }[]> =
+  {
+    HDD: [
+      // {
+      //   re: /^/,
+      //   modelLoader: lazyModelLoader(() => {
+      //     const model = genericDrive.clone();
+      //     model.geometry.scale(0.0254, 0.1016, 0.14605);
+      //     model.geometry.computeBoundingBox();
+      //     return Promise.resolve(model);
+      //   }),
+      // },
+      {
+        re: /^/,
+        modelLoader: lazyModelLoader(() =>
+          genericDrive().then((model) => {
+            return model;
+          })
+        ),
+      }, // keep at end of list
+    ],
+    SSD_15mm: [
+      // {
+      //   re: /^/,
+      //   modelLoader: lazyModelLoader(() => {
+      //     const model = genericDrive.clone();
+      //     model.geometry.scale(0.015, 0.06985, 0.1016);
+      //     model.geometry.computeBoundingBox();
+      //     return Promise.resolve(model);
+      //   }),
+      // },
+      // { re: /^/, modelLoader: lazyGLBLoader(() => import("./drive/SDD_15mm_generic.glb?inline")) }, // keep at end of list
+      {
+        re: /^/,
+        modelLoader: lazyModelLoader(() =>
+          genericDrive().then((model) => {
+            model = model.clone();
+            model.scale.set(15 / 26.11, 2.75 / 4, 4 / 5.75);
+            return model;
+          })
+        ),
+      }, // keep at end of list
+    ],
+    SSD_7mm: [
+      // {
+      //   re: /^/,
+      //   modelLoader: lazyModelLoader(() => {
+      //     const model = genericDrive.clone();
+      //     model.geometry.scale(0.007, 0.06985, 0.1016);
+      //     model.geometry.computeBoundingBox();
+      //     return Promise.resolve(model);
+      //   }),
+      // },
+      // { re: /^/, modelLoader: lazyGLBLoader(() => import("./drive/SDD_7mm_generic.glb?inline")) }, // keep at end of list
+      {
+        re: /^/,
+        modelLoader: lazyModelLoader(() =>
+          genericDrive().then((model) => {
+            model = model.clone();
+            model.scale.set(7 / 26.11, 2.75 / 4, 4 / 5.75);
+            return model;
+          })
+        ),
+      }, // keep at end of list
+    ],
+  };
 
 export function getDriveModel(
   driveType: DriveSlotType,
   modelNumber: string
 ): Promise<THREE.Object3D> {
   for (const { re, modelLoader } of driveLUT[driveType]) {
-    if (re.test(modelNumber)) return modelLoader();
+    if (re.test(modelNumber)) return modelLoader().then(model => {
+      // TODO: traverse
+      model.castShadow = true;
+      model.receiveShadow = true;
+      return model;
+    });
   }
   // generic model should catch any model number
   throw new ValueError(`could not find ${driveType} model for ${modelNumber}`);

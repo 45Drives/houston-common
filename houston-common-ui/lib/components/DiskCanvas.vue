@@ -70,7 +70,10 @@ Promise.all([import("./ServerView"), props.server.getServerModel()]).then(
         serverView
           .setView("InitialView")
           .then(() => new Promise((resolve) => setTimeout(resolve, 1000)))
-          .then(() => serverView.setView("DriveView"));
+          .then(() => {
+            serverView.revealDrives();
+            serverView.setView("DriveView");
+          });
       })
     );
 

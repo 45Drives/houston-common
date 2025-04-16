@@ -44,7 +44,7 @@ const driveSlots = defineModel<DriveSlot[]>("driveSlots", { default: [] });
 
 const darkMode = useDarkModeState();
 
-Promise.all([import("./ServerView"), props.server.getServerModel()]).then(
+const serverView = Promise.all([import("./ServerView"), props.server.getServerModel()]).then(
   async ([{ ServerView, ServerDriveSlot }, serverModel]) => {
     const watchHandles: WatchHandle[] = [];
 
@@ -99,8 +99,14 @@ Promise.all([import("./ServerView"), props.server.getServerModel()]).then(
         wh.stop();
       }
     };
+
+    return serverView;
   }
 );
+
+defineExpose({
+  serverView,
+});
 
 onBeforeUnmount(() => {
   unmountCallback?.();

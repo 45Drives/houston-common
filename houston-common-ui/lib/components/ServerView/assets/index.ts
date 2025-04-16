@@ -165,7 +165,7 @@ const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader<THR
         modelLoader: lazyModelLoader(() =>
           genericDrive().then((model) => {
             model = model.clone();
-            model.scale.set(15 / 26.11, 2.75 / 4, 4 / 5.75);
+            model.scale.set(15 / 25.4, 2.75 / 4, 4 / 5.75);
             return model;
           })
         ),
@@ -187,7 +187,7 @@ const driveLUT: Record<DriveSlotType, { re: RegExp; modelLoader: ModelLoader<THR
         modelLoader: lazyModelLoader(() =>
           genericDrive().then((model) => {
             model = model.clone();
-            model.scale.set(7 / 26.11, 2.75 / 4, 4 / 5.75);
+            model.scale.set(7 / 25.4, 2.75 / 4, 4 / 5.75);
             return model;
           })
         ),

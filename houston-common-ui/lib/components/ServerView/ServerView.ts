@@ -4,6 +4,7 @@ import { MouseEventTranslator } from "@/components/ServerView/MouseEventTranslat
 import {
   Server,
   unwrap,
+  ValueError,
   type DriveSlot,
   type LiveDriveSlotsHandle,
 } from "@45drives/houston-common-lib";
@@ -14,10 +15,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 import { LAYER_DEFAULT, LAYER_NO_SELECT } from "./constants";
 
-import {
-  getChassisModel,
-  type DriveOrientation,
-} from "@/components/ServerView/assets";
+import { getChassisModel, type DriveOrientation } from "@/components/ServerView/assets";
 import {
   isDriveSlotType,
   ServerComponentSlot,
@@ -392,6 +390,11 @@ export class ServerView extends THREE.EventDispatcher<
     this.renderer.domElement.addEventListener("mousemove", (event) => {
       this.mouseEventTranslator.translateMouseOver(event as MouseEvent & { type: "mousemove" });
     });
+    this.renderer.domElement.addEventListener("mouseleave", (event) => {
+      for (const slot of this.componentSlots) {
+        slot.highlight = false;
+      }
+    });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -721,6 +724,29 @@ export class ServerView extends THREE.EventDispatcher<
     return [...this.componentSlots.values()].filter((slot) => slot.selected);
   }
 
+  async setSlotIssues(type: "warning" | "error" | "clear", slotIds: string[]) {
+    await this.chassis;
+    for (const slotId of slotIds) {
+      const componentSlot = this.componentSlots.find((s) => s.slotId === slotId);
+      if (componentSlot === undefined) {
+        continue;
+      }
+      switch (type) {
+        case "warning":
+          componentSlot.warning = true;
+          break;
+        case "error":
+          componentSlot.error = true;
+          break;
+        case "clear":
+          componentSlot.warning = componentSlot.error = false;
+          break;
+        default:
+          throw new ValueError(`Invalid slot issue type: ${type}`);
+      }
+    }
+  }
+
   private animate(time: number) {
     if (this.t0 === undefined) {
       this.t0 = time;
@@ -730,8 +756,6 @@ export class ServerView extends THREE.EventDispatcher<
     const dt = time - this.t0;
     this.t0 = time;
 
-    // this.materials.powdercoat.color.setHSL((time / 1000) % 1, 1, 0.5);
-
     this.animationMixer.update(dt);
     this.cameraSetpointController?.updateCameraPosition(this.camera, dt);
     // this.controls.object = new THREE.Object3D();
@@ -739,6 +763,11 @@ export class ServerView extends THREE.EventDispatcher<
     // this.controls.object = this.camera;
     // this.controls.update();
     this.mouseEventTranslator.animate();
+
+    for (const slot of this.componentSlots) {
+      slot.animate(time);
+    }
+
     this.renderer.render(this.scene, this.camera);
   }
 }

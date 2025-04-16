@@ -17,7 +17,6 @@ const DEBUG_BOXES = false;
 export class BoundingBox extends THREE.Mesh<THREE.BoxGeometry> {
   readonly bound = new THREE.Box3();
   private size = new THREE.Vector3();
-  private center = new THREE.Vector3();
 
   constructor() {
     super();
@@ -26,14 +25,13 @@ export class BoundingBox extends THREE.Mesh<THREE.BoxGeometry> {
   resizeTo(object: THREE.Object3D, margin: number = 0) {
     this.bound.setFromObject(object);
     this.bound.getSize(this.size);
-    this.bound.getCenter(this.center);
+    this.bound.getCenter(this.position);
     this.geometry?.dispose();
     this.geometry = new THREE.BoxGeometry(
       this.size.x + margin,
       this.size.y + margin,
       this.size.z + margin
     );
-    this.position.copy(this.center);
     console.log("resizeTo");
     console.log("selection box pos:", this.position);
     console.log("objectRef pos:", object.position);
@@ -47,40 +45,27 @@ export class SlotBoundingBox extends BoundingBox {
   }
 }
 
-export class SelectionHighlight extends BoundingBox {
-  private static material: THREE.MeshBasicMaterial = new THREE.MeshBasicMaterial({
-    color: 0x00ff00,
-    transparent: true,
-    opacity: 0.25,
-  });
-
-  constructor() {
-    super();
-    this.material = SelectionHighlight.material;
-  }
-}
-
-export class SelectionPreviewHighlight extends BoundingBox {
-  private static material: THREE.MeshBasicMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.125,
-  });
-
-  constructor() {
-    super();
-    this.material = SelectionPreviewHighlight.material;
-  }
-}
-
 export class ServerComponentSlot {
-  private _selected = false;
-  protected selectionHighlightBox: SelectionHighlight;
+  protected highlightBox: BoundingBox;
   public boundingBox: SlotBoundingBox;
-  private boxHelper: THREE.BoxHelper;
+  // protected boxHelper: THREE.BoxHelper;
 
   readonly BoundingBoxMargin = 0.001;
-  readonly SelectionHighlightMargin = 0.0001;
+  readonly HighlightBoxMargin = 0.001;
+
+  public selected: boolean = false;
+  public highlight: boolean = false;
+  public warning: boolean = false;
+  public error: boolean = false;
+
+  private highlightMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.5,
+    visible: false,
+  });
+
+  private static clock = new THREE.Clock();
 
   constructor(
     public scene: THREE.Scene,
@@ -89,49 +74,72 @@ export class ServerComponentSlot {
   ) {
     this.objectRef.visible = false;
 
-    this.selectionHighlightBox = new SelectionHighlight();
-    this.selectionHighlightBox.visible = false;
-    this.scene.add(this.selectionHighlightBox);
-
     this.boundingBox = new SlotBoundingBox(this);
-    this.boundingBox.material = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.125,
-    });
+    this.boundingBox.resizeTo(this.objectRef, this.BoundingBoxMargin);
     this.boundingBox.visible = false;
     this.scene.add(this.boundingBox);
 
-    this.boxHelper = new THREE.BoxHelper(this.boundingBox, 0xffff00);
-    this.boxHelper.visible = DEBUG_BOXES;
-    this.scene.add(this.boxHelper);
+    this.highlightBox = new BoundingBox();
+    this.highlightBox.resizeTo(this.objectRef, this.HighlightBoxMargin);
+    this.highlightBox.material = this.highlightMaterial;
+    this.scene.add(this.highlightBox);
 
-    this.selectionHighlightBox.resizeTo(this.objectRef, this.SelectionHighlightMargin);
-    this.boundingBox.resizeTo(this.objectRef, this.BoundingBoxMargin);
-    this.boxHelper.update();
+    // this.boxHelper = new THREE.BoxHelper(this.highlightBox, 0xffff00);
+    // this.boxHelper.update();
+    // this.scene.add(this.boxHelper);
   }
 
-  set selected(value: boolean) {
-    if (value === this._selected) {
-      return;
+  static colors = {
+    selected: new THREE.Color(0x00ff00),
+    highlight: new THREE.Color(0xffffff),
+    warning: new THREE.Color(0xf97316),
+    error: new THREE.Color(0xff0000),
+  };
+
+  private lerpColors(
+    colors: [THREE.Color, ...THREE.Color[]],
+    time: number,
+    period: number,
+    target?: THREE.Color
+  ): THREE.Color {
+    target ??= new THREE.Color();
+    if (colors.length == 1) {
+      return target.copy(colors[0]);
     }
-    if (value) {
-      this.selectionHighlightBox.visible = true;
-    } else {
-      this.selectionHighlightBox.visible = false;
+    const index = Math.floor(((time % period) / period) * colors.length);
+    const subperiod = period / colors.length;
+    // console.log("LERP", index, (index + 1) % color.length, (time % subperiod), subperiod, (time % subperiod) / subperiod);
+    return target.lerpColors(
+      colors[index],
+      colors[(index + 1) % colors.length],
+      (time % subperiod) / subperiod
+    );
+  }
+
+  animate(time: number) {
+    const colors = [];
+    if (this.selected) {
+      colors.push(ServerComponentSlot.colors.selected);
     }
-    this._selected = value;
-  }
-
-  get selected() {
-    return this._selected;
-  }
-
-  set highlight(value: boolean) {
-    if (value) {
-      this.boundingBox.visible = true;
+    if (this.highlight) {
+      colors.push(ServerComponentSlot.colors.highlight);
+    }
+    if (this.warning) {
+      colors.push(ServerComponentSlot.colors.warning);
+    }
+    if (this.error) {
+      colors.push(ServerComponentSlot.colors.error);
+    }
+    if (colors.length) {
+      this.highlightMaterial.visible = true;
+      this.lerpColors(
+        colors as [THREE.Color, ...THREE.Color[]],
+        time,
+        2000,
+        this.highlightMaterial.color
+      );
     } else {
-      this.boundingBox.visible = false;
+      this.highlightMaterial.visible = false;
     }
   }
 }
@@ -168,6 +176,9 @@ export class ServerDriveSlot extends ServerComponentSlot {
   }
 
   setDrive(drive: DriveSlot["drive"]) {
+    if (drive?.model === this.drive?.model) {
+      return;
+    }
     this.drive = drive;
     if (drive) {
       getDriveModel(this.driveType, drive.model).then((driveModel) => {
@@ -220,6 +231,9 @@ export class ServerDriveSlot extends ServerComponentSlot {
         this.modelBoxHelper.update();
 
         this.driveModel.visible = true;
+
+        this.highlightBox.resizeTo(this.driveModel, this.HighlightBoxMargin);
+        // this.boxHelper.update();
       });
     } else {
       this.driveModel.visible = false;

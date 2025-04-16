@@ -166,6 +166,22 @@ export class EasySetupConfigurator {
       console.log(error);
     }
 
+    try {
+      await unwrap(
+        server.execute(
+          new Command(["systemctl", "enable", "avahi-daemon"], this.commandOptions),
+          true
+        )
+      );
+      await unwrap(
+        server.execute(
+          new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions),
+          true
+        )
+      );
+    } catch (error) {
+      console.log(error);
+    }
   }
 
   private async applyZFSConfig(_config: EasySetupConfig) {

@@ -254,6 +254,7 @@ export class ServerDriveSlot extends ServerComponentSlot {
       });
     } else {
       this.driveModel.visible = false;
+      this.highlightBox.resizeTo(this.objectRef);
     }
   }
 }

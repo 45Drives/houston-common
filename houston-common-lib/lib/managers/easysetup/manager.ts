@@ -134,6 +134,11 @@ export class EasySetupConfigurator {
           console.log('existing share found on pool:', share);
           try {
             await unwrap(this.sambaManager.closeSambaShare(share.name));
+          } catch (error) {
+            console.log(error);
+          }
+          // Don't undo this!!!!
+          try {
             await unwrap(this.sambaManager.removeShare(share));
           } catch (error) {
             console.log(error);
@@ -162,6 +167,7 @@ export class EasySetupConfigurator {
 
     try {
       await this.zfsManager.destroyPool(poolName, { force: true });
+      this.tryDestroyPoolWithRetries(poolName)
     } catch (error) {
       console.log(error);
     }
@@ -182,20 +188,53 @@ export class EasySetupConfigurator {
     } catch (error) {
       console.log(error);
     }
+
+    try {
+      await unwrap(
+        server.execute(
+          new Command(["rm", "-rf", "/tank/*"], this.commandOptions),
+          true
+        )
+      );
+    } catch (error) {
+      console.log(error);
+    }
+
+    try {
+      await unwrap(
+        server.execute(
+          new Command(["umount", "/tank"], this.commandOptions),
+          true
+        )
+      );
+    } catch (error) {
+      console.log(error);
+    }
   }
 
+  private async tryDestroyPoolWithRetries(poolName: string, maxRetries = 3, delayMs = 1000) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await this.zfsManager.destroyPool(poolName, { force: true });
+        console.log(`Pool ${poolName} destroyed successfully on attempt ${attempt}`);
+        return;
+      } catch (error) {
+        console.error(`Attempt ${attempt} failed to destroy pool:`, error);
+  
+        if (attempt < maxRetries) {
+          console.log(`Retrying in ${delayMs}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        } else {
+          console.error(`Failed to destroy pool ${poolName} after ${maxRetries} attempts.`);
+          throw error; // rethrow after final failure if needed
+        }
+      }
+    }
+  }
+  
+  
   private async applyZFSConfig(_config: EasySetupConfig) {
     let zfsConfig = _config.zfsConfig;
-
-    let baseDisks = await this.zfsManager.getBaseDisks();
-    console.log("baseDisks:", baseDisks);
-
-    baseDisks = baseDisks.filter((b) => b.path.trim().length > 0);
-    console.log("baseDisks filtered", baseDisks);
-
-    zfsConfig!.pool.vdevs[0]!.disks = baseDisks;
-
-    console.log('zfsConfig vdev disks:', zfsConfig!.pool.vdevs[0]!.disks);
 
     await this.zfsManager.createPool(zfsConfig!.pool, zfsConfig!.poolOptions);
     await this.zfsManager.addDataset(

@@ -81,15 +81,37 @@ function lazyGLBLoader(glbImport: () => Promise<typeof import(".glb?inline")>) {
 
 export type DriveOrientation = "TopLoader" | "FrontLoader";
 
+const HL4Loader = lazyGLBLoader(() => import("./chassis/HL4/HL4.glb?inline"));
+const HL8Loader = lazyGLBLoader(() => import("./chassis/HL8/HL8.glb?inline"));
+const HL15Loader = lazyGLBLoader(() => import("./chassis/HL15/HL15.glb?inline"));
+
 const chassisModelLUT: {
   re: RegExp;
   modelLoader: ModelLoader<GLTF>;
   driveOrientation: DriveOrientation;
+  defaultPowdercoat: THREE.ColorRepresentation;
+  defaultLabels: THREE.ColorRepresentation;
 }[] = [
   {
     re: /^HomeLab-HL4/,
-    modelLoader: lazyGLBLoader(() => import("./chassis/HL4/HL4.glb?inline")),
+    modelLoader: HL4Loader,
     driveOrientation: "FrontLoader",
+    defaultPowdercoat: 0xffffff,
+    defaultLabels: 0x000000,
+  },
+  {
+    re: /^HomeLab-HL8/,
+    modelLoader: HL8Loader,
+    driveOrientation: "FrontLoader",
+    defaultPowdercoat: 0xffffff,
+    defaultLabels: 0x000000,
+  },
+  {
+    re: /^HomeLab-HL15/,
+    modelLoader: HL15Loader,
+    driveOrientation: "TopLoader",
+    defaultPowdercoat: 0xffffff,
+    defaultLabels: 0x000000,
   },
 ];
 
@@ -97,16 +119,26 @@ export type ChassisModel = {
   model: Promise<THREE.Object3D>;
   animations: Promise<THREE.AnimationClip[]>;
   driveOrientation: DriveOrientation;
+  defaultPowdercoat: THREE.Color;
+  defaultLabels: THREE.Color;
 };
 
 export function getChassisModel(modelNumber: string): ChassisModel {
-  for (const { re, modelLoader, driveOrientation } of chassisModelLUT) {
+  for (const {
+    re,
+    modelLoader,
+    driveOrientation,
+    defaultPowdercoat,
+    defaultLabels,
+  } of chassisModelLUT) {
     if (re.test(modelNumber)) {
       const gltf = modelLoader();
       return {
         model: gltf.then((gltf) => gltf.scene),
         animations: gltf.then((gltf) => gltf.animations),
         driveOrientation,
+        defaultPowdercoat: new THREE.Color(defaultPowdercoat),
+        defaultLabels: new THREE.Color(defaultLabels),
       };
     }
   }
@@ -114,6 +146,8 @@ export function getChassisModel(modelNumber: string): ChassisModel {
     model: notFoundModelLoader(),
     animations: Promise.resolve([]),
     driveOrientation: "FrontLoader",
+    defaultPowdercoat: new THREE.Color(0x000000),
+    defaultLabels: new THREE.Color(0xffffff),
   };
 }
 
@@ -200,12 +234,13 @@ export function getDriveModel(
   modelNumber: string
 ): Promise<THREE.Object3D> {
   for (const { re, modelLoader } of driveLUT[driveType]) {
-    if (re.test(modelNumber)) return modelLoader().then(model => {
-      // TODO: traverse
-      model.castShadow = true;
-      model.receiveShadow = true;
-      return model;
-    });
+    if (re.test(modelNumber))
+      return modelLoader().then((model) => {
+        // TODO: traverse
+        model.castShadow = true;
+        model.receiveShadow = true;
+        return model;
+      });
   }
   // generic model should catch any model number
   throw new ValueError(`could not find ${driveType} model for ${modelNumber}`);

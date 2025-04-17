@@ -217,26 +217,40 @@ class CameraSetpointController {
     driveOrientation: DriveOrientation
   ) {
     camera = camera.clone(false); // don't affect passed in camera
-    const getView = (
-      position: THREE.Vector3,
-      zoomMargin: number,
-      ...focusOn: [THREE.Object3D, ...THREE.Object3D[]]
-    ): CameraSetPoint => {
-      camera.position.copy(position);
 
+    type Focus = {
+      box: THREE.Box3;
+      center: THREE.Vector3;
+      size: THREE.Vector3;
+    };
+
+    const getFocus = (...focusOn: [THREE.Object3D, ...THREE.Object3D[]]): Focus => {
+      focusOn[0].updateMatrixWorld(true);
       const bounds = new THREE.Box3().setFromObject(focusOn[0]);
       const objBounds = new THREE.Box3();
+      const center = new THREE.Vector3();
+      const size = new THREE.Vector3();
 
-      for (const obj of focusOn) {
+      for (const obj of focusOn.slice(1)) {
         obj.updateMatrixWorld(true);
         objBounds.setFromObject(obj);
         bounds.union(objBounds);
       }
 
-      const focusPoint = new THREE.Vector3();
-      bounds.getCenter(focusPoint);
+      bounds.getCenter(center);
+      bounds.getSize(size);
 
-      camera.lookAt(focusPoint);
+      return {
+        box: bounds,
+        center,
+        size,
+      };
+    };
+
+    const getView = (position: THREE.Vector3, zoomMargin: number, focus: Focus): CameraSetPoint => {
+      camera.position.copy(position);
+
+      camera.lookAt(focus.center);
 
       if (camera instanceof THREE.OrthographicCamera) {
         camera.zoom = 1;
@@ -245,7 +259,21 @@ class CameraSetpointController {
         throw new Error("not implemented");
       }
 
-      const projectedBounds = bounds.applyMatrix4(camera.projectionMatrix);
+      const boundsCorners = [
+        focus.size.clone().multiply({ x: 0.5, y: 0.5, z: 0.5 }).add(focus.center),
+        focus.size.clone().multiply({ x: 0.5, y: 0.5, z: -0.5 }).add(focus.center),
+        focus.size.clone().multiply({ x: 0.5, y: -0.5, z: 0.5 }).add(focus.center),
+        focus.size.clone().multiply({ x: 0.5, y: -0.5, z: -0.5 }).add(focus.center),
+        focus.size.clone().multiply({ x: -0.5, y: 0.5, z: 0.5 }).add(focus.center),
+        focus.size.clone().multiply({ x: -0.5, y: 0.5, z: -0.5 }).add(focus.center),
+        focus.size.clone().multiply({ x: -0.5, y: -0.5, z: 0.5 }).add(focus.center),
+        focus.size.clone().multiply({ x: -0.5, y: -0.5, z: -0.5 }).add(focus.center),
+      ];
+      for (const point of boundsCorners) {
+        point.project(camera);
+      }
+
+      const projectedBounds = new THREE.Box3().setFromPoints(boundsCorners);
       console.log("projected bounds:", projectedBounds);
 
       const projectedSize = this.workingVector;
@@ -253,7 +281,16 @@ class CameraSetpointController {
       console.log("projected size:", projectedSize);
 
       if (camera instanceof THREE.OrthographicCamera) {
-        camera.zoom = (2 / Math.max(projectedSize.x, projectedSize.y)) * zoomMargin;
+        const cameraW = camera.right - camera.left;
+        const cameraH = camera.top - camera.bottom;
+        const cameraAspect = cameraW / cameraH;
+        const boundsAspect = projectedSize.x / projectedSize.y;
+
+        if (boundsAspect > cameraAspect) {
+          camera.zoom = (2 / projectedSize.x) * zoomMargin;
+        } else {
+          camera.zoom = (2 / projectedSize.y) * zoomMargin;
+        }
       } else {
         throw new Error("not implemented");
       }
@@ -262,37 +299,38 @@ class CameraSetpointController {
 
       return {
         position: camera.position.clone(),
-        focusPoint,
+        focusPoint: focus.center,
         zoom: camera.zoom,
       };
     };
     const position = this.workingVector;
     position.set(2, 2, 2);
-    const initialView: CameraSetPoint = getView(position, 0.75, chassis);
+    const initialView: CameraSetPoint = getView(position, 0.75, getFocus(chassis));
+
+    let driveSlotFocusOn: THREE.Object3D[] = componentSlots
+      .filter((slot) => slot instanceof ServerDriveSlot)
+      .map((slot) => slot.boundingBox);
+
+    if (driveSlotFocusOn.length === 0) {
+      driveSlotFocusOn = [chassis];
+    }
+
+    const driveFocus = getFocus(...(driveSlotFocusOn as [THREE.Object3D, ...THREE.Object3D[]]));
+    let driveView: CameraSetPoint;
     switch (driveOrientation) {
       case "FrontLoader":
         position.set(0, 0, 2);
+        driveView = getView(position, 1, driveFocus);
         break;
       case "TopLoader":
-        position.set(0, 2, 0.1);
+        position.set(0, 2, 0).add(driveFocus.center);
+        position.z += driveFocus.size.z / 2;
+        driveView = getView(position, 1, driveFocus);
         break;
       default:
         throw new Error(`DriveOrientation not implemented: ${driveOrientation}`);
     }
 
-    let driveSlotFocus: THREE.Object3D[] = componentSlots
-      .filter((slot) => slot instanceof ServerDriveSlot)
-      .map((slot) => slot.boundingBox);
-
-    if (driveSlotFocus.length === 0) {
-      driveSlotFocus = [chassis];
-    }
-
-    const driveView: CameraSetPoint = getView(
-      position,
-      0.75,
-      ...(driveSlotFocus as [THREE.Object3D, ...THREE.Object3D[]])
-    );
     return {
       initialView,
       driveView,
@@ -341,7 +379,11 @@ export class ServerView extends THREE.EventDispatcher<
   private t0?: number;
 
   private materials = {
-    powdercoat: new THREE.MeshPhysicalMaterial({ roughness: 0.5, color: 0x000000 }),
+    powdercoat: new THREE.MeshPhysicalMaterial({
+      roughness: 1,
+      color: 0x000000,
+      reflectivity: 0.5,
+    }),
     acrylic: new THREE.MeshPhysicalMaterial({
       roughness: 0.1,
       color: 0xffffff,
@@ -428,7 +470,7 @@ export class ServerView extends THREE.EventDispatcher<
     light.intensity = 1;
     for (const [position, intensity] of [
       [new THREE.Vector3(-0.125, 0.07, 1), 1], // front
-      [new THREE.Vector3(0, 2.5, 0), 90], // ceil
+      [new THREE.Vector3(0, 2.5, 0), 20], // ceil
     ] as [THREE.Vector3, number][]) {
       light.position.copy(position);
       light.intensity = intensity;
@@ -454,8 +496,12 @@ export class ServerView extends THREE.EventDispatcher<
       model: chassisModelPromise,
       animations,
       driveOrientation,
+      defaultPowdercoat,
+      defaultLabels,
     } = getChassisModel(serverModel);
     this.driveOrientation = driveOrientation;
+    this.materials.powdercoat.color.copy(defaultPowdercoat);
+    this.materials.labels.color.copy(defaultLabels);
     this.chassis = chassisModelPromise.then((chassis) => {
       const box = new THREE.Box3().setFromObject(chassis);
       const center = new THREE.Vector3();
@@ -496,6 +542,8 @@ export class ServerView extends THREE.EventDispatcher<
             case "STEEL":
               obj.material = this.materials.steel;
               break;
+            case "LABELS":
+              obj.material = this.materials.labels;
             default:
               break;
           }

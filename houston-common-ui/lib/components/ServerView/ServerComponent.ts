@@ -6,6 +6,7 @@ import {
   type LiveDriveSlotsHandle,
 } from "@45drives/houston-common-lib";
 import { getDriveModel, type DriveOrientation } from "@/components/ServerView/assets";
+import { object } from "zod";
 
 export type DriveSlotType = "HDD" | "SSD_7mm" | "SSD_15mm";
 export function isDriveSlotType(driveSlotType: string): driveSlotType is DriveSlotType {
@@ -14,7 +15,9 @@ export function isDriveSlotType(driveSlotType: string): driveSlotType is DriveSl
 
 const DEBUG_BOXES = false;
 
-export class BoundingBox extends THREE.Mesh<THREE.BoxGeometry> {
+export class BoundingBox<
+  TMaterial extends THREE.Material | THREE.Material[] = THREE.Material | THREE.Material[],
+> extends THREE.Mesh<THREE.BoxGeometry, TMaterial> {
   readonly bound = new THREE.Box3();
   private size = new THREE.Vector3();
 
@@ -45,27 +48,85 @@ export class SlotBoundingBox extends BoundingBox {
   }
 }
 
+export type ColorFlags<
+  TColorMap extends {
+    [key: string]: THREE.Color;
+  },
+> = {
+  [Property in keyof TColorMap]: boolean;
+};
+
+export class SlotHighlight implements ColorFlags<typeof SlotHighlight.colors> {
+  private static HighlightBoxMargin = 0.001;
+  static colors = {
+    selected: new THREE.Color(0x00ff00),
+    highlight: new THREE.Color(0xffffff),
+    warning: new THREE.Color(0xf97316),
+    error: new THREE.Color(0xff0000),
+  };
+  selected = false;
+  highlight = false;
+  warning = false;
+  error = false;
+
+  box = new BoundingBox<THREE.MeshBasicMaterial>();
+
+  constructor() {
+    this.box.material = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.5,
+    });
+  }
+
+  animate(time: number) {
+    const colors = [];
+    for (const [key, color] of Object.entries(SlotHighlight.colors) as [
+      keyof typeof SlotHighlight.colors,
+      THREE.Color,
+    ][]) {
+      if (this[key]) {
+        colors.push(color);
+      }
+    }
+    this.box.visible = colors.length > 0;
+    this.lerpColors(colors as [THREE.Color, ...THREE.Color[]], time, 2000, this.box.material.color);
+  }
+
+  resizeTo(object: THREE.Object3D) {
+    this.box.resizeTo(object, SlotHighlight.HighlightBoxMargin);
+  }
+
+  private lerpColors(
+    colors: THREE.Color[],
+    time: number,
+    period: number,
+    target?: THREE.Color
+  ): THREE.Color {
+    target ??= new THREE.Color();
+    if (colors.length === 0) {
+      return target;
+    }
+    if (colors.length === 1) {
+      return target.copy(colors[0]);
+    }
+    const index = Math.floor(((time % period) / period) * colors.length);
+    const subperiod = period / colors.length;
+    // console.log("LERP", index, (index + 1) % color.length, (time % subperiod), subperiod, (time % subperiod) / subperiod);
+    return target.lerpColors(
+      colors[index],
+      colors[(index + 1) % colors.length],
+      (time % subperiod) / subperiod
+    );
+  }
+}
+
 export class ServerComponentSlot {
-  protected highlightBox: BoundingBox;
+  public highlightBox: SlotHighlight;
   public boundingBox: SlotBoundingBox;
   // protected boxHelper: THREE.BoxHelper;
 
   readonly BoundingBoxMargin = 0.001;
-  readonly HighlightBoxMargin = 0.001;
-
-  public selected: boolean = false;
-  public highlight: boolean = false;
-  public warning: boolean = false;
-  public error: boolean = false;
-
-  private highlightMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.5,
-    visible: false,
-  });
-
-  private static clock = new THREE.Clock();
 
   constructor(
     public scene: THREE.Scene,
@@ -79,68 +140,24 @@ export class ServerComponentSlot {
     this.boundingBox.visible = false;
     this.scene.add(this.boundingBox);
 
-    this.highlightBox = new BoundingBox();
-    this.highlightBox.resizeTo(this.objectRef, this.HighlightBoxMargin);
-    this.highlightBox.material = this.highlightMaterial;
-    this.scene.add(this.highlightBox);
+    this.highlightBox = new SlotHighlight();
+    this.highlightBox.resizeTo(this.objectRef);
+    this.scene.add(this.highlightBox.box);
 
     // this.boxHelper = new THREE.BoxHelper(this.highlightBox, 0xffff00);
     // this.boxHelper.update();
     // this.scene.add(this.boxHelper);
   }
 
-  static colors = {
-    selected: new THREE.Color(0x00ff00),
-    highlight: new THREE.Color(0xffffff),
-    warning: new THREE.Color(0xf97316),
-    error: new THREE.Color(0xff0000),
-  };
-
-  private lerpColors(
-    colors: [THREE.Color, ...THREE.Color[]],
-    time: number,
-    period: number,
-    target?: THREE.Color
-  ): THREE.Color {
-    target ??= new THREE.Color();
-    if (colors.length == 1) {
-      return target.copy(colors[0]);
-    }
-    const index = Math.floor(((time % period) / period) * colors.length);
-    const subperiod = period / colors.length;
-    // console.log("LERP", index, (index + 1) % color.length, (time % subperiod), subperiod, (time % subperiod) / subperiod);
-    return target.lerpColors(
-      colors[index],
-      colors[(index + 1) % colors.length],
-      (time % subperiod) / subperiod
-    );
+  get selected() {
+    return this.highlightBox.selected;
+  }
+  set selected(value: boolean) {
+    this.highlightBox.selected = value;
   }
 
   animate(time: number) {
-    const colors = [];
-    if (this.selected) {
-      colors.push(ServerComponentSlot.colors.selected);
-    }
-    if (this.highlight) {
-      colors.push(ServerComponentSlot.colors.highlight);
-    }
-    if (this.warning) {
-      colors.push(ServerComponentSlot.colors.warning);
-    }
-    if (this.error) {
-      colors.push(ServerComponentSlot.colors.error);
-    }
-    if (colors.length) {
-      this.highlightMaterial.visible = true;
-      this.lerpColors(
-        colors as [THREE.Color, ...THREE.Color[]],
-        time,
-        2000,
-        this.highlightMaterial.color
-      );
-    } else {
-      this.highlightMaterial.visible = false;
-    }
+    this.highlightBox.animate(time);
   }
 }
 
@@ -232,7 +249,7 @@ export class ServerDriveSlot extends ServerComponentSlot {
 
         this.driveModel.visible = true;
 
-        this.highlightBox.resizeTo(this.driveModel, this.HighlightBoxMargin);
+        this.highlightBox.resizeTo(this.driveModel);
         // this.boxHelper.update();
       });
     } else {

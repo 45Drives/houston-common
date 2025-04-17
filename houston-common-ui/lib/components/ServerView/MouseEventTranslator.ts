@@ -132,7 +132,7 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
       ]);
       const frustum = this.createSelectionFrustum(selectionBoxNormalized);
       for (const slot of this.componentSlots) {
-        slot.highlight = frustum.intersectsBox(slot.boundingBox.bound);
+        slot.highlightBox.highlight = frustum.intersectsBox(slot.boundingBox.bound);
       }
     } else {
       this.selectionBox.hide();
@@ -145,10 +145,10 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
         this.domElement.style.cursor = "default";
       }
       if (this.componentUnderCursor) {
-        this.componentUnderCursor.highlight = false;
+        this.componentUnderCursor.highlightBox.highlight = false;
       }
       if (obj) {
-        obj.highlight = true;
+        obj.highlightBox.highlight = true;
       }
       this.componentUnderCursor = obj;
     }
@@ -214,7 +214,7 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
       // drag select
       if (this.enableSelection) {
         for (const slot of this.componentSlots) {
-          slot.highlight = false;
+          slot.highlightBox.highlight = false;
         }
         const selectionBoxNormalized = new THREE.Box2().setFromPoints([
           this.mouseDownCoordsNormalized,

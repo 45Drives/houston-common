@@ -20,6 +20,7 @@ import {
   isDriveSlotType,
   ServerComponentSlot,
   ServerDriveSlot,
+  SlotHighlight,
   type ServerComponentSlotEventMap,
 } from "./ServerComponent";
 
@@ -391,9 +392,11 @@ export class ServerView extends THREE.EventDispatcher<
       this.mouseEventTranslator.translateMouseOver(event as MouseEvent & { type: "mousemove" });
     });
     this.renderer.domElement.addEventListener("mouseleave", (event) => {
-      for (const slot of this.componentSlots) {
-        slot.highlight = false;
-      }
+      this.setSlotHighlights(
+        "highlight",
+        this.componentSlots.map((s) => s.slotId),
+        false
+      );
     });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
@@ -724,25 +727,23 @@ export class ServerView extends THREE.EventDispatcher<
     return [...this.componentSlots.values()].filter((slot) => slot.selected);
   }
 
-  async setSlotIssues(type: "warning" | "error" | "clear", slotIds: string[]) {
+  async setSlotHighlights(
+    colorFlag: keyof typeof SlotHighlight.colors | (keyof typeof SlotHighlight.colors)[],
+    slotIds: string[],
+    value: boolean = true
+  ) {
     await this.chassis;
     for (const slotId of slotIds) {
       const componentSlot = this.componentSlots.find((s) => s.slotId === slotId);
       if (componentSlot === undefined) {
         continue;
       }
-      switch (type) {
-        case "warning":
-          componentSlot.warning = true;
-          break;
-        case "error":
-          componentSlot.error = true;
-          break;
-        case "clear":
-          componentSlot.warning = componentSlot.error = false;
-          break;
-        default:
-          throw new ValueError(`Invalid slot issue type: ${type}`);
+      if (Array.isArray(colorFlag)) {
+        for (const key of colorFlag) {
+          componentSlot.highlightBox[key] = value;
+        }
+      } else {
+        componentSlot.highlightBox[colorFlag] = value;
       }
     }
   }

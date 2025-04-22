@@ -775,8 +775,37 @@ export class ServerView extends THREE.EventDispatcher<
     return [...this.componentSlots.values()].filter((slot) => slot.selected);
   }
 
+  /**
+   * Set or clear (a) highlight flag(s) on given slots (e.g. warning, error, selected, highlight)
+   * @param colorFlag color highlight flag to set
+   * @param slotIds which slots to set or clear highlight flag on
+   * @param value true = set flag, false = clear flag
+   */
   async setSlotHighlights(
     colorFlag: keyof typeof SlotHighlight.colors | (keyof typeof SlotHighlight.colors)[],
+    slotIds: string[],
+    value?: boolean
+  ): Promise<void>;
+  /**
+   * Set arbitrary color highlights given slots. (Only one color at a time)
+   * @param color Color to set
+   * @param slotIds which slots to set color on
+   */
+  async setSlotHighlights(
+    color: keyof typeof THREE.Color.NAMES,
+    slotIds: string[]
+  ): Promise<void>;
+  /**
+   * Clear arbitrary color highlight for given slots. (Only one color at a time)
+   * @param color null
+   * @param slotIds which slots to clear color on
+   */
+  async setSlotHighlights(
+    color: null,
+    slotIds: string[]
+  ): Promise<void>;
+  async setSlotHighlights(
+    colorFlag: keyof typeof SlotHighlight.colors | (keyof typeof SlotHighlight.colors)[] | keyof typeof THREE.Color.NAMES | null,
     slotIds: string[],
     value: boolean = true
   ) {
@@ -790,8 +819,10 @@ export class ServerView extends THREE.EventDispatcher<
         for (const key of colorFlag) {
           componentSlot.highlightBox[key] = value;
         }
-      } else {
+      } else if (SlotHighlight.isColorFlag(colorFlag)) {
         componentSlot.highlightBox[colorFlag] = value;
+      } else {
+        componentSlot.highlightBox.setColor(colorFlag);
       }
     }
   }

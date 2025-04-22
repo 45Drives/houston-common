@@ -64,10 +64,16 @@ export class SlotHighlight implements ColorFlags<typeof SlotHighlight.colors> {
     warning: new THREE.Color(0xf97316),
     error: new THREE.Color(0xff0000),
   };
+  static isColorFlag(flag: any): flag is keyof typeof SlotHighlight.colors {
+    return typeof flag === "string" && Object.keys(SlotHighlight.colors).includes(flag);
+  }
   selected = false;
   highlight = false;
   warning = false;
   error = false;
+  private auxColor?: THREE.Color;
+
+  
 
   box = new BoundingBox<THREE.MeshBasicMaterial>();
 
@@ -79,8 +85,15 @@ export class SlotHighlight implements ColorFlags<typeof SlotHighlight.colors> {
     });
   }
 
+  setColor(color: keyof typeof THREE.Color.NAMES | null) {
+    this.auxColor = color ? new THREE.Color(color) : undefined;
+  }
+
   animate(time: number) {
     const colors = [];
+    if (this.auxColor) {
+      colors.push(this.auxColor);
+    }
     for (const [key, color] of Object.entries(SlotHighlight.colors) as [
       keyof typeof SlotHighlight.colors,
       THREE.Color,

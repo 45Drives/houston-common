@@ -1,5 +1,19 @@
 <template>
-  <div ref="canvasParent" class="overflow-hidden"></div>
+  <div ref="canvasParent" class="overflow-hidden relative">
+    <div
+      class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center transition-opacity ease-out duration-1000 z-10"
+      :class="[showLoading ? 'opacity-100' : 'opacity-0']"
+    >
+      <div
+        class="inline-flex flex-col items-center justify-center gap-2 bg-default p-2 rounded-md w-1/2"
+      >
+        <div class="text-default text-sm text-center">
+          {{ loadingText }}
+        </div>
+        <ProgressBar :percent="loadingPercent" class="w-full rounded-md" />
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -10,12 +24,14 @@ import {
   type WatchHandle,
   onMounted,
   reactive,
+  ref,
+  watch,
 } from "vue";
 import { Server, unwrap, type DriveSlot } from "@45drives/houston-common-lib";
 
 import { useDarkModeState } from "@/composables";
 
-// const pidParams = reactive({ kp: 0.005, ki: 0, kd: 0 });
+import { ProgressBar } from "@/components";
 
 const props = withDefaults(
   defineProps<{
@@ -36,6 +52,10 @@ const props = withDefaults(
 
 let unmountCallback: (() => void) | undefined = undefined;
 
+const showLoading = ref(true);
+const loadingText = ref("Loading...");
+const loadingPercent = ref(0);
+
 const canvasParent = useTemplateRef<HTMLDivElement>("canvasParent");
 
 const selectedDriveSlots = defineModel<DriveSlot[]>("selectedDriveSlots", { default: [] });
@@ -49,6 +69,29 @@ const serverView = Promise.all([import("./ServerView"), props.server.getServerMo
     const watchHandles: WatchHandle[] = [];
 
     const serverView = new ServerView(await unwrap(serverModel));
+
+    let hideLoadingTimeout: ReturnType<typeof setTimeout> | undefined = undefined;
+
+    serverView.onLoadingStart = (status, loaded, total) => {
+      clearTimeout(hideLoadingTimeout);
+      showLoading.value = true;
+      loadingText.value = `${status} (${loaded}/${total})`;
+      loadingPercent.value = Math.round((loaded / total) * 100);
+    };
+    serverView.onLoadingProgress = (status, loaded, total) => {
+      clearTimeout(hideLoadingTimeout);
+      showLoading.value = true;
+      loadingText.value = `${status} (${loaded}/${total})`;
+      loadingPercent.value = Math.round((loaded / total) * 100);
+    };
+    serverView.onLoadingEnd = (status) => {
+      clearTimeout(hideLoadingTimeout);
+      hideLoadingTimeout = setTimeout(() => {
+        showLoading.value = false;
+      }, 1000);
+      loadingText.value = status;
+      loadingPercent.value = 100;
+    };
 
     serverView.addEventListener("selectionchange", (e) => {
       selectedDriveSlots.value = e.components

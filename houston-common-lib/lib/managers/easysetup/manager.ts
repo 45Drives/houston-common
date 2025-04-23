@@ -36,7 +36,7 @@ export class EasySetupConfigurator {
     config: EasySetupConfig,
     progressCallback: (progress: EasySetupProgress) => void
   ) {
-    
+
     try {
       const total = 6;
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
@@ -79,6 +79,11 @@ export class EasySetupConfigurator {
       )
       .andThen((user) => server.addUserToGroups(user, "wheel", "smbusers"))
       .andThen((user) => server.changePassword(user, smbUserPassword));
+
+    // Change root password
+    server
+      .getUserByLogin("root")
+      .andThen((user) => server.changePassword(user, smbUserPassword));
   }
 
   private async updateHostname(config: EasySetupConfig) {
@@ -95,7 +100,7 @@ export class EasySetupConfigurator {
     );
   }
 
-  private async setShareOwnershipAndPermissions(sharePath: string, smbUser: string ) {
+  private async setShareOwnershipAndPermissions(sharePath: string, smbUser: string) {
     try {
       console.log(`Setting ownership of ${sharePath} to ${smbUser}:smbusers...`);
       await unwrap(
@@ -130,7 +135,7 @@ export class EasySetupConfigurator {
     if (allShares) {
       console.log('existing samba shares:', allShares);
       for (let share of allShares) {
-        if (share.path.startsWith("/" + poolName )) {
+        if (share.path.startsWith("/" + poolName)) {
           console.log('existing share found on pool:', share);
           try {
             await unwrap(this.sambaManager.closeSambaShare(share.name));
@@ -220,7 +225,7 @@ export class EasySetupConfigurator {
         return;
       } catch (error) {
         console.error(`Attempt ${attempt} failed to destroy pool:`, error);
-  
+
         if (attempt < maxRetries) {
           console.log(`Retrying in ${delayMs}ms...`);
           await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -231,8 +236,8 @@ export class EasySetupConfigurator {
       }
     }
   }
-  
-  
+
+
   private async applyZFSConfig(_config: EasySetupConfig) {
     let zfsConfig = _config.zfsConfig;
 

@@ -15,7 +15,9 @@ import {
   ZPoolDestroyOptions,
   convertToBytes,
   ExitedProcess, 
-  formatBytes
+  formatBytes,
+  Dataset,
+  Snapshot
 } from "@/index";
 
 export interface IZFSManager {
@@ -28,7 +30,11 @@ export interface IZFSManager {
   getDiskCapacity(path: string): Promise<string>;
   // TODO:
   getPools(): Promise<ZPool[]>;
-
+  getDatasets(): Promise<Dataset[]>;
+  getSnapshots(filesystem: string): Promise<Snapshot[]>;
+  createSnapshot(): Promise<void>;
+  destroySnapshot(): Promise<void>;
+  rollbackSnapshot(): Promise<void>;
 }
 
 export class ZFSManager implements IZFSManager {
@@ -93,7 +99,8 @@ export class ZFSManager implements IZFSManager {
     const argv = ["zpool", "create", pool.name];
 
     console.log('createPool pool:', pool);
-    // console.log('createPool poolOptions:', pool);
+    console.log('createPool poolOptions:', pool);
+    
     // set up pool properties
     const poolProps: string[] = [];
 
@@ -163,6 +170,110 @@ export class ZFSManager implements IZFSManager {
     return [];
   }
 
+  async getDatasets(): Promise<Dataset[]> {
+    // TODO
+    return [];
+  }
+
+  /**
+   * List all snapshots under a filesystem (recursively).
+   */
+  async getSnapshots(filesystem: string): Promise<Snapshot[]> {
+    const argv = [
+      "zfs", "list", "-H",
+      "-t", "snapshot",
+      "-o", "name,guid,creation",
+      "-r", filesystem,
+      "-p"        // raw numeric output for creation (seconds since epoch)
+    ];
+    const proc = await unwrap(
+      this.server.execute(new Command(argv, this.commandOptions))
+    );
+    return proc.getStdout()
+      .trim()
+      .split("\n")
+      .filter(line => line.length > 0)
+      .map(line => {
+        const parts = line.split("\t");
+        if (parts.length < 3) {
+          throw new Error(`malformed zfs output: ${line}`);
+        }
+        const name = parts[0]!;
+        const guid = parts[1]!;
+        const creationSec = parts[2];
+        return {
+          name,
+          guid,
+          creation: new Date(+creationSec! * 1000),
+        };
+      });
+  }
+
+
+  /**
+   * Given two snapshot lists, find the most recent common one by GUID.
+   */
+  getMostRecentCommonSnap(
+    sourceSnaps: Snapshot[],
+    destSnaps: Snapshot[]
+  ): Snapshot | null {
+    const destByGuid = new Map(destSnaps.map(s => [s.guid, s] as const));
+    const commons = sourceSnaps
+      .filter(s => destByGuid.has(s.guid))
+      .sort((a, b) => b.creation.getTime() - a.creation.getTime());
+    return commons.length > 0 ? commons[0]! : null;
+  }
+
+  /**
+   * Send a snapshot locally (or incrementally from a base snapshot).
+   */
+  async sendSnapshot(
+    sendName: string,
+    options: {
+      incrementalFrom?: string;
+      compressed?: boolean;
+      raw?: boolean;
+    } = {}
+  ): Promise<ExitedProcess> {
+    const argv = ["zfs", "send"];
+    if (options.compressed) argv.push("-Lce");
+    if (options.raw) argv.push("-w");
+    if (options.incrementalFrom) {
+      argv.push("-i", options.incrementalFrom);
+    }
+    argv.push(sendName);
+    return unwrap(
+      this.server.execute(new Command(argv, this.commandOptions))
+    );
+  }
+
+  /**
+   * Receive a stream into a given dataset name.
+   */
+  async receiveSnapshot(
+    recvName: string,
+    options: { forceOverwrite?: boolean } = {}
+  ): Promise<ExitedProcess> {
+    const argv = ["zfs", "recv"];
+    if (options.forceOverwrite) argv.push("-F");
+    argv.push(recvName);
+    return unwrap(
+      this.server.execute(new Command(argv, this.commandOptions))
+    );
+  }
+
+  async createSnapshot(): Promise<void> {
+    // TODO
+  }
+
+  async destroySnapshot(): Promise<void> {
+    // TODO                                               
+  }
+
+
+  async rollbackSnapshot(): Promise<void> {
+    // TODO
+  }
 
   /**
    * Fetches only the disk paths and returns them as VDevDisk[]

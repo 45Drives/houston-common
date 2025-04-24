@@ -79,11 +79,6 @@ export class EasySetupConfigurator {
       )
       .andThen((user) => server.addUserToGroups(user, "wheel", "smbusers"))
       .andThen((user) => server.changePassword(user, smbUserPassword));
-
-    // Change root password
-    server
-      .getUserByLogin("root")
-      .andThen((user) => server.changePassword(user, smbUserPassword));
   }
 
   private async updateHostname(config: EasySetupConfig) {
@@ -124,18 +119,20 @@ export class EasySetupConfigurator {
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
 
-    if (!config.zfsConfig) {
+    if (!config.zfsConfigs) {
       return;
     }
 
-    const poolName = config.zfsConfig.pool.name;
-    const datasetName = config.zfsConfig.dataset.name;
+    let storageZfsConfig = config!.zfsConfigs![0];
+    let backupZfsConfig = config!.zfsConfigs![1];
+
+    const storagePoolName = storageZfsConfig!.pool.name;
 
     const allShares = await (this.sambaManager.getShares().unwrapOr(undefined));
     if (allShares) {
       console.log('existing samba shares:', allShares);
       for (let share of allShares) {
-        if (share.path.startsWith("/" + poolName)) {
+        if (share.path.startsWith("/" + storagePoolName)) {
           console.log('existing share found on pool:', share);
           try {
             await unwrap(this.sambaManager.closeSambaShare(share.name));
@@ -149,7 +146,7 @@ export class EasySetupConfigurator {
             console.log(error);
           }
         } else {
-          console.log(`Share ${share} doesn't exist on pool ${poolName} so we didn't remove it.`)
+          console.log(`Share ${share} doesn't exist on pool ${storagePoolName} so we didn't remove it.`)
         }
       }
     } else {
@@ -157,7 +154,17 @@ export class EasySetupConfigurator {
       console.log(`No shares found!`)
     }
 
-    console.log('existing pool found:', config.zfsConfig.pool);
+    console.log('existing storage pool found:', config.zfsConfigs[0]!.pool);
+    console.log('existing backup pool found:', config.zfsConfigs[1]!.pool);
+
+    this.unmountAndRemovePool(storageZfsConfig!);
+    this.unmountAndRemovePool(backupZfsConfig!);
+  }
+
+  private async unmountAndRemovePool(config: ZFSConfig) {
+    const poolName = config!.pool.name;
+    const datasetName = config!.dataset.name;
+
     try {
       server.execute(new Command(["umount", poolName + "/" + datasetName], this.commandOptions))
     } catch (error) {
@@ -197,7 +204,7 @@ export class EasySetupConfigurator {
     try {
       await unwrap(
         server.execute(
-          new Command(["rm", "-rf", "/tank/*"], this.commandOptions),
+          new Command(["rm", "-rf", `/${poolName}/*`], this.commandOptions),
           true
         )
       );
@@ -208,7 +215,7 @@ export class EasySetupConfigurator {
     try {
       await unwrap(
         server.execute(
-          new Command(["umount", "/tank"], this.commandOptions),
+          new Command(["umount", `/${poolName}`], this.commandOptions),
           true
         )
       );
@@ -239,13 +246,20 @@ export class EasySetupConfigurator {
 
 
   private async applyZFSConfig(_config: EasySetupConfig) {
-    let zfsConfig = _config.zfsConfig;
+    let storageZfsConfig = _config!.zfsConfigs![0];
+    let backupZfsConfig = _config!.zfsConfigs![1];
 
-    await this.zfsManager.createPool(zfsConfig!.pool, zfsConfig!.poolOptions);
+    await this.zfsManager.createPool(storageZfsConfig!.pool, storageZfsConfig!.poolOptions);
     await this.zfsManager.addDataset(
-      zfsConfig!.pool.name,
-      zfsConfig!.dataset.name,
-      zfsConfig!.datasetOptions
+      storageZfsConfig!.pool.name,
+      storageZfsConfig!.dataset.name,
+      storageZfsConfig!.datasetOptions
+    );
+    await this.zfsManager.createPool(backupZfsConfig!.pool, backupZfsConfig!.poolOptions);
+    await this.zfsManager.addDataset(
+      backupZfsConfig!.pool.name,
+      backupZfsConfig!.dataset.name,
+      backupZfsConfig!.datasetOptions
     );
   }
 
@@ -274,12 +288,11 @@ export class EasySetupConfigurator {
         )
     );
 
-
     // Apply share configurations and ensure correct ownership/permissions
     const shares = config.sambaConfig!.shares;
     for (let i = 0; i < shares.length; i++) {
       let share = shares[i];
-      const sharePath = `/${config.zfsConfig!.pool.name}/${config.folderName!}`;
+      const sharePath = `/${config.zfsConfigs![0]!.pool.name}/${config.folderName!}`;
       if (share) {
         if (config.folderName && i === 0) {
           share.name = config.folderName;
@@ -302,7 +315,7 @@ export class EasySetupConfigurator {
       .map((sambaConfig): EasySetupConfig => {
         return {
           sambaConfig,
-          zfsConfig: dc.zfsconf as ZFSConfig,
+          zfsConfigs: dc.zfsconf as ZFSConfig[],
         };
       })
       .unwrapOr(null);

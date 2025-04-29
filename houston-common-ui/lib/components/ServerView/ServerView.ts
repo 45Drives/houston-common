@@ -531,27 +531,11 @@ export class ServerView extends THREE.EventDispatcher<
               this.componentSlots.push(new ServerComponentSlot(this.scene, obj, obj.userData.SLOT));
             }
           }
-          if (obj instanceof THREE.Mesh && obj.material instanceof THREE.Material) {
-            switch (obj.material.name) {
-              case "POWDER_COAT":
-                obj.material = this.materials.powdercoat;
-                break;
-              case "ALUMINUM":
-                obj.material = this.materials.aluminum;
-                break;
-              case "ACRYLIC":
-                obj.material = this.materials.acrylic;
-                break;
-              case "PLASTIC":
-                obj.material = this.materials.plastic;
-                break;
-              case "STEEL":
-                obj.material = this.materials.steel;
-                break;
-              case "LABELS":
-                obj.material = this.materials.labels;
-              default:
-                break;
+          if (obj instanceof THREE.Mesh) {
+            if (Array.isArray(obj.material)) {
+              obj.material = obj.material.map((m) => this.replaceMaterial(m));
+            } else if (obj.material instanceof THREE.Material) {
+              obj.material = this.replaceMaterial(obj.material);
             }
           }
         });
@@ -625,6 +609,25 @@ export class ServerView extends THREE.EventDispatcher<
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
     }
     this.renderer.setAnimationLoop(null);
+  }
+
+  private replaceMaterial(m: THREE.Material) {
+    switch (m.name) {
+      case "POWDER_COAT":
+        return this.materials.powdercoat;
+      case "ALUMINUM":
+        return this.materials.aluminum;
+      case "ACRYLIC":
+        return this.materials.acrylic;
+      case "PLASTIC":
+        return this.materials.plastic;
+      case "STEEL":
+        return this.materials.steel;
+      case "LABELS":
+        return this.materials.labels;
+      default:
+        return m;
+    }
   }
 
   private waitForAction(action: THREE.AnimationAction) {

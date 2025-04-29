@@ -113,6 +113,27 @@ const chassisModelLUT: {
     defaultPowdercoat: 0xffffff,
     defaultLabels: 0x000000,
   },
+  {
+    re: /^Professional-PRO4/,
+    modelLoader: HL4Loader,
+    driveOrientation: "FrontLoader",
+    defaultPowdercoat: 0x000000,
+    defaultLabels: 0xffffff,
+  },
+  {
+    re: /^Professional-PRO8/,
+    modelLoader: HL8Loader,
+    driveOrientation: "FrontLoader",
+    defaultPowdercoat: 0x000000,
+    defaultLabels: 0xffffff,
+  },
+  {
+    re: /^Professional-PRO15/,
+    modelLoader: HL15Loader,
+    driveOrientation: "TopLoader",
+    defaultPowdercoat: 0x000000,
+    defaultLabels: 0xffffff,
+  },
 ];
 
 export type ChassisModel = {

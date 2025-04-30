@@ -192,8 +192,8 @@ export class ZfsDatasetParameter extends ParameterNode implements ParameterNodeT
 
     // Method to convert ZfsDatasetParameter to a location
     toLocation(): Location {
-        const label = (this.children[0] as StringParameter).value;
-        const key = (this.children[1] as StringParameter).value;
+        // const label = (this.children[0] as StringParameter).value;
+        // const key = (this.children[1] as StringParameter).value;
         const host = (this.children[3] as StringParameter).value;
         const port = (this.children[4] as IntParameter).value;
         const user = (this.children[5] as StringParameter).value;
@@ -238,9 +238,9 @@ export class LocationParameter extends ParameterNode implements ParameterNodeTyp
 
     // Method to convert ZfsDatasetParameter to a location
     toLocation(): Location {
-        const label = (this.children[0] as StringParameter).value;
-        const key = (this.children[1] as StringParameter).value;
-        const transferMethod = (this.children[2] as StringParameter).value;
+        // const label = (this.children[0] as StringParameter).value;
+        // const key = (this.children[1] as StringParameter).value;
+        // const transferMethod = (this.children[2] as StringParameter).value;
         const host = (this.children[3] as StringParameter).value;
         const port = (this.children[4] as IntParameter).value;
         const user = (this.children[5] as StringParameter).value;

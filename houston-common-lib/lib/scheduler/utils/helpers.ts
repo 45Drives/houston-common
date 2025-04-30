@@ -1,18 +1,18 @@
-import { legacy } from "@45drives/houston-common-lib";
+import { legacy } from "@/index";
 // @ts-ignore
-import get_zfs_data_script from "../scripts/get-zfs-data.py?raw";
+import get_zfs_data_script from "@/scripts/get-zfs-data.py?raw";
 // @ts-ignore
-import test_ssh_script from "../scripts/test-ssh.py?raw";
+import test_ssh_script from "@/scripts/test-ssh.py?raw";
 // @ts-ignore
-import test_netcat_script from '../scripts/test-netcat.py?raw'
+import test_netcat_script from '@/scripts/test-netcat.py?raw'
 //@ts-ignore
-import task_file_creation_script from "../scripts/task-file-creation.py?raw";
+import task_file_creation_script from "@/scripts/task-file-creation.py?raw";
 //@ts-ignore
-import remove_task_script from "../scripts/remove-task-files.py?raw";
+import remove_task_script from "@/scripts/remove-task-files.py?raw";
 //@ts-ignore
-import run_task_script from "../scripts/run-task-now.py?raw";
+import run_task_script from "@/scripts/run-task-now.py?raw";
 //@ts-ignore
-import get_disks_script from "../scripts/get-disk-data.py?raw";
+import get_disks_script from "@/scripts/get-disk-data.py?raw";
 
 import { inject, InjectionKey, ref } from "vue";
 import { DiskData } from "../types";
@@ -507,7 +507,7 @@ export async function isDatasetEmpty(mountpoint: string, user?: string, host?: s
 	  /^\S+\s+\d+\s+\S+\s+\S+\s+\d+\s+\w+\s+\d+\s+\d+:\d+\s+(\.|\.\.)$/;
 
 	// Check each line for matches
-	const matches = lines.filter((line) => pattern.test(line));
+	const matches = lines.filter((line: string) => pattern.test(line));
 
 	// If we find only '.' and '..', return true (dataset is empty)
 	if (matches.length <= 2) {

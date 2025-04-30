@@ -21,6 +21,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "lib"),
     },
   },
+  assetsInclude: ["**/*.py"],
   build: {
     minify: false,
     // lib property is set in build script
@@ -32,7 +33,13 @@ export default defineConfig({
       formats: ["es", "cjs"],
     },
     rollupOptions: {
-      external: (id) => id.includes('test') || id.includes('spec'), // Exclude test files
+      external: (id) => {
+        // only externalize TS/JS test files, not .py?raw imports with test in the name
+        return (
+          (id.endsWith('.test.ts') || id.endsWith('.test.js')) ||
+          (id.endsWith('.spec.ts') || id.endsWith('.spec.js'))
+        );
+      }
     },
     sourcemap: true,
     emptyOutDir: true,

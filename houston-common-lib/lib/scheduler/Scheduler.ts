@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { legacy } from '@45drives/houston-common-lib';
+import { legacy } from '@/index';
 import {
     SchedulerType,
     TaskInstanceType,
@@ -35,7 +35,7 @@ import {
 import { TaskExecutionLog } from './TaskLog';
 
 // @ts-ignore
-import get_tasks_script from '../scripts/get-task-instances.py?raw';
+import get_tasks_script from '@/scripts/get-task-instances.py?raw';
 
 const { BetterCockpitFile, errorString, useSpawn } = legacy;
 
@@ -189,7 +189,7 @@ export class Scheduler implements SchedulerType {
             excludeValues: (string | number)[] = [0, '0', "''"],
             resetKeys: string[] = []
         ) => {
-            if (obj[key] && !excludeValues.includes(obj[key])) {
+            if (obj[key] && !excludeValues.includes(obj[key]!)) {
                 /* leave it */
             } else {
                 obj[key] = emptyValue;
@@ -308,7 +308,7 @@ export class Scheduler implements SchedulerType {
             console.log('env file created and content written successfully');
             file.close();
 
-        }).catch(error => {
+        }).catch((error: any) => {
             console.error("Error writing content to the file:", error);
             file.close();
         });
@@ -328,7 +328,7 @@ export class Scheduler implements SchedulerType {
             console.log('Notes file created and content written successfully');
             file3.close();
 
-        }).catch(error => {
+        }).catch((error: any) => {
             console.error("Error writing content to the notes file:", error);
             file3.close();
         });
@@ -355,7 +355,7 @@ export class Scheduler implements SchedulerType {
             file2.replace(jsonString).then(() => {
                 console.log('json file created and content written successfully');
                 file2.close();
-            }).catch(error => {
+            }).catch((error: any) => {
                 console.error("Error writing content to the file:", error);
                 file2.close();
             });
@@ -408,7 +408,7 @@ export class Scheduler implements SchedulerType {
         file.replace(envKeyValuesString).then(() => {
             console.log('env file updated successfully');
             file.close();
-        }).catch(error => {
+        }).catch((error: any) => {
             console.error("Error updating file:", error);
             file.close();
         });
@@ -437,7 +437,7 @@ export class Scheduler implements SchedulerType {
         file.replace(taskInstance.notes).then(() => {
             console.log('notes file updated successfully');
             file.close();
-        }).catch(error => {
+        }).catch((error: any) => {
             console.error("Error updating file:", error);
             file.close();
         });
@@ -644,7 +644,7 @@ export class Scheduler implements SchedulerType {
         file.replace(jsonString).then(() => {
             console.log('json file created and content written successfully');
             file.close();
-        }).catch(error => {
+        }).catch((error: any) => {
             console.error("Error writing content to the file:", error);
             file.close();
         });

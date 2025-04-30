@@ -9,7 +9,6 @@ import {
   CommandOptions,
   ValueError,
   Scheduler,
-  TaskTemplate,
   ZFSReplicationTaskTemplate,
   TaskInstance,
   ParameterNode,

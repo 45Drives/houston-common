@@ -1,4 +1,4 @@
-import { legacy } from '@45drives/houston-common-lib';
+import { legacy } from '@/index';
 import { formatTemplateName } from './utils/helpers';
 import { TaskInstanceType } from './types';
 

@@ -1,4 +1,4 @@
-import { legacy } from '@45drives/houston-common-lib';
+import { legacy } from '@/index';
 import {
     CloudSyncProvider,
     CloudSyncRemote,
@@ -10,13 +10,13 @@ import {
 } from './types';
 
 // @ts-ignore
-import get_cloud_sync_remotes_script from '../scripts/get-rclone-remotes.py?raw';
+import get_cloud_sync_remotes_script from '@/scripts/get-rclone-remotes.py?raw';
 // @ts-ignore
-import create_cloud_sync_remote_script from '../scripts/create-rclone-remote.py?raw';
+import create_cloud_sync_remote_script from '@/scripts/create-rclone-remote.py?raw';
 // @ts-ignore
-import update_cloud_sync_remote_script from '../scripts/update-rclone-remote.py?raw';
+import update_cloud_sync_remote_script from '@/scripts/update-rclone-remote.py?raw';
 // @ts-ignore
-import delete_cloud_sync_remote_script from '../scripts/delete-rclone-remote.py?raw';
+import delete_cloud_sync_remote_script from '@/scripts/delete-rclone-remote.py?raw';
 
 const { useSpawn } = legacy;
 export class RemoteManager implements RemoteManagerType {

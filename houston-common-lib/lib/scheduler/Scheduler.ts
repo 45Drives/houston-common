@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { legacy } from '@/index';
+import { legacy, File, server } from '@/index';
 import {
     SchedulerType,
     TaskInstanceType,
@@ -37,7 +37,7 @@ import { TaskExecutionLog } from './TaskLog';
 // @ts-ignore
 import get_tasks_script from '@/scripts/get-task-instances.py?raw';
 
-const { BetterCockpitFile, errorString, useSpawn } = legacy;
+const { errorString, useSpawn } = legacy;
 
 export class Scheduler implements SchedulerType {
     taskTemplates: TaskTemplateType[];
@@ -300,18 +300,11 @@ export class Scheduler implements SchedulerType {
         // console.log('envFilePath:', envFilePath);
         // console.log('envKeyValuesString:', envKeyValuesString);
 
-        const file = new BetterCockpitFile(envFilePath, {
-            superuser: 'try',
-        });
+        const file = new File(server, envFilePath);
 
-        file.replace(envKeyValuesString).then(() => {
-            console.log('env file created and content written successfully');
-            file.close();
-
-        }).catch((error: any) => {
-            console.error("Error writing content to the file:", error);
-            file.close();
-        });
+        await file
+            .replace(envKeyValuesString, { superuser: 'try', backup: false})
+            .match(() => console.log('env file created and content written successfully'), (error: any) => console.error("Error writing content to the file:", error));
 
         const jsonFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.json`;
         // console.log('jsonFilePath:', jsonFilePath);
@@ -321,18 +314,10 @@ export class Scheduler implements SchedulerType {
         const notesFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.txt`;
         // const notes = taskInstance.notes
         const notes = taskInstance.notes
-        const file3 = new BetterCockpitFile(notesFilePath, {
-            superuser: 'try',
-        }) 
-        file3.replace(notes).then(() => {
-            console.log('Notes file created and content written successfully');
-            file3.close();
-
-        }).catch((error: any) => {
-            console.error("Error writing content to the notes file:", error);
-            file3.close();
-        });
-
+        const file2 = new File(server, notesFilePath);
+        await file2
+            .replace(notes, { superuser: 'try', backup: false })
+            .match(() => console.log('Notes file created and content written successfully'), (error: any) => console.error("Error writing notes file:", error));
 
         //run script to generate service + timer via template, param env and schedule json
         if (taskInstance.schedule.intervals.length < 1) {
@@ -346,20 +331,15 @@ export class Scheduler implements SchedulerType {
             // requires schedule data object
             // console.log('schedule:', taskInstance.schedule);
 
-            const file2 = new BetterCockpitFile(jsonFilePath, {
-                superuser: 'try',
-            });
-
             const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
 
-            file2.replace(jsonString).then(() => {
-                console.log('json file created and content written successfully');
-                file2.close();
-            }).catch((error: any) => {
-                console.error("Error writing content to the file:", error);
-                file2.close();
-            });
-
+            await new File(server, jsonFilePath)
+                .replace(jsonString, { superuser: 'try', backup: false })
+                .match(
+                    () => console.log('json schedule file created successfully'),
+                    err => console.error('Error writing schedule JSON:', err)
+                );
+            
             await createTaskFiles(templateName, scriptPath, envFilePath, templateTimerPath, jsonFilePath);
         }
     }
@@ -401,17 +381,23 @@ export class Scheduler implements SchedulerType {
 
       //  console.log('envFilePath:', envFilePath);
 
-        const file = new BetterCockpitFile(envFilePath, {
-            superuser: 'try',
-        });
+        // const file = new BetterCockpitFile(envFilePath, {
+        //     superuser: 'try',
+        // });
 
-        file.replace(envKeyValuesString).then(() => {
-            console.log('env file updated successfully');
-            file.close();
-        }).catch((error: any) => {
-            console.error("Error updating file:", error);
-            file.close();
-        });
+        // file.replace(envKeyValuesString).then(() => {
+        //     console.log('env file updated successfully');
+        //     file.close();
+        // }).catch((error: any) => {
+        //     console.error("Error updating file:", error);
+        //     file.close();
+        // });
+        await new File(server, envFilePath)
+            .replace(envKeyValuesString, { superuser: 'try', backup: false })
+            .match(
+                () => console.log('env file updated successfully'),
+                err => console.error('Error updating env file:', err)
+            );
 
         await createStandaloneTask(templateName, scriptPath, envFilePath);
 
@@ -430,17 +416,23 @@ export class Scheduler implements SchedulerType {
 
         console.log('notesFilePath:', notesFilePath);
 
-        const file = new BetterCockpitFile(notesFilePath, {
-            superuser: 'try',
-        });
+        // const file = new BetterCockpitFile(notesFilePath, {
+        //     superuser: 'try',
+        // });
 
-        file.replace(taskInstance.notes).then(() => {
-            console.log('notes file updated successfully');
-            file.close();
-        }).catch((error: any) => {
-            console.error("Error updating file:", error);
-            file.close();
-        });
+        // file.replace(taskInstance.notes).then(() => {
+        //     console.log('notes file updated successfully');
+        //     file.close();
+        // }).catch((error: any) => {
+        //     console.error("Error updating file:", error);
+        //     file.close();
+        // });
+        await new File(server, notesFilePath)
+            .replace(taskInstance.notes, { superuser: 'try', backup: false })
+            .match(
+                () => console.log('notes file updated successfully'),
+                err => console.error('Error updating notes file:', err)
+            );
 
         // Reload the system daemon
         let command = ['sudo', 'systemctl', 'daemon-reload'];
@@ -635,19 +627,25 @@ export class Scheduler implements SchedulerType {
         const jsonFilePath = `/etc/systemd/system/${fullTaskName}.json`;
       //  console.log('jsonFilePath:', jsonFilePath);
 
-        const file = new BetterCockpitFile(jsonFilePath, {
-            superuser: 'try',
-        });
+        // const file = new BetterCockpitFile(jsonFilePath, {
+        //     superuser: 'try',
+        // });
 
         const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
 
-        file.replace(jsonString).then(() => {
-            console.log('json file created and content written successfully');
-            file.close();
-        }).catch((error: any) => {
-            console.error("Error writing content to the file:", error);
-            file.close();
-        });
+        // file.replace(jsonString).then(() => {
+        //     console.log('json file created and content written successfully');
+        //     file.close();
+        // }).catch((error: any) => {
+        //     console.error("Error writing content to the file:", error);
+        //     file.close();
+        // });
+        await new File(server, jsonFilePath)
+            .replace(jsonString, { superuser: 'try', backup: false })
+            .match(
+                () => console.log('schedule JSON updated successfully'),
+                err => console.error('Error writing schedule JSON:', err)
+            );
 
         if (taskInstance.schedule.enabled) {
             await createScheduleForTask(fullTaskName, templateTimerPath, jsonFilePath);

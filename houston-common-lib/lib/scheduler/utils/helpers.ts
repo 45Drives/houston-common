@@ -15,6 +15,7 @@ import run_task_script from "../scripts/run-task-now.py?raw";
 import get_disks_script from "../scripts/get-disk-data.py?raw";
 
 import { inject, InjectionKey, ref } from "vue";
+import { DiskData } from "../types";
 
 const { useSpawn, errorString } = legacy;
 
@@ -30,37 +31,39 @@ export function injectWithCheck<T>(
 }
 
 /* Getting values from Parameter structure to display in table */
-export function findValue(obj, targetKey, valueKey) {
-  if (!obj || typeof obj !== "object") return null;
+export function findValue(
+	obj: { key: string; value?: any; children?: Array<any> },
+	targetKey: string,
+	valueKey: string
+): any {
+	if (!obj || typeof obj !== "object") return null;
 
-  // Directly check at the current level if this is the targetKey
-  if (obj.key === targetKey) {
-	// If looking for the same key as targetKey and it has a value, return it
-	if (targetKey === valueKey && obj.value !== undefined) {
-	  return obj.value;
+	if (obj.key === targetKey) {
+		if (targetKey === valueKey && obj.value !== undefined) {
+			return obj.value;
+		}
+		let foundChild = obj.children?.find((child) => child.key === valueKey);
+		if (foundChild && foundChild.value !== undefined) {
+			return foundChild.value;
+		}
 	}
-	// If there's a different valueKey to find, look for it among children
-	let foundChild = obj.children?.find((child) => child.key === valueKey);
-	if (foundChild && foundChild.value !== undefined) {
-	  return foundChild.value;
-	}
-  }
 
-  // If no value found at this level, and there are children, search them recursively
-  if (Array.isArray(obj.children)) {
-	for (let child of obj.children) {
-	  const result = findValue(child, targetKey, valueKey);
-	  if (result !== null) {
-		// Ensure '0', 'false', or empty string are considered valid returns
-		return result;
-	  }
+	if (Array.isArray(obj.children)) {
+		for (let child of obj.children) {
+			const result = findValue(child, targetKey, valueKey);
+			if (result !== null) {
+				return result;
+			}
+		}
 	}
-  }
 
-  return null; // If the search yields no results, return null
+	return null;
 }
 
-export async function getPoolData(host?, port?, user?) {
+export async function getPoolData(
+	host?: string,
+	port?: string,
+	user?: string) {
   try {
 	const cmd = [
 	  "/usr/bin/env",
@@ -106,7 +109,11 @@ export async function getPoolData(host?, port?, user?) {
   }
 }
 
-export async function getDatasetData(pool, host?, port?, user?) {
+export async function getDatasetData(
+	pool: string,
+	host?: string,
+	port?: string,
+	user?: string) {
   try {
 	const cmd = [
 	  "/usr/bin/env",
@@ -157,7 +164,7 @@ export async function getDatasetData(pool, host?, port?, user?) {
   }
 }
 
-export async function testSSH(sshTarget) {
+export async function testSSH(sshTarget: string) {
   try {
   //  console.log(`target: ${sshTarget}`);
 	const state = useSpawn(
@@ -179,7 +186,7 @@ export async function testSSH(sshTarget) {
   }
 }
 
-export async function testNetcat(user, netcatHost, port) {
+export async function testNetcat(user: string, netcatHost: string, port: string) {
 	try {
 	  console.log(`target: ${netcatHost}, port: ${port}`);
 	  
@@ -222,11 +229,11 @@ export async function executePythonScript(
 }
 
 export async function createTaskFiles(
-  templateName,
-  scriptPath,
-  envFile,
-  timerTemplate,
-  scheduleFile
+  	templateName: string,
+  	scriptPath: string,
+	envFile: string,
+	timerTemplate: string,
+	scheduleFile: string
 ) {
 	console.log("createTaskFiles ", templateName)
 	console.log(" createTaskFiles Script Path: ",scriptPath)
@@ -246,7 +253,7 @@ export async function createTaskFiles(
   ]);
 }
 
-export async function createStandaloneTask(templateName, scriptPath, envFile) {
+export async function createStandaloneTask(templateName: string, scriptPath: string, envFile: string) {
 	console.log(" createStandaloneTask Template Name: ",templateName)
 
 	console.log(" createStandaloneTask Script Path: ",scriptPath)
@@ -264,9 +271,9 @@ export async function createStandaloneTask(templateName, scriptPath, envFile) {
 }
 
 export async function createScheduleForTask(
-  taskName,
-  timerTemplate,
-  scheduleFile
+  taskName: string,
+  timerTemplate: string,
+  scheduleFile: string
 ) {
   return executePythonScript(task_file_creation_script, [
 	"-t",
@@ -280,16 +287,16 @@ export async function createScheduleForTask(
   ]);
 }
 
-export async function removeTask(taskName) {
+export async function removeTask(taskName: string) {
   return executePythonScript(remove_task_script, [taskName]);
 }
 
-export async function runTask(taskName) {
+export async function runTask(taskName: string) {
   return executePythonScript(run_task_script, [taskName]);
 }
 
 //change the first letter of a word to upper case
-export const upperCaseWord = (word) => {
+export const upperCaseWord = (word: string) => {
   let lowerCaseWord = word.toLowerCase();
   let firstLetter = lowerCaseWord.charAt(0);
   let remainingLetters = lowerCaseWord.substring(1);
@@ -297,15 +304,15 @@ export const upperCaseWord = (word) => {
   return firstLetterCap + remainingLetters;
 };
 
-export function boolToYesNo(state: boolean) {
-  if (state == true) {
-	return "Yes";
-  } else if (state == false) {
-	return "No";
-  }
+export function boolToYesNo(state: boolean): "Yes" | "No" {
+	if (state) {
+		return "Yes";
+	} else {
+		return "No";
+	}
 }
 
-export function formatTemplateName(templateName) {
+export function formatTemplateName(templateName: string) {
   // Split the string into words using space as the delimiter
   let words = templateName.split(" ");
   // Capitalize the first letter of each word and lowercase the rest
@@ -317,7 +324,7 @@ export function formatTemplateName(templateName) {
   return formattedTemplateName;
 }
 
-export function validateNumber(field, number) {
+export function validateNumber(number: number) {
   if (isNaN(number) || number < 0) {
 	// errorList.value.push(`${field} must be a valid non-negative number.`);
 	return false;
@@ -326,36 +333,35 @@ export function validateNumber(field, number) {
   }
 }
 
-export async function getDisks(diskGroup) {
-  try {
-	const state = useSpawn(
-	  ["/usr/bin/env", "python3", "-c", get_disks_script],
-	  { superuser: "try" }
-	);
-	const disks = (await state.promise()).stdout!;
-	// return disks;
-	const parsedJSON = JSON.parse(disks);
-	//loops through and adds disk data from JSON to disk data object, pushes objects to disks array
-	for (let i = 0; i < parsedJSON.length; i++) {
-	  const disk: DiskData = {
-		name: parsedJSON[i].name,
-		capacity: parsedJSON[i].capacity,
-		model: parsedJSON[i].model,
-		type: parsedJSON[i].type,
-		phy_path: parsedJSON[i].phy_path,
-		sd_path: parsedJSON[i].sd_path,
-		vdev_path: parsedJSON[i].vdev_path,
-		serial: parsedJSON[i].serial,
-		health: parsedJSON[i].health,
-		temp: parsedJSON[i].temp,
-	  };
-	  diskGroup.value.push(disk);
-	  // console.log("Disk:", disk);
+export async function getDisks(diskGroup: DiskData[]): Promise<void> {
+	try {
+		const state = useSpawn(
+			["/usr/bin/env", "python3", "-c", get_disks_script],
+			{ superuser: "try" }
+		);
+		const disks = (await state.promise()).stdout!;
+		const parsedJSON = JSON.parse(disks);
+
+		// Add disk data from JSON to the disk data object
+		for (let i = 0; i < parsedJSON.length; i++) {
+			const disk: DiskData = {
+				name: parsedJSON[i].name,
+				capacity: parsedJSON[i].capacity,
+				model: parsedJSON[i].model,
+				type: parsedJSON[i].type,
+				phy_path: parsedJSON[i].phy_path,
+				sd_path: parsedJSON[i].sd_path,
+				vdev_path: parsedJSON[i].vdev_path,
+				serial: parsedJSON[i].serial,
+				health: parsedJSON[i].health,
+				temp: parsedJSON[i].temp,
+			};
+			diskGroup.push(disk);
+		}
+	} catch (state) {
+		console.error(errorString(state));
+		return;
 	}
-  } catch (state) {
-	console.error(errorString(state));
-	return null;
-  }
 }
 
 export function getDiskIDName(
@@ -474,7 +480,7 @@ export async function checkRemotePathExists(remoteName: string, remotePathStr: s
 	}
 }
 
-export async function isDatasetEmpty(mountpoint, user?: string, host?: string, port?: string) {
+export async function isDatasetEmpty(mountpoint: string, user?: string, host?: string, port?: string) {
 	try {
 		const baseCommand = ['ls', '-la', `/${mountpoint}`,];
 		let command: string[] = [];
@@ -521,43 +527,45 @@ export async function isDatasetEmpty(mountpoint, user?: string, host?: string, p
 }
 
 export async function doSnapshotsExist(
-  filesystem: string,
-  user?: string,
-  host?: string,
-  port?: string
-) {
-  try {
-	const baseCommand = ["zfs", "list", "-H", "-t", "snapshot", filesystem];
-	let command: string[] = [];
+	filesystem: string,
+	user?: string,
+	host?: string,
+	port?: string
+): Promise<boolean> {
+	try {
+		const baseCommand = ["zfs", "list", "-H", "-t", "snapshot", filesystem];
+		let command: string[] = [];
 
-	if (user && host) {
-	  // Use SSH for remote command
-	  command = ["ssh"];
-	  if (port && port !== "22") {
-		command.push("-p", port);
-	  }
-	  command.push(`${user}@${host}`, ...baseCommand);
-	} else {
-	  // Local command
-	  command = baseCommand;
+		if (user && host) {
+			// Use SSH for remote command
+			command = ["ssh"];
+			if (port && port !== "22") {
+				command.push("-p", port);
+			}
+			command.push(`${user}@${host}`, ...baseCommand);
+		} else {
+			// Local command
+			command = baseCommand;
+		}
+
+		// Execute the command
+		const state = useSpawn(command, { superuser: "try" });
+		const output = await state.promise();
+
+		// Parse the output
+		const lines = output.stdout!.trim().split("\n");
+		if (lines.length === 1 && lines[0] === "") {
+			// If there's only one empty line, there are no snapshots
+			console.log("No snapshots found.");
+			return false;
+		} else if (lines.length > 0) {
+			console.log("Snapshots exist, must overwrite dataset to continue.");
+			return true;
+		} else {
+			return false; // Ensure a boolean is returned even in an unexpected case
+		}
+	} catch (error) {
+		console.error(`Error checking dataset contents: ${errorString(error)}`);
+		return false; // Ensure a boolean is returned in case of error
 	}
-
-	// Execute the command
-	const state = useSpawn(command, { superuser: "try" }); // Ensure you handle superuser permissions if necessary
-	const output = await state.promise();
-
-	// Parse the output
-	const lines = output.stdout!.trim().split("\n"); // Use trim() to remove empty lines
-	if (lines.length === 1 && lines[0] === "") {
-	  // If there's only one empty line, there are no snapshots
-	  console.log("No snapshots found.");
-	  return false;
-	} else if (lines.length > 0) {
-	  console.log("Snapshots exist, must overwrite dataset to continue.");
-	  return true;
-	}
-  } catch (error) {
-	console.error(`Error checking dataset contents: ${errorString(error)}`);
-	return null;
-  }
 }

@@ -141,7 +141,7 @@ export class RemoteManager implements RemoteManagerType {
             const state = useSpawn(['/usr/bin/env', 'python3', '-c', create_cloud_sync_remote_script, '--data', remoteJsonString], { superuser: 'try' });
             const newRemoteOutput = (await state.promise()).stdout;
 
-          //  console.log('newRemoteOutput:', newRemoteOutput);
+           console.log('newRemoteOutput:', newRemoteOutput);
             this.cloudSyncRemotes.push(remote);
 
         } catch (error) {
@@ -181,7 +181,7 @@ export class RemoteManager implements RemoteManagerType {
             ], { superuser: 'try' });
 
             const editRemoteOutput = (await state.promise()).stdout;
-          //  console.log('editRemoteOutput:', editRemoteOutput);
+           console.log('editRemoteOutput:', editRemoteOutput);
 
             // Update the local list of remotes with the new data
             const index = this.cloudSyncRemotes.findIndex(remote => remote.name === oldName);
@@ -213,7 +213,7 @@ export class RemoteManager implements RemoteManagerType {
             const state = useSpawn(['/usr/bin/env', 'python3', '-c', delete_cloud_sync_remote_script, remoteName], { superuser: 'try' });
             const deleteOutput = (await state.promise()).stdout;
 
-          //  console.log("Delete script output:", deleteOutput);
+           console.log("Delete script output:", deleteOutput);
             return true;
         } catch (error) {
             console.error("Error deleting remote:", error);

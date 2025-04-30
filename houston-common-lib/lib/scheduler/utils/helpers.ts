@@ -62,7 +62,7 @@ export function findValue(
 
 export async function getPoolData(
 	host?: string,
-	port?: string,
+	port?: any,
 	user?: string) {
   try {
 	const cmd = [
@@ -112,7 +112,7 @@ export async function getPoolData(
 export async function getDatasetData(
 	pool: string,
 	host?: string,
-	port?: string,
+	port?: string| number,
 	user?: string) {
   try {
 	const cmd = [
@@ -133,7 +133,7 @@ export async function getDatasetData(
 	}
 	if (port) {
 	  cmd.push("--port");
-	  cmd.push(port);
+	  cmd.push(port.toString());
 	}
 	if (user) {
 	  cmd.push("--user");
@@ -186,7 +186,7 @@ export async function testSSH(sshTarget: string) {
   }
 }
 
-export async function testNetcat(user: string, netcatHost: string, port: string) {
+export async function testNetcat(user: string, netcatHost: string, port: any) {
 	try {
 	  console.log(`target: ${netcatHost}, port: ${port}`);
 	  
@@ -402,19 +402,16 @@ export function truncateName(name: string, threshold: number) {
   return name.length > threshold ? name.slice(0, threshold) + "..." : name;
 }
 
-export function splitAndClean(inputString: string, isDisk: boolean) {
+export function splitAndClean(inputString: string) {
   // Trim any leading/trailing whitespace from string and remove both single and double quotes
   const cleanedString = inputString.trim().replace(/^['"]|['"]$/g, "");
 
   // Split the input string by comma
   const parts = cleanedString.split(",");
 
-  // Trim any leading/trailing whitespace from each part and optionally remove the disk prefix
+  // Trim any leading/trailing whitespace from each part
   const cleanedParts: string[] = parts.map((part) => {
 	let cleanedPart = part.trim();
-	// if (isDisk) {
-	//     cleanedPart = cleanedPart.replace(/^\/dev\/disk\/by-vdev\//, '');
-	// }
 	return cleanedPart;
   });
 
@@ -480,7 +477,7 @@ export async function checkRemotePathExists(remoteName: string, remotePathStr: s
 	}
 }
 
-export async function isDatasetEmpty(mountpoint: string, user?: string, host?: string, port?: string) {
+export async function isDatasetEmpty(mountpoint: string, user?: string, host?: string, port?: any) {
 	try {
 		const baseCommand = ['ls', '-la', `/${mountpoint}`,];
 		let command: string[] = [];
@@ -530,7 +527,7 @@ export async function doSnapshotsExist(
 	filesystem: string,
 	user?: string,
 	host?: string,
-	port?: string
+	port?: any
 ): Promise<boolean> {
 	try {
 		const baseCommand = ["zfs", "list", "-H", "-t", "snapshot", filesystem];

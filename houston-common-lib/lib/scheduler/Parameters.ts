@@ -163,7 +163,7 @@ export class ZfsDatasetParameter extends ParameterNode implements ParameterNodeT
 
     async loadDatasets(pool: string): Promise<void> {
         const hostParam = this.getChild('host') as StringParameter;
-        const portParam = this.getChild('port') as IntParameter;
+        const portParam = this.getChild('port') as StringParameter;
         const userParam = this.getChild('user') as StringParameter;
 
         const datasets = await getDatasetData(

@@ -89,7 +89,7 @@ export namespace DriveSlot {
         { label: "Device Path (by-path)", value: slot.drive.pathByPath },
         { label: "Drive Type", value: slot.drive.rotationRate ? "HDD" : "SSD" },
         { label: "Model Name", value: slot.drive.model },
-        { label: "Manufacture", value: modelToManufacturer(slot.drive.model) },
+        { label: "Manufacturer", value: modelToManufacturer(slot.drive.model) },
         { label: "Serial", value: slot.drive.serial },
         { label: "Firmware Version", value: slot.drive.firmwareVersion },
         { label: "Capacity", value: formatBytes(slot.drive.capacity, "both") },

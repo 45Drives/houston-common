@@ -8,6 +8,7 @@ export interface ZFSConfig {
 export interface ZPoolBase {
   name: string;
   vdevs: VDev[];
+  capacities?: string;
 }
 
 export interface ZpoolCreateOptions {

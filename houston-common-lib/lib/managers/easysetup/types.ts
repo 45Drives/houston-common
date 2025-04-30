@@ -8,6 +8,7 @@ export type EasySetupConfig = {
   smbPass?: string
   srvrName?: string
   folderName?: string
+  splitPools?: boolean
 };
 
 export type BackupLogEntry = {

@@ -190,7 +190,7 @@ export class EasySetupConfigurator {
 
     try {
       await this.zfsManager.destroyPool(poolName, { force: true });
-      this.tryDestroyPoolWithRetries(poolName)
+      await this.tryDestroyPoolWithRetries(poolName)
     } catch (error) {
       console.log(error);
     }

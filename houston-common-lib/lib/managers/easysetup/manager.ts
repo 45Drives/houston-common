@@ -296,8 +296,8 @@ export class EasySetupConfigurator {
 
     // Create HourlyForADay Task
     const hourlyParams = new ParameterNode("ZFS Replication Task Config", "zfsRepConfig")
-      .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, sourceData.dataset.name))
-      .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, destData.dataset.name))
+      .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name,  `${sourceData.pool.name}/${sourceData.dataset.name}`))
+      .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, `${destData.pool.name}/${destData.dataset.name}`))
       .addChild(new ParameterNode('Send Options', 'sendOptions')
          .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
                 .addChild(new BoolParameter('Raw', 'raw_flag', false))
@@ -331,8 +331,8 @@ export class EasySetupConfigurator {
 
     // Create DailyForAWeek Task
     const dailyParams = new ParameterNode("ZFS Replication Task Config", "zfsRepConfig")
-      .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, sourceData.dataset.name))
-      .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, destData.dataset.name))
+      .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
+      .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, `${destData.pool.name}/${destData.dataset.name}`))
       .addChild(new ParameterNode('Send Options', 'sendOptions')
          .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
                 .addChild(new BoolParameter('Raw', 'raw_flag', false))

@@ -287,7 +287,7 @@ export class EasySetupConfigurator {
         myScheduler.registerTaskInstance(task);
       });
     }
-    
+
   }
   
 
@@ -391,10 +391,10 @@ export class EasySetupConfigurator {
         new TaskScheduleInterval({
           minute: { value: '0' }, // At 0 minutes
           hour: { value: '0' }, // At midnight
-          day: { value: 'Sun' }, // Every Sunday
+          day: { value: 'Fri' }, // Every Friday
           month: { value: '*' }, // Every month
           year: { value: '*' }, // Every year
-        }) // Weekly on Sunday at midnight
+        }) // Weekly on Friday at midnight
       ]),
       'Take snapshots weekly and save for a month.'
     );

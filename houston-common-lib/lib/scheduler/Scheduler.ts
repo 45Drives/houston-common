@@ -314,6 +314,7 @@ export class Scheduler implements SchedulerType {
         console.log('envKeyValuesString:', envKeyValuesString);
 
         await this.ensureDir('/etc/systemd/system');
+
         const envFile = new File(server, envFilePath);
         await envFile.create(true, { superuser: 'require' })
             .match(

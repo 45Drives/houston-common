@@ -271,21 +271,25 @@ export class EasySetupConfigurator {
       storageZfsConfig!.dataset.name,
       storageZfsConfig!.datasetOptions
     );
-    
-    await this.zfsManager.createPool(backupZfsConfig!.pool, backupZfsConfig!.poolOptions);
-    await this.zfsManager.addDataset(
-      backupZfsConfig!.pool.name,
-      backupZfsConfig!.dataset.name,
-      backupZfsConfig!.datasetOptions
-    );
 
-    const tasks = this.createReplicationTasks(storageZfsConfig!, backupZfsConfig!);
-    tasks.forEach(task => {
-      console.log('new Task created:', task);
-      taskInstances.push(task);
-      myScheduler.registerTaskInstance(task);
-    });
+    if (_config.splitPools) {
+      await this.zfsManager.createPool(backupZfsConfig!.pool, backupZfsConfig!.poolOptions);
+      await this.zfsManager.addDataset(
+        backupZfsConfig!.pool.name,
+        backupZfsConfig!.dataset.name,
+        backupZfsConfig!.datasetOptions
+      );
+
+      const tasks = this.createReplicationTasks(storageZfsConfig!, backupZfsConfig!);
+      tasks.forEach(task => {
+        console.log('new Task created:', task);
+        taskInstances.push(task);
+        myScheduler.registerTaskInstance(task);
+      });
+    }
+    
   }
+  
 
   private createReplicationTasks(sourceData: ZFSConfig , destData: ZFSConfig ): TaskInstance[] {
     const tasks: TaskInstance[] = []

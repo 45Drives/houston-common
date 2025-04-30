@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { legacy, File, server } from '@/index';
+import { legacy, File, server, Directory } from '@/index';
 import {
     SchedulerType,
     TaskInstanceType,
@@ -49,6 +49,17 @@ export class Scheduler implements SchedulerType {
     ) {
         this.taskTemplates = taskTemplates;
         this.taskInstances = taskInstances;
+    }
+
+    /** Ensure a directory exists with sudo */
+    async ensureDir(path: string) {
+        const dir = path.endsWith('/') ? path.slice(0, -1) : path;
+        await new Directory(server, dir)
+            .create(true, { superuser: 'require' })
+            .match(
+                () => console.log(`✅ ensured dir ${dir}`),
+                err => console.error(`❌ mkdir ${dir} failed:`, err)
+            );
     }
 
     async loadTaskInstances(): Promise<void>  {
@@ -300,9 +311,22 @@ export class Scheduler implements SchedulerType {
 
         console.log('envFilePath:', envFilePath);
         console.log('envKeyValuesString:', envKeyValuesString);
-        await new File(server, envFilePath)
-            .replace(envKeyValuesString, { superuser: 'try', backup: false})
-            .match(() => console.log('env file created and content written successfully'), (error: any) => console.error("Error writing content to the file:", error));
+        // await new File(server, envFilePath)
+        //     .replace(envKeyValuesString, { superuser: 'try', backup: false})
+        //     .match(() => console.log('env file created and content written successfully'), (error: any) => console.error("Error writing content to the file:", error));
+
+        await this.ensureDir('/etc/systemd/system');
+        const envFile = new File(server, envFilePath);
+        await envFile.create(true, { superuser: 'require' })
+            .match(
+                () => console.log(`✅ created ${envFilePath}`),
+                err => console.error(`❌ create file failed:`, err)
+            );
+        await envFile.write(envKeyValuesString, { superuser: 'require' })
+            .match(
+                () => console.log(`✅ wrote env for ${templateName}`),
+                err => console.error(`❌ write env failed:`, err)
+            );
 
         const jsonFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.json`;
         console.log('jsonFilePath:', jsonFilePath);
@@ -311,11 +335,21 @@ export class Scheduler implements SchedulerType {
         console.log("genrating notes file");
         const notesFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.txt`;
         const notes = taskInstance.notes;
+        // await new File(server, notesFilePath)
+        //     .replace(notes, { superuser: 'try', backup: false })
+        //     .match(() => console.log('Notes file created and content written successfully'), (error: any) => console.error("Error writing notes file:", error));
 
-        await new File(server, notesFilePath)
-            .replace(notes, { superuser: 'try', backup: false })
-            .match(() => console.log('Notes file created and content written successfully'), (error: any) => console.error("Error writing notes file:", error));
-
+        const notesFile = new File(server, notesFilePath);
+        await notesFile.create(true, { superuser: 'require' })
+            .match(
+                () => console.log(`✅ created ${notesFilePath}`),
+                err => console.error(`❌ create notes failed:`, err)
+            );
+        await notesFile.write(notes, { superuser: 'require' })
+            .match(
+                () => console.log(`✅ wrote notes for ${templateName}`),
+                err => console.error(`❌ write notes failed:`, err)
+            );
         //run script to generate service + timer via template, param env and schedule json
         if (taskInstance.schedule.intervals.length < 1) {
             //ignore schedule for now
@@ -328,13 +362,24 @@ export class Scheduler implements SchedulerType {
             // requires schedule data object
             console.log('schedule:', taskInstance.schedule);
 
+            // await new File(server, jsonFilePath)
+            //     .replace(jsonString, { superuser: 'try', backup: false })
+            //     .match(
+            //         () => console.log('json schedule file created successfully'),
+            //         err => console.error('Error writing schedule JSON:', err)
+            //     );
             const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
-
-            await new File(server, jsonFilePath)
-                .replace(jsonString, { superuser: 'try', backup: false })
+            const jsonFile = new File(server, jsonFilePath);
+            await this.ensureDir('/etc/systemd/system');
+            await jsonFile.create(true, { superuser: 'require' })
                 .match(
-                    () => console.log('json schedule file created successfully'),
-                    err => console.error('Error writing schedule JSON:', err)
+                    () => console.log(`✅ created ${jsonFilePath}`),
+                    err => console.error(`❌ create json failed:`, err)
+                );
+            await jsonFile.write(jsonString, { superuser: 'require' })
+                .match(
+                    () => console.log(`✅ wrote schedule JSON`),
+                    err => console.error(`❌ write schedule JSON failed:`, err)
                 );
             
             await createTaskFiles(templateName, scriptPath, envFilePath, templateTimerPath, jsonFilePath);
@@ -389,11 +434,23 @@ export class Scheduler implements SchedulerType {
         //     console.error("Error updating file:", error);
         //     file.close();
         // });
-        await new File(server, envFilePath)
-            .replace(envKeyValuesString, { superuser: 'try', backup: false })
+        // await new File(server, envFilePath)
+        //     .replace(envKeyValuesString, { superuser: 'try', backup: false })
+        //     .match(
+        //         () => console.log('env file updated successfully'),
+        //         err => console.error('Error updating env file:', err)
+        //     );
+        await this.ensureDir('/etc/systemd/system');
+        const envFile = new File(server, envFilePath);
+        await envFile.create(true, { superuser: 'require' })
             .match(
-                () => console.log('env file updated successfully'),
-                err => console.error('Error updating env file:', err)
+                () => console.log(`✅ recreated ${envFilePath}`),
+                err => console.error(`❌ recreate env failed:`, err)
+            );
+        await envFile.write(envKeyValuesString, { superuser: 'require' })
+            .match(
+                () => console.log(`✅ updated env for ${templateName}`),
+                err => console.error(`❌ update env failed:`, err)
             );
 
         await createStandaloneTask(templateName, scriptPath, envFilePath);
@@ -424,11 +481,23 @@ export class Scheduler implements SchedulerType {
         //     console.error("Error updating file:", error);
         //     file.close();
         // });
-        await new File(server, notesFilePath)
-            .replace(taskInstance.notes, { superuser: 'try', backup: false })
+        // await new File(server, notesFilePath)
+        //     .replace(taskInstance.notes, { superuser: 'try', backup: false })
+        //     .match(
+        //         () => console.log('notes file updated successfully'),
+        //         err => console.error('Error updating notes file:', err)
+        //     );
+        await this.ensureDir('/etc/systemd/system');
+        const notesFile = new File(server, notesFilePath);
+        await notesFile.create(true, { superuser: 'require' })
             .match(
-                () => console.log('notes file updated successfully'),
-                err => console.error('Error updating notes file:', err)
+                () => console.log(`✅ recreated ${notesFilePath}`),
+                err => console.error(`❌ recreate notes failed:`, err)
+            );
+        await notesFile.write(taskInstance.notes, { superuser: 'require' })
+            .match(
+                () => console.log(`✅ updated notes for ${templateName}`),
+                err => console.error(`❌ update notes failed:`, err)
             );
 
         // Reload the system daemon
@@ -637,11 +706,23 @@ export class Scheduler implements SchedulerType {
         //     console.error("Error writing content to the file:", error);
         //     file.close();
         // });
-        await new File(server, jsonFilePath)
-            .replace(jsonString, { superuser: 'try', backup: false })
+        // await new File(server, jsonFilePath)
+        //     .replace(jsonString, { superuser: 'try', backup: false })
+        //     .match(
+        //         () => console.log('schedule JSON updated successfully'),
+        //         err => console.error('Error writing schedule JSON:', err)
+        //     );
+        await this.ensureDir('/etc/systemd/system');
+        const jsonFile = new File(server, jsonFilePath);
+        await jsonFile.create(true, { superuser: 'require' })
             .match(
-                () => console.log('schedule JSON updated successfully'),
-                err => console.error('Error writing schedule JSON:', err)
+                () => console.log(`✅ recreated ${jsonFilePath}`),
+                err => console.error(`❌ recreate json failed:`, err)
+            );
+        await jsonFile.write(jsonString, { superuser: 'require' })
+            .match(
+                () => console.log(`✅ updated schedule JSON`),
+                err => console.error(`❌ update JSON failed:`, err)
             );
 
         if (taskInstance.schedule.enabled) {

@@ -265,12 +265,13 @@ export class Scheduler implements SchedulerType {
     async registerTaskInstance(taskInstance: TaskInstance) {
         // generate env file with key/value pairs (Task Parameters)
         const envKeyValues = taskInstance.parameters.asEnvKeyValues();
-        // console.log('envKeyVals Before Parse:', envKeyValues);
+        console.log('envKeyVals Before Parse:', envKeyValues);
         const templateName = formatTemplateName(taskInstance.template.name);
         let scriptPath: string;
         const envObject = this.parseEnvKeyValues(envKeyValues, templateName);
         envObject['taskName'] = taskInstance.name;
 
+        
         if (templateName === 'CustomTask') {
             const pathParam = taskInstance.parameters.children.find(
                 c => c.key === 'path'
@@ -288,7 +289,7 @@ export class Scheduler implements SchedulerType {
             Object.entries(envObject)
                 .filter(([, v]) => v !== '' && v !== '0')
         );
-        // console.log('Filtered envObject:', filteredEnvObject);
+        console.log('Filtered envObject:', filteredEnvObject);
 
         // Convert the parsed envObject back to envKeyValuesString
         const envKeyValuesString = Object.entries(filteredEnvObject).map(([key, value]) => `${key}=${value}`).join('\n');
@@ -297,25 +298,21 @@ export class Scheduler implements SchedulerType {
         const houstonSchedulerPrefix = 'houston_scheduler_';
         const envFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.env`;
 
-        // console.log('envFilePath:', envFilePath);
-        // console.log('envKeyValuesString:', envKeyValuesString);
-
-        const file = new File(server, envFilePath);
-
-        await file
+        console.log('envFilePath:', envFilePath);
+        console.log('envKeyValuesString:', envKeyValuesString);
+        await new File(server, envFilePath)
             .replace(envKeyValuesString, { superuser: 'try', backup: false})
             .match(() => console.log('env file created and content written successfully'), (error: any) => console.error("Error writing content to the file:", error));
 
         const jsonFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.json`;
-        // console.log('jsonFilePath:', jsonFilePath);
+        console.log('jsonFilePath:', jsonFilePath);
 
         //run script to generate notes file
         console.log("genrating notes file");
         const notesFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.txt`;
-        // const notes = taskInstance.notes
-        const notes = taskInstance.notes
-        const file2 = new File(server, notesFilePath);
-        await file2
+        const notes = taskInstance.notes;
+
+        await new File(server, notesFilePath)
             .replace(notes, { superuser: 'try', backup: false })
             .match(() => console.log('Notes file created and content written successfully'), (error: any) => console.error("Error writing notes file:", error));
 
@@ -329,7 +326,7 @@ export class Scheduler implements SchedulerType {
         } else {
             //generate json file with enabled boolean + intervals (Schedule Intervals)
             // requires schedule data object
-            // console.log('schedule:', taskInstance.schedule);
+            console.log('schedule:', taskInstance.schedule);
 
             const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
 

@@ -45,6 +45,15 @@ export * from "@/disks";
 export * from "@/user";
 export * from "@/driveSlots/types";
 
+export type { DayOfWeek as SchedulerDayOfWeek } from "@/scheduler";
+export type { TimeUnit as SchedulerTimeUnit } from "@/scheduler";
+export type { TaskSchedule as SchedulerTaskSchedule } from "@/scheduler";
+
+export * from "@/scheduler";
+
+export type { TaskSchedule } from "@/managers";
+export type { DayOfWeek, TimeUnit } from "@/managers";
+
 export * as legacy from "@/legacy";
 
 globalThis.reportHoustonError ??= (e, ctx: string = "") => {

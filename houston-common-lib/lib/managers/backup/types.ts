@@ -14,6 +14,24 @@ export interface BackUpTask {
 
 export interface BackUpSetupConfig {
   backUpTasks: BackUpTask[]
+  username: string
+  password: string
 }
 
+
 export const backupTaskTag = "houston-client-manager-backup-task"
+
+export interface FileEntry {
+  path: string
+  selected: boolean
+}
+
+export interface BackupEntry {
+  uuid: string
+  folder: string
+  server: string
+  client: string
+  lastBackup: string
+  onSystem: boolean
+  files: FileEntry[]
+}

@@ -391,9 +391,10 @@ export class EasySetupConfigurator {
         new TaskScheduleInterval({
           minute: { value: '0' }, // At 0 minutes
           hour: { value: '0' }, // At midnight
-          day: { value: 'Fri' }, // Every Friday
+          day: { value: '*' }, // Every day
           month: { value: '*' }, // Every month
           year: { value: '*' }, // Every year
+          dayOfWeek: ['Fri'] // on Friday
         }) // Weekly on Friday at midnight
       ]),
       'Take snapshots weekly and save for a month.'

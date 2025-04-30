@@ -4,23 +4,23 @@ import { Command } from "@/process/Command";
 import { Server } from "@/server";
 import { ProcessError } from "@/errors";
 
-import { Result, ResultAsync } from "neverthrow";
+import { ok, okAsync, Result, ResultAsync } from "neverthrow";
 
 
 export function factory(): IHoustonDriver {
     class CockpitProcess extends ProcessBase implements IDriverProcess {
        
         constructor(server: Server, command: Command, _defer?: boolean) {
-            throw new Error('not implemented');
+            // throw new Error('not implemented');
             super(server, command);
 
-            // if (defer !== true) {
-            //     this.execute();
-            // }
+            if (_defer !== true) {
+                this.execute();
+            }
         }
 
         public execute(): this {
-            throw new Error('not implemented');
+            // throw new Error('not implemented');
 
             // const { environ, ...rest } = this.command.options;
             // const opts: Cockpit.SpawnOptions = rest;
@@ -33,12 +33,12 @@ export function factory(): IHoustonDriver {
             //     err: "message",
             //     host: this.server.host,
             // });
-            // return this;
+            return this;
         }
 
         public wait(_failIfNonZero: boolean = true): ResultAsync<ExitedProcess, ProcessError> {
 
-            throw new Error('not implemented');
+            // throw new Error('not implemented');
             
             // return ResultAsync.fromPromise(
             //     new Promise((resolve, reject) => {
@@ -94,44 +94,46 @@ export function factory(): IHoustonDriver {
             //         });
             //     }
             // );
+
+            return okAsync(new ExitedProcess(this.server, this.command, 0, new Uint8Array, ''));
         }
 
         public write(_data: Uint8Array, _stream: boolean = false): Result<null, ProcessError> {
-            throw new Error('not implemented');
+            // throw new Error('not implemented');
 
             // if (this.spawnHandle === undefined) {
             //     return err(new ProcessError(this.prefixMessage("process not running!")));
             // }
             // this.spawnHandle.input(data, stream);
-            // return ok(null);
+            return ok(null);
         }
 
         public terminate(): this {
 
-            throw new Error('not implemented');
+            // throw new Error('not implemented');
             // if (this.spawnHandle) {
             //     this.spawnHandle.close("terminated");
             // }
-            // return this;
+            return this;
         }
 
         public close(): this {
 
-            throw new Error('not implemented');
+            // throw new Error('not implemented');
             // if (this.spawnHandle) {
             //     this.spawnHandle.close();
             // }
-            // return this;
+            return this;
         }
 
         public streamBinary(_callback: (output: Uint8Array) => void): Result<null, ProcessError> {
 
-            throw new Error('not implemented');
+            // throw new Error('not implemented');
             // if (this.spawnHandle === undefined) {
             //     return err(new ProcessError(this.prefixMessage("process not running!")));
             // }
             // this.spawnHandle.stream(callback);
-            // return ok(null);
+            return ok(null);
         }
     }
 

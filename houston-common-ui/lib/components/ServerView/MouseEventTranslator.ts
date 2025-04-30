@@ -106,6 +106,9 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
   }
 
   translateMouseClick(event: MouseEvent & { type: "mousedown" | "mouseup" }) {
+    if (!this.enableSelection) {
+      return;
+    }
     if (event.button !== 0) {
       // only handle left mouse button
       return;
@@ -118,6 +121,9 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
   }
 
   translateMouseOver(event: MouseEvent & { type: "mousemove" }) {
+    if (!this.enableSelection) {
+      return;
+    }
     const mouseCoords = this.normalizedMouseEventCoords(event);
     if (this.isDragging(mouseCoords)) {
       this.componentUnderCursor = undefined;
@@ -199,44 +205,37 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
       return;
     }
 
-    let selectedBefore: ServerComponentSlot[];
-    if (this.enableSelection) {
-      selectedBefore = this.componentSlots.filter((slot) => slot.selected);
-    }
+    const selectedBefore = this.componentSlots.filter((slot) => slot.selected);
 
-    // deselect if not ctrl or shift TODO: fix toggle select on regular click
-    if (this.enableSelection && !event.shiftKey && !event.ctrlKey) {
+    // deselect if not ctrl or shift
+    if (!event.shiftKey && !event.ctrlKey) {
       this.deselectAll();
     }
 
     const mouseUpCoordsNormalized = this.normalizedMouseEventCoords(event);
     if (this.isDragging(mouseUpCoordsNormalized)) {
       // drag select
-      if (this.enableSelection) {
-        for (const slot of this.componentSlots) {
-          slot.highlightBox.highlight = false;
-        }
-        const selectionBoxNormalized = new THREE.Box2().setFromPoints([
-          this.mouseDownCoordsNormalized,
-          mouseUpCoordsNormalized,
-        ]);
-
-        this.handleDragSelect(selectionBoxNormalized, event.ctrlKey);
+      for (const slot of this.componentSlots) {
+        slot.highlightBox.highlight = false;
       }
+      const selectionBoxNormalized = new THREE.Box2().setFromPoints([
+        this.mouseDownCoordsNormalized,
+        mouseUpCoordsNormalized,
+      ]);
+
+      this.handleDragSelect(selectionBoxNormalized, event.ctrlKey);
     } else {
       // regular click
       this.handleRegularClick(event, mouseUpCoordsNormalized);
     }
     this.mouseDownCoordsNormalized = undefined;
 
-    if (this.enableSelection) {
-      const selectedAfter = this.componentSlots.filter((slot) => slot.selected);
-      if (
-        selectedAfter.length !== selectedBefore!.length ||
-        !selectedBefore!.every((obj) => selectedAfter.includes(obj))
-      ) {
-        this.dispatchEvent({ type: "selectionchange", components: selectedAfter });
-      }
+    const selectedAfter = this.componentSlots.filter((slot) => slot.selected);
+    if (
+      selectedAfter.length !== selectedBefore!.length ||
+      !selectedBefore!.every((obj) => selectedAfter.includes(obj))
+    ) {
+      this.dispatchEvent({ type: "selectionchange", components: selectedAfter });
     }
   }
 
@@ -248,7 +247,7 @@ export class MouseEventTranslator extends THREE.EventDispatcher<{
       | ServerComponentSlot
       | undefined;
 
-    if (this.enableSelection && intersection) {
+    if (intersection) {
       intersection.selected = event.shiftKey || !intersection.selected;
     }
   }

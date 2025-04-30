@@ -8,6 +8,7 @@ export interface ZFSConfig {
 export interface ZPoolBase {
   name: string;
   vdevs: VDev[];
+  capacities?: string;
 }
 
 export interface ZpoolCreateOptions {
@@ -232,4 +233,10 @@ export interface PoolScanObject {
   bytes_issued: number;
   bytes_processed: number;
   bytes_to_process: number;
+}
+
+export interface Snapshot {
+  name: string;
+  guid: string;
+  creation: Date;
 }

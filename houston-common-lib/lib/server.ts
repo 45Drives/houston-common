@@ -393,6 +393,16 @@ export class Server {
       );
   }
 
+  getUserByName(name: string): ResultAsync<LocalUser, ProcessError | ValueError> {
+    return this.getLocalUsers()
+      .map((localUsers) => localUsers.filter((user) => user.name === name))
+      .andThen((userMatches) =>
+        userMatches.length === 0
+          ? err(new ValueError(`User not found: ${name}`))
+          : ok(userMatches[0]!)
+      );
+  }
+
   getUserByUid(uid: number): ResultAsync<User, ProcessError> {
     return this.getLocalUsers()
       .map((localUsers) => localUsers.filter((user) => user.uid === uid))

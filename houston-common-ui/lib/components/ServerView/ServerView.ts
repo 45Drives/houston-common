@@ -492,6 +492,7 @@ export class ServerView extends THREE.EventDispatcher<
 
     this.componentSlots = [];
 
+    this.onLoadingStart?.("Loading chassis model...", 0, 3);
     const {
       model: chassisModelPromise,
       animations,
@@ -502,56 +503,45 @@ export class ServerView extends THREE.EventDispatcher<
     this.driveOrientation = driveOrientation;
     this.materials.powdercoat.color.copy(defaultPowdercoat);
     this.materials.labels.color.copy(defaultLabels);
-    this.chassis = chassisModelPromise.then((chassis) => {
-      const box = new THREE.Box3().setFromObject(chassis);
-      const center = new THREE.Vector3();
-      box.getCenter(center);
-      chassis.position.set(-center.x, -center.y, -center.z);
-      chassis.updateMatrix();
-      chassis.updateMatrixWorld(true);
-      chassis.traverse((obj) => {
-        if (typeof obj.userData.SLOT === "string") {
-          if (isDriveSlotType(obj.userData.DRIVE_TYPE)) {
-            this.componentSlots.push(
-              new ServerDriveSlot(
-                this.scene,
-                obj,
-                obj.userData.SLOT,
-                obj.userData.DRIVE_TYPE,
-                this.driveOrientation
-              )
-            );
-          } else {
-            this.componentSlots.push(new ServerComponentSlot(this.scene, obj, obj.userData.SLOT));
+    this.chassis = chassisModelPromise
+      .then((chassis) => {
+        this.onLoadingProgress?.("Configuring chassis model slots...", 1, 3);
+        return chassis;
+      })
+      .then((chassis) => {
+        const box = new THREE.Box3().setFromObject(chassis);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        chassis.position.set(-center.x, -center.y, -center.z);
+        chassis.updateMatrix();
+        chassis.updateMatrixWorld(true);
+        chassis.traverse((obj) => {
+          if (typeof obj.userData.SLOT === "string") {
+            if (isDriveSlotType(obj.userData.DRIVE_TYPE)) {
+              this.componentSlots.push(
+                new ServerDriveSlot(
+                  this.scene,
+                  obj,
+                  obj.userData.SLOT,
+                  obj.userData.DRIVE_TYPE,
+                  this.driveOrientation
+                )
+              );
+            } else {
+              this.componentSlots.push(new ServerComponentSlot(this.scene, obj, obj.userData.SLOT));
+            }
           }
-        }
-        if (obj instanceof THREE.Mesh && obj.material instanceof THREE.Material) {
-          switch (obj.material.name) {
-            case "POWDER_COAT":
-              obj.material = this.materials.powdercoat;
-              break;
-            case "ALUMINUM":
-              obj.material = this.materials.aluminum;
-              break;
-            case "ACRYLIC":
-              obj.material = this.materials.acrylic;
-              break;
-            case "PLASTIC":
-              obj.material = this.materials.plastic;
-              break;
-            case "STEEL":
-              obj.material = this.materials.steel;
-              break;
-            case "LABELS":
-              obj.material = this.materials.labels;
-            default:
-              break;
+          if (obj instanceof THREE.Mesh) {
+            if (Array.isArray(obj.material)) {
+              obj.material = obj.material.map((m) => this.replaceMaterial(m));
+            } else if (obj.material instanceof THREE.Material) {
+              obj.material = this.replaceMaterial(obj.material);
+            }
           }
-        }
+        });
+        this.scene.add(chassis);
+        return chassis;
       });
-      this.scene.add(chassis);
-      return chassis;
-    });
 
     this.animationMixer = new THREE.AnimationMixer(this.scene);
     this.animationMixer.timeScale = 0.001;
@@ -585,16 +575,25 @@ export class ServerView extends THREE.EventDispatcher<
       }
     });
 
-    this.cameraSetpointControllerPromise = this.chassis.then((chassis) => {
-      const ctrlr = new CameraSetpointController(
-        this.camera,
-        chassis,
-        this.componentSlots,
-        this.driveOrientation
-      );
-      ctrlr.forceView("InitialView", this.camera);
-      this.cameraSetpointController = ctrlr;
-      return ctrlr;
+    this.cameraSetpointControllerPromise = this.chassis
+      .then((chassis) => {
+        this.onLoadingProgress?.("Configuring chassis views...", 2, 3);
+        return chassis;
+      })
+      .then((chassis) => {
+        const ctrlr = new CameraSetpointController(
+          this.camera,
+          chassis,
+          this.componentSlots,
+          this.driveOrientation
+        );
+        ctrlr.forceView("InitialView", this.camera);
+        this.cameraSetpointController = ctrlr;
+        return ctrlr;
+      });
+
+    Promise.all([this.chassis, this.cameraSetpointControllerPromise]).then(() => {
+      this.onLoadingEnd?.("Loaded.", 3, 3);
     });
   }
 
@@ -610,6 +609,25 @@ export class ServerView extends THREE.EventDispatcher<
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
     }
     this.renderer.setAnimationLoop(null);
+  }
+
+  private replaceMaterial(m: THREE.Material) {
+    switch (m.name) {
+      case "POWDER_COAT":
+        return this.materials.powdercoat;
+      case "ALUMINUM":
+        return this.materials.aluminum;
+      case "ACRYLIC":
+        return this.materials.acrylic;
+      case "PLASTIC":
+        return this.materials.plastic;
+      case "STEEL":
+        return this.materials.steel;
+      case "LABELS":
+        return this.materials.labels;
+      default:
+        return m;
+    }
   }
 
   private waitForAction(action: THREE.AnimationAction) {
@@ -775,8 +793,35 @@ export class ServerView extends THREE.EventDispatcher<
     return [...this.componentSlots.values()].filter((slot) => slot.selected);
   }
 
+  /**
+   * Set or clear (a) highlight flag(s) on given slots (e.g. warning, error, selected, highlight)
+   * @param colorFlag color highlight flag to set
+   * @param slotIds which slots to set or clear highlight flag on
+   * @param value true = set flag, false = clear flag
+   */
   async setSlotHighlights(
     colorFlag: keyof typeof SlotHighlight.colors | (keyof typeof SlotHighlight.colors)[],
+    slotIds: string[],
+    value?: boolean
+  ): Promise<void>;
+  /**
+   * Set arbitrary color highlights given slots. (Only one color at a time)
+   * @param color Color to set
+   * @param slotIds which slots to set color on
+   */
+  async setSlotHighlights(color: keyof typeof THREE.Color.NAMES, slotIds: string[]): Promise<void>;
+  /**
+   * Clear arbitrary color highlight for given slots. (Only one color at a time)
+   * @param color null
+   * @param slotIds which slots to clear color on
+   */
+  async setSlotHighlights(color: null, slotIds: string[]): Promise<void>;
+  async setSlotHighlights(
+    colorFlag:
+      | keyof typeof SlotHighlight.colors
+      | (keyof typeof SlotHighlight.colors)[]
+      | keyof typeof THREE.Color.NAMES
+      | null,
     slotIds: string[],
     value: boolean = true
   ) {
@@ -790,11 +835,19 @@ export class ServerView extends THREE.EventDispatcher<
         for (const key of colorFlag) {
           componentSlot.highlightBox[key] = value;
         }
-      } else {
+      } else if (SlotHighlight.isColorFlag(colorFlag)) {
         componentSlot.highlightBox[colorFlag] = value;
+      } else {
+        componentSlot.highlightBox.setColor(colorFlag);
       }
     }
   }
+
+  onLoadingStart?: (status: string, loaded: number, total: number) => void;
+
+  onLoadingProgress?: (status: string, loaded: number, total: number) => void;
+
+  onLoadingEnd?: (status: string, loaded: number, total: number) => void;
 
   private animate(time: number) {
     if (this.t0 === undefined) {

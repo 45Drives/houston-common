@@ -306,7 +306,7 @@ export class EasySetupConfigurator {
                 .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
                 .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
                 .addChild(new StringParameter('Custom Name', 'customName', ''))
-                .addChild(new StringParameter('Transfer Method', 'transferMethod', ''))
+                .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
       )
       .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
         .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'days'))  // Hourly task keeps snapshots for 1 day
@@ -341,7 +341,7 @@ export class EasySetupConfigurator {
                 .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
                 .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
                 .addChild(new StringParameter('Custom Name', 'customName', ''))
-                .addChild(new StringParameter('Transfer Method', 'transferMethod', ''))
+                .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
       )
       .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
         .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'weeks'))  // Daily task keeps snapshots for 1 week
@@ -376,7 +376,7 @@ export class EasySetupConfigurator {
                 .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
                 .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
                 .addChild(new StringParameter('Custom Name', 'customName', ''))
-                .addChild(new StringParameter('Transfer Method', 'transferMethod', ''))
+                .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
       )
       .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
         .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'months'))  // Weekly task keeps snapshots for 1 month

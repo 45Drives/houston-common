@@ -402,7 +402,7 @@ export class EasySetupConfigurator {
 
     // Push all tasks to the array
     tasks.push(hourlyTask, dailyTask, weeklyTask);
-
+    console.log('tasks:', tasks);
     return tasks;
   }
 

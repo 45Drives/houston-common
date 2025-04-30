@@ -282,6 +282,7 @@ export class Scheduler implements SchedulerType {
         const envObject = this.parseEnvKeyValues(envKeyValues, templateName);
         envObject['taskName'] = taskInstance.name;
 
+        console.log('registering task data:', taskInstance);
         
         if (templateName === 'CustomTask') {
             const pathParam = taskInstance.parameters.children.find(
@@ -311,9 +312,6 @@ export class Scheduler implements SchedulerType {
 
         console.log('envFilePath:', envFilePath);
         console.log('envKeyValuesString:', envKeyValuesString);
-        // await new File(server, envFilePath)
-        //     .replace(envKeyValuesString, { superuser: 'try', backup: false})
-        //     .match(() => console.log('env file created and content written successfully'), (error: any) => console.error("Error writing content to the file:", error));
 
         await this.ensureDir('/etc/systemd/system');
         const envFile = new File(server, envFilePath);
@@ -335,9 +333,6 @@ export class Scheduler implements SchedulerType {
         console.log("genrating notes file");
         const notesFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.txt`;
         const notes = taskInstance.notes;
-        // await new File(server, notesFilePath)
-        //     .replace(notes, { superuser: 'try', backup: false })
-        //     .match(() => console.log('Notes file created and content written successfully'), (error: any) => console.error("Error writing notes file:", error));
 
         const notesFile = new File(server, notesFilePath);
         await notesFile.create(true, { superuser: 'require' })
@@ -350,6 +345,7 @@ export class Scheduler implements SchedulerType {
                 () => console.log(`✅ wrote notes for ${templateName}`),
                 err => console.error(`❌ write notes failed:`, err)
             );
+
         //run script to generate service + timer via template, param env and schedule json
         if (taskInstance.schedule.intervals.length < 1) {
             //ignore schedule for now
@@ -362,15 +358,9 @@ export class Scheduler implements SchedulerType {
             // requires schedule data object
             console.log('schedule:', taskInstance.schedule);
 
-            // await new File(server, jsonFilePath)
-            //     .replace(jsonString, { superuser: 'try', backup: false })
-            //     .match(
-            //         () => console.log('json schedule file created successfully'),
-            //         err => console.error('Error writing schedule JSON:', err)
-            //     );
             const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
             const jsonFile = new File(server, jsonFilePath);
-            await this.ensureDir('/etc/systemd/system');
+            // await this.ensureDir('/etc/systemd/system');
             await jsonFile.create(true, { superuser: 'require' })
                 .match(
                     () => console.log(`✅ created ${jsonFilePath}`),
@@ -408,7 +398,6 @@ export class Scheduler implements SchedulerType {
         }
 
         // Remove empty values from envObject
-        // Remove empty values from envObject
         const filteredEnvObject: Record<string, string> = Object.fromEntries(
             Object.entries(envObject)
                 .filter(([, v]) => v !== '' && v !== '0')
@@ -423,24 +412,6 @@ export class Scheduler implements SchedulerType {
 
       //  console.log('envFilePath:', envFilePath);
 
-        // const file = new BetterCockpitFile(envFilePath, {
-        //     superuser: 'try',
-        // });
-
-        // file.replace(envKeyValuesString).then(() => {
-        //     console.log('env file updated successfully');
-        //     file.close();
-        // }).catch((error: any) => {
-        //     console.error("Error updating file:", error);
-        //     file.close();
-        // });
-        // await new File(server, envFilePath)
-        //     .replace(envKeyValuesString, { superuser: 'try', backup: false })
-        //     .match(
-        //         () => console.log('env file updated successfully'),
-        //         err => console.error('Error updating env file:', err)
-        //     );
-        await this.ensureDir('/etc/systemd/system');
         const envFile = new File(server, envFilePath);
         await envFile.create(true, { superuser: 'require' })
             .match(
@@ -470,24 +441,6 @@ export class Scheduler implements SchedulerType {
 
         console.log('notesFilePath:', notesFilePath);
 
-        // const file = new BetterCockpitFile(notesFilePath, {
-        //     superuser: 'try',
-        // });
-
-        // file.replace(taskInstance.notes).then(() => {
-        //     console.log('notes file updated successfully');
-        //     file.close();
-        // }).catch((error: any) => {
-        //     console.error("Error updating file:", error);
-        //     file.close();
-        // });
-        // await new File(server, notesFilePath)
-        //     .replace(taskInstance.notes, { superuser: 'try', backup: false })
-        //     .match(
-        //         () => console.log('notes file updated successfully'),
-        //         err => console.error('Error updating notes file:', err)
-        //     );
-        await this.ensureDir('/etc/systemd/system');
         const notesFile = new File(server, notesFilePath);
         await notesFile.create(true, { superuser: 'require' })
             .match(
@@ -693,26 +646,8 @@ export class Scheduler implements SchedulerType {
         const jsonFilePath = `/etc/systemd/system/${fullTaskName}.json`;
       //  console.log('jsonFilePath:', jsonFilePath);
 
-        // const file = new BetterCockpitFile(jsonFilePath, {
-        //     superuser: 'try',
-        // });
-
         const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
 
-        // file.replace(jsonString).then(() => {
-        //     console.log('json file created and content written successfully');
-        //     file.close();
-        // }).catch((error: any) => {
-        //     console.error("Error writing content to the file:", error);
-        //     file.close();
-        // });
-        // await new File(server, jsonFilePath)
-        //     .replace(jsonString, { superuser: 'try', backup: false })
-        //     .match(
-        //         () => console.log('schedule JSON updated successfully'),
-        //         err => console.error('Error writing schedule JSON:', err)
-        //     );
-        await this.ensureDir('/etc/systemd/system');
         const jsonFile = new File(server, jsonFilePath);
         await jsonFile.create(true, { superuser: 'require' })
             .match(

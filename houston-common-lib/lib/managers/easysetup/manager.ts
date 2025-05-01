@@ -168,8 +168,8 @@ export class EasySetupConfigurator {
     console.log('existing storage pool found:', config.zfsConfigs[0]!.pool);
     console.log('existing backup pool found:', config.zfsConfigs[1]!.pool);
 
-    this.unmountAndRemovePool(storageZfsConfig!);
-    this.unmountAndRemovePool(backupZfsConfig!);
+    await this.unmountAndRemovePool(storageZfsConfig!);
+    await this.unmountAndRemovePool(backupZfsConfig!);
   }
 
   private async unmountAndRemovePool(config: ZFSConfig) {
@@ -177,13 +177,17 @@ export class EasySetupConfigurator {
     const datasetName = config!.dataset.name;
 
     try {
-      server.execute(new Command(["umount", poolName + "/" + datasetName], this.commandOptions))
+      await unwrap(
+        server.execute(new Command(["umount", `${poolName}/${datasetName}`], this.commandOptions))
+      );
     } catch (error) {
       console.log(error);
     }
 
     try {
-      server.execute(new Command(["umount", poolName], this.commandOptions))
+      await unwrap(
+        server.execute(new Command(["umount", poolName], this.commandOptions))
+      );
     } catch (error) {
       console.log(error);
     }
@@ -215,7 +219,7 @@ export class EasySetupConfigurator {
     try {
       await unwrap(
         server.execute(
-          new Command(["rm", "-rf", `/${poolName}/*`], this.commandOptions),
+          new Command(["rm", "-rf", `/${poolName}`], this.commandOptions),
           true
         )
       );
@@ -262,7 +266,7 @@ export class EasySetupConfigurator {
 
     const taskTemplates = [new ZFSReplicationTaskTemplate()]
     const taskInstances: TaskInstance[] = [];
-    
+
     const myScheduler = new Scheduler(taskTemplates, taskInstances);
 
     await this.zfsManager.createPool(storageZfsConfig!.pool, storageZfsConfig!.poolOptions);
@@ -289,24 +293,24 @@ export class EasySetupConfigurator {
     }
 
   }
-  
 
-  private createReplicationTasks(sourceData: ZFSConfig , destData: ZFSConfig ): TaskInstance[] {
+
+  private createReplicationTasks(sourceData: ZFSConfig, destData: ZFSConfig): TaskInstance[] {
     const tasks: TaskInstance[] = []
 
     // Create HourlyForADay Task
     const hourlyParams = new ParameterNode("ZFS Replication Task Config", "zfsRepConfig")
-      .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name,  `${sourceData.pool.name}/${sourceData.dataset.name}`))
+      .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
       .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, `${destData.pool.name}/${destData.dataset.name}`))
       .addChild(new ParameterNode('Send Options', 'sendOptions')
-         .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
-                .addChild(new BoolParameter('Raw', 'raw_flag', false))
-                .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
-                .addChild(new IntParameter('MBuffer Size', 'mbufferSize', 1))
-                .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
-                .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-                .addChild(new StringParameter('Custom Name', 'customName', ''))
-                .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
+        .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
+        .addChild(new BoolParameter('Raw', 'raw_flag', false))
+        .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
+        .addChild(new IntParameter('MBuffer Size', 'mbufferSize', 1))
+        .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
+        .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
+        .addChild(new StringParameter('Custom Name', 'customName', ''))
+        .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
       )
       .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
         .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'days'))  // Hourly task keeps snapshots for 1 day
@@ -334,14 +338,14 @@ export class EasySetupConfigurator {
       .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
       .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, `${destData.pool.name}/${destData.dataset.name}`))
       .addChild(new ParameterNode('Send Options', 'sendOptions')
-         .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
-                .addChild(new BoolParameter('Raw', 'raw_flag', false))
-                .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
-                .addChild(new IntParameter('MBuffer Size', 'mbufferSize', 1))
-                .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
-                .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-                .addChild(new StringParameter('Custom Name', 'customName', ''))
-                .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
+        .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
+        .addChild(new BoolParameter('Raw', 'raw_flag', false))
+        .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
+        .addChild(new IntParameter('MBuffer Size', 'mbufferSize', 1))
+        .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
+        .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
+        .addChild(new StringParameter('Custom Name', 'customName', ''))
+        .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
       )
       .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
         .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'weeks'))  // Daily task keeps snapshots for 1 week
@@ -369,14 +373,14 @@ export class EasySetupConfigurator {
       .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
       .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, `${destData.pool.name}/${destData.dataset.name}`))
       .addChild(new ParameterNode('Send Options', 'sendOptions')
-         .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
-                .addChild(new BoolParameter('Raw', 'raw_flag', false))
-                .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
-                .addChild(new IntParameter('MBuffer Size', 'mbufferSize', 1))
-                .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
-                .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-                .addChild(new StringParameter('Custom Name', 'customName', ''))
-                .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
+        .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
+        .addChild(new BoolParameter('Raw', 'raw_flag', false))
+        .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
+        .addChild(new IntParameter('MBuffer Size', 'mbufferSize', 1))
+        .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
+        .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
+        .addChild(new StringParameter('Custom Name', 'customName', ''))
+        .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
       )
       .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
         .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'months'))  // Weekly task keeps snapshots for 1 month

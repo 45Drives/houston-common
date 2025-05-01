@@ -52,6 +52,7 @@ export class EasySetupConfigurator {
       const total = 6;
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
 
+      await this.clearReplicationTasks();
       await this.deleteZFSPoolAndSMBShares(config);
       progressCallback({ message: "Made sure your server is good to continue", step: 2, total });
 
@@ -294,6 +295,23 @@ export class EasySetupConfigurator {
 
   }
 
+  private async clearReplicationTasks() {
+    const scheduler = new Scheduler([new ZFSReplicationTaskTemplate()], []);
+    await scheduler.loadTaskInstances();
+
+    const replicationTasks = scheduler.taskInstances.filter(
+      task => task.template instanceof ZFSReplicationTaskTemplate
+    );
+
+    for (const task of replicationTasks) {
+      try {
+        await scheduler.unregisterTaskInstance(task);
+        console.log(`✅ Unregistered replication task: ${task.name}`);
+      } catch (error) {
+        console.error(`❌ Failed to unregister task ${task.name}:`, error);
+      }
+    }
+  }
 
   private createReplicationTasks(sourceData: ZFSConfig, destData: ZFSConfig): TaskInstance[] {
     const tasks: TaskInstance[] = []

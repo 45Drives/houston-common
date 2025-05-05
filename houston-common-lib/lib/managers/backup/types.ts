@@ -10,6 +10,7 @@ export interface BackUpTask {
   source: string          // client folder to backup
   target: string          // mount point for backup location(preappened clientID(client hostname))
   mirror: boolean
+  uuid: string
 }
 
 export interface BackUpSetupConfig {

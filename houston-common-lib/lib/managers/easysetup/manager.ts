@@ -112,7 +112,7 @@ export class EasySetupConfigurator {
       console.log(`Setting ownership of ${sharePath} to ${smbUser}:smbusers...`);
       await unwrap(
         server.execute(
-          new Command(["chown", "-R", `${smbUser}:smbusers`, sharePath], this.commandOptions),
+          new Command(["chown", `${smbUser}:smbusers`, sharePath], this.commandOptions),
           true
         )
       );
@@ -120,7 +120,7 @@ export class EasySetupConfigurator {
       console.log(`Setting permissions for ${sharePath} to 775...`);
       await unwrap(
         server.execute(
-          new Command(["chmod", "-R", "775", sharePath], this.commandOptions),
+          new Command(["chmod", "775", sharePath], this.commandOptions),
           true
         )
       );

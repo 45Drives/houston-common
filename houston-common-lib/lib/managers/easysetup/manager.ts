@@ -107,27 +107,6 @@ export class EasySetupConfigurator {
     );
   }
 
-  private async setShareOwnershipAndPermissions(sharePath: string, smbUser: string) {
-    try {
-      console.log(`Setting ownership of ${sharePath} to ${smbUser}:smbusers...`);
-      await unwrap(
-        server.execute(
-          new Command(["chown", "-R", `${smbUser}:smbusers`, sharePath], this.commandOptions),
-          true
-        )
-      );
-
-      console.log(`Setting permissions for ${sharePath} to 775...`);
-      await unwrap(
-        server.execute(
-          new Command(["chmod", "-R", "775", sharePath], this.commandOptions),
-          true
-        )
-      );
-    } catch (error) {
-      console.error(`Error setting ownership and permissions for ${sharePath}:`, error);
-    }
-  }
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
 
@@ -464,7 +443,6 @@ export class EasySetupConfigurator {
           share.path = sharePath;
         }
         await unwrap(this.sambaManager.addShare(share));
-        await this.setShareOwnershipAndPermissions(share.path, config.smbUser);
       }
     }
   }

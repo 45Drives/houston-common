@@ -52,7 +52,6 @@ export class EasySetupConfigurator {
       const total = 6;
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
 
-      await this.clearReplicationTasks();
       await this.deleteZFSPoolAndSMBShares(config);
       progressCallback({ message: "Made sure your server is good to continue", step: 2, total });
 
@@ -284,8 +283,8 @@ export class EasySetupConfigurator {
         backupZfsConfig!.dataset.name,
         backupZfsConfig!.datasetOptions
       );
-
-      const tasks = this.createReplicationTasks(storageZfsConfig!, backupZfsConfig!);
+      await this.clearReplicationTasks();
+      const tasks = await this.createReplicationTasks(storageZfsConfig!, backupZfsConfig!);
       tasks.forEach(task => {
         console.log('new Task created:', task);
         taskInstances.push(task);
@@ -313,7 +312,7 @@ export class EasySetupConfigurator {
     }
   }
 
-  private createReplicationTasks(sourceData: ZFSConfig, destData: ZFSConfig): TaskInstance[] {
+  private async createReplicationTasks(sourceData: ZFSConfig, destData: ZFSConfig): Promise<TaskInstance[]> {
     const tasks: TaskInstance[] = []
 
     // Create HourlyForADay Task

@@ -63,6 +63,8 @@ export class SlotHighlight implements ColorFlags<typeof SlotHighlight.colors> {
     highlight: new THREE.Color(0xffffff),
     warning: new THREE.Color(0xf97316),
     error: new THREE.Color(0xff0000),
+    flashingStorage: new THREE.Color(0xff00ff),
+    flashingBackup: new THREE.Color(0x00ffff),
   };
   static isColorFlag(flag: any): flag is keyof typeof SlotHighlight.colors {
     return typeof flag === "string" && Object.keys(SlotHighlight.colors).includes(flag);
@@ -71,6 +73,8 @@ export class SlotHighlight implements ColorFlags<typeof SlotHighlight.colors> {
   highlight = false;
   warning = false;
   error = false;
+  flashingStorage = false;
+  flashingBackup = false;
   private auxColor?: THREE.Color;
 
   

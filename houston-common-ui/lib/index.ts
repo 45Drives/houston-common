@@ -1,5 +1,6 @@
 export * from "@/components";
 export * from "@/composables";
+export * from "@/directives";
 
 import { reportError } from ".";
 

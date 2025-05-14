@@ -14,6 +14,15 @@ export function useEnterToAdvance(
   let debounceTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const handler = (e: KeyboardEvent) => {
+    // Don't proceed if a modal dialog is open
+    const modalIsOpen = !!document.querySelector('.houston-modal, .confirm-modal, .modal');
+
+    if (modalIsOpen) {
+      e.preventDefault();      // Block the Enter key
+      e.stopImmediatePropagation(); // Prevent the event from reaching other listeners
+      return; // Do not run any onEnter/onRightArrow etc
+    }
+
     // Allow typing in inputs/textareas/selects/etc
     const active = document.activeElement;
     const isTypingField =

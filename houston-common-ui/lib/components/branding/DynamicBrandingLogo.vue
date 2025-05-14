@@ -10,33 +10,41 @@ import {
     enterprise_logo,
     homelab_logo,
     pro_logo,
+    base_logo_dark,
+    enterprise_logo_dark,
+    homelab_logo_dark,
+    pro_logo_dark
 } from '../../img/branding'; // adjust path if needed
 import type { DivisionType } from './types';
+import { useDarkModeState } from '@/composables';
 
 const props = defineProps<{
     division?: DivisionType;
 }>();
 
+const isDarkMode = useDarkModeState();
+
 const logo = computed(() => {
+    const dark = isDarkMode.value;
+
     switch (props.division) {
-        case 'default':
-            return base_logo;
         case 'enterprise':
-            return enterprise_logo;
+            return dark ? enterprise_logo_dark : enterprise_logo;
         case 'homelab':
-            return homelab_logo;
+            return dark ? homelab_logo_dark : homelab_logo;
         case 'professional':
-            return pro_logo;
+            return dark ? pro_logo_dark : pro_logo;
+        case 'default':
         default:
-            return base_logo;
+            return dark ? base_logo_dark : base_logo;
     }
 });
 </script>
 
 <style scoped>
 /* Adds a fallback background color to ensure visibility */
-img {
+/* img {
     background-color: white;
     border-radius: 0.25rem;
-}
+} */
 </style>

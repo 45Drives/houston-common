@@ -25,26 +25,23 @@ const props = defineProps<{
 const isDarkMode = useDarkModeState();
 
 const logo = computed(() => {
-    const dark = isDarkMode.value;
-
-    switch (props.division) {
-        case 'enterprise':
-            return dark ? enterprise_logo_dark : enterprise_logo;
-        case 'homelab':
-            return dark ? homelab_logo_dark : homelab_logo;
-        case 'professional':
-            return dark ? pro_logo_dark : pro_logo;
-        case 'default':
-        default:
-            return dark ? base_logo_dark : base_logo;
+    if (isDarkMode.value) {
+        switch (props.division) {
+            case 'enterprise': return enterprise_logo_dark;
+            case 'homelab': return homelab_logo_dark;
+            case 'professional': return pro_logo_dark;
+            default: return base_logo_dark;
+        }
+    } else {
+        switch (props.division) {
+            case 'enterprise': return enterprise_logo;
+            case 'homelab': return homelab_logo;
+            case 'professional': return pro_logo;
+            default: return base_logo;
+        }
     }
 });
 </script>
 
 <style scoped>
-/* Adds a fallback background color to ensure visibility */
-/* img {
-    background-color: white;
-    border-radius: 0.25rem;
-} */
 </style>

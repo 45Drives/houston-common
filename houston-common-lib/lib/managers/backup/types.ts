@@ -11,7 +11,13 @@ export interface BackUpTask {
   target: string          // mount point for backup location(preappened clientID(client hostname))
   mirror: boolean
   uuid: string
-  status?: 'online' | 'offline' | 'missing_folder'
+  status?:
+  | 'online'
+  | 'offline_unreachable'
+  | 'offline_invalid_credentials'
+  | 'offline_connection_error'
+  | 'missing_folder'
+  | 'checking';
 }
 
 export interface BackUpSetupConfig {

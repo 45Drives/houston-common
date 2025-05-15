@@ -49,7 +49,7 @@ export class EasySetupConfigurator {
   ) {
 
     try {
-      const total = 6;
+      const total = config.splitPools ? 7 : 6;
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
 
       await this.deleteZFSPoolAndSMBShares(config);
@@ -67,6 +67,10 @@ export class EasySetupConfigurator {
       await this.applySambaConfig(config);
       progressCallback({ message: "Network configured", step: 6, total });
 
+      if (config.splitPools) {
+        progressCallback({ message: "Scheduled Active Backup tasks", step: 7, total });
+      }
+      
       await storeEasySetupConfig(config);
 
     } catch (error: any) {

@@ -84,17 +84,22 @@ export class EasySetupConfigurator {
     if (!config.smbUser || !config.smbPass) {
       throw new Error("user and password not set in config");
     }
+
     const smbUserLogin = config.smbUser;
     const smbUserPassword = config.smbPass;
     server
-      .getUserByLogin(config.smbUser)
+      .getUserByLogin(smbUserLogin)
       .orElse(() => server.addUser({ login: smbUserLogin }))
       .andThen((user) =>
-        server.createGroup("smbusers").map(() => user)
+        server
+          .getGroupByName("smbusers")
+          .orElse(() => server.createGroup("smbusers"))
+          .map(() => user)
       )
       .andThen((user) => server.addUserToGroups(user, "wheel", "smbusers"))
       .andThen((user) => server.changePassword(user, smbUserPassword));
   }
+  
 
   private async updateHostname(config: EasySetupConfig) {
     if (config.srvrName) {
@@ -112,8 +117,13 @@ export class EasySetupConfigurator {
 
   private async setShareOwnershipAndPermissions(sharePath: string, smbUser: string) {
     try {
-      console.log(`Setting ownership of ${sharePath} to ${smbUser}:smbusers...`);
+      // console.log(`(${smbUser}) Setting ownership of ${sharePath} to root:smbusers...`);
+      console.log(` Setting ownership of ${sharePath} to ${smbUser}:smbusers...`);
       await unwrap(
+        // server.execute(
+        //   new Command(["chown", `root:smbusers`, sharePath], this.commandOptions),
+        //   true
+        // )
         server.execute(
           new Command(["chown", `${smbUser}:smbusers`, sharePath], this.commandOptions),
           true
@@ -294,6 +304,8 @@ export class EasySetupConfigurator {
         taskInstances.push(task);
         myScheduler.registerTaskInstance(task);
       });
+    } else {
+      await this.clearReplicationTasks();
     }
 
   }

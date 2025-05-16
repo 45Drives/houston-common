@@ -17,7 +17,8 @@ export interface BackUpTask {
   | 'offline_invalid_credentials'
   | 'offline_connection_error'
   | 'missing_folder'
-  | 'checking';
+  | 'checking'
+  | 'offline_insufficient_permissions';
 }
 
 export interface BackUpSetupConfig {

@@ -117,13 +117,8 @@ export class EasySetupConfigurator {
 
   private async setShareOwnershipAndPermissions(sharePath: string, smbUser: string) {
     try {
-      // console.log(`(${smbUser}) Setting ownership of ${sharePath} to root:smbusers...`);
       console.log(` Setting ownership of ${sharePath} to ${smbUser}:smbusers...`);
       await unwrap(
-        // server.execute(
-        //   new Command(["chown", `root:smbusers`, sharePath], this.commandOptions),
-        //   true
-        // )
         server.execute(
           new Command(["chown", `${smbUser}:smbusers`, sharePath], this.commandOptions),
           true

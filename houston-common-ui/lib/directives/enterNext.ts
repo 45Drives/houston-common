@@ -9,6 +9,7 @@ export const enterNextDirective: Directive = {
       if (!form) return;
 
       e.preventDefault();
+      e.stopImmediatePropagation();
 
       const focusables = Array.from(
         form.querySelectorAll(

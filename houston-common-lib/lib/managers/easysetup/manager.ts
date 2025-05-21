@@ -23,7 +23,7 @@ import { storeEasySetupConfig } from './logConfig';
 import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
-import { TaskSchedule } from "@/scheduler";
+import { AutomatedSnapshotTaskTemplate, TaskSchedule } from "@/scheduler";
 
 
 export interface EasySetupProgress {
@@ -49,7 +49,8 @@ export class EasySetupConfigurator {
   ) {
 
     try {
-      const total = config.splitPools ? 7 : 6;
+      // const total = config.splitPools ? 7 : 6;
+      const total = 7;
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
 
       await this.deleteZFSPoolAndSMBShares(config);
@@ -69,6 +70,8 @@ export class EasySetupConfigurator {
 
       if (config.splitPools) {
         progressCallback({ message: "Scheduled Active Backup tasks", step: 7, total });
+      } else {
+        progressCallback({ message: "Scheduled Snapshot tasks", step: 7, total });
       }
       
       await storeEasySetupConfig(config);
@@ -300,7 +303,14 @@ export class EasySetupConfigurator {
         myScheduler.registerTaskInstance(task);
       });
     } else {
+      await this.clearSnapshotTasks();
       await this.clearReplicationTasks();
+      const tasks = await this.createAutoSnapshotTasks(storageZfsConfig!);
+      tasks.forEach(task => {
+        console.log('new Task created:', task);
+        taskInstances.push(task);
+        myScheduler.registerTaskInstance(task);
+      });
     }
 
   }
@@ -311,6 +321,24 @@ export class EasySetupConfigurator {
 
     const replicationTasks = scheduler.taskInstances.filter(
       task => task.template instanceof ZFSReplicationTaskTemplate
+    );
+
+    for (const task of replicationTasks) {
+      try {
+        await scheduler.unregisterTaskInstance(task);
+        console.log(`✅ Unregistered replication task: ${task.name}`);
+      } catch (error) {
+        console.error(`❌ Failed to unregister task ${task.name}:`, error);
+      }
+    }
+  }
+
+  private async clearSnapshotTasks() {
+    const scheduler = new Scheduler([new AutomatedSnapshotTaskTemplate()], []);
+    await scheduler.loadTaskInstances();
+
+    const replicationTasks = scheduler.taskInstances.filter(
+      task => task.template instanceof AutomatedSnapshotTaskTemplate
     );
 
     for (const task of replicationTasks) {
@@ -437,6 +465,94 @@ export class EasySetupConfigurator {
     console.log('tasks:', tasks);
     return tasks;
   }
+
+  private async createAutoSnapshotTasks(zfsData: ZFSConfig): Promise<TaskInstance[]> {
+    //  .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
+    const tasks: TaskInstance[] = [];
+
+    const baseParams = (
+      retentionValue: number,
+      retentionUnit: 'days' | 'weeks' | 'months',
+      taskName: string,
+      schedule: TaskSchedule,
+      notes: string
+    ): TaskInstance => {
+      const autoSnapParams = new ParameterNode("Automated Snapshot Task Config", "autoSnapConfig")
+        .addChild(new StringParameter('Filesystem', 'filesystem', `${zfsData.pool.name}/${zfsData.dataset.name}`))
+        .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
+        .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
+        .addChild(new StringParameter('Custom Name', 'customName', ''))
+        .addChild(new SnapshotRetentionParameter('Snapshot Retention', 'snapshotRetention', retentionValue, retentionUnit));
+
+      return new TaskInstance(
+        taskName,
+        new AutomatedSnapshotTaskTemplate(),
+        autoSnapParams,
+        schedule,
+        notes
+      );
+    };
+
+    // 🕐 Hourly snapshots retained for 1 day
+    const hourlySchedule = new TaskSchedule(true, [
+      new TaskScheduleInterval({
+        minute: { value: '0' },
+        hour: { value: '*' },
+        day: { value: '*' },
+        month: { value: '*' },
+        year: { value: '*' },
+      }),
+    ]);
+    const hourlyTask = baseParams(
+      1,
+      'days',
+      'AutoSnapshot_HourlyForADay',
+      hourlySchedule,
+      'Take snapshots every hour and keep them for 1 day.'
+    );
+
+    // 📆 Daily snapshots retained for 1 week
+    const dailySchedule = new TaskSchedule(true, [
+      new TaskScheduleInterval({
+        minute: { value: '0' },
+        hour: { value: '0' },
+        day: { value: '*' },
+        month: { value: '*' },
+        year: { value: '*' },
+      }),
+    ]);
+    const dailyTask = baseParams(
+      1,
+      'weeks',
+      'AutoSnapshot_DailyForAWeek',
+      dailySchedule,
+      'Take snapshots daily and keep them for 1 week.'
+    );
+
+    // 📅 Weekly snapshots retained for 1 month (on Fridays at midnight)
+    const weeklySchedule = new TaskSchedule(true, [
+      new TaskScheduleInterval({
+        minute: { value: '0' },
+        hour: { value: '0' },
+        day: { value: '*' },
+        month: { value: '*' },
+        year: { value: '*' },
+        dayOfWeek: ['Fri'],
+      }),
+    ]);
+    const weeklyTask = baseParams(
+      1,
+      'months',
+      'AutoSnapshot_WeeklyForAMonth',
+      weeklySchedule,
+      'Take snapshots every Friday and keep them for 1 month.'
+    );
+
+    tasks.push(hourlyTask, dailyTask, weeklyTask);
+    console.log('autoSnapshotTasks:', tasks);
+    return tasks;
+  }
+  
 
   private async applySambaConfig(config: EasySetupConfig) {
     if (config.smbUser == undefined) {

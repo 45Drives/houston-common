@@ -469,7 +469,7 @@ export class EasySetupConfigurator {
   private async createAutoSnapshotTasks(zfsData: ZFSConfig): Promise<TaskInstance[]> {
     //  .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
     const tasks: TaskInstance[] = [];
-
+    
     const baseParams = (
       retentionValue: number,
       retentionUnit: 'days' | 'weeks' | 'months',
@@ -478,7 +478,7 @@ export class EasySetupConfigurator {
       notes: string
     ): TaskInstance => {
       const autoSnapParams = new ParameterNode("Automated Snapshot Task Config", "autoSnapConfig")
-        .addChild(new StringParameter('Filesystem', 'filesystem', `${zfsData.pool.name}/${zfsData.dataset.name}`))
+        .addChild(new ZfsDatasetParameter('Filesystem', 'filesystem', '', 0, '', zfsData.pool.name, `${zfsData.pool.name}/${zfsData.dataset.name}`))
         .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
         .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
         .addChild(new StringParameter('Custom Name', 'customName', ''))

@@ -10,6 +10,7 @@ const props = defineProps<{
   steps: WizardStep[];
   onComplete: (data: any) => void;
   hideHeader?: boolean;
+  showProg?: boolean;
 }>();
 
 console.log(props.id);
@@ -42,7 +43,7 @@ const progress = computed(() => {
 <template>
   <div class="flex flex-col">
     <StepsHeader v-if="!hideHeader" v-bind="state" />
-    <ProgressBar class="w-full" v-if="hideHeader" :percent="progress" />
+    <ProgressBar class="w-full" v-if="hideHeader && showProg" :percent="progress" />
     <WizardStepView v-bind="state" class="grow" />
   </div>
 </template>

@@ -19,6 +19,8 @@ export interface BackUpTask {
   | 'missing_folder'
   | 'checking'
   | 'offline_insufficient_permissions';
+  share?: string
+  host?: string
 }
 
 export interface BackUpSetupConfig {

@@ -13,6 +13,8 @@ const props = defineProps<{
   showProg?: boolean;
 }>();
 
+const emit = defineEmits(["goBack", "onComplete"]);
+
 console.log(props.id);
 
 const state = defineWizardSteps(props.steps, createWizardInjectionKey(props.id));
@@ -44,6 +46,6 @@ const progress = computed(() => {
   <div class="flex flex-col">
     <StepsHeader v-if="!hideHeader" v-bind="state" />
     <ProgressBar class="w-full" v-if="hideHeader && showProg" :percent="progress" />
-    <WizardStepView v-bind="state" class="grow" />
+    <WizardStepView v-bind="state" class="grow" @goBack="emit('goBack')" />
   </div>
 </template>

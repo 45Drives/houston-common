@@ -128,6 +128,18 @@ export class ZFSManager implements IZFSManager {
     if (options.recordsize !== undefined) fsProps.push(`recordsize=${options.recordsize}`);
     if (options.dedup !== undefined) fsProps.push(`dedup=${options.dedup}`);
 
+    // Handle refreservation
+    if (options.refreservationPercent !== undefined) {
+      // Estimate total disk capacity from all vdevs
+      const totalBytes = pool.vdevs.flatMap(v => v.disks)
+        .map(disk => convertToBytes(disk.capacity ?? "0"))
+        .reduce((acc, curr) => acc + curr, 0);
+
+      const fraction = Math.min(Math.max(options.refreservationPercent, 0), 100) / 100;
+      const refreservationBytes = Math.floor(totalBytes * fraction);
+      fsProps.push(`refreservation=${refreservationBytes}`);
+    }
+
     // fs props are ['-O', 'prop=value']
     argv.push(...fsProps.flatMap((prop) => ["-O", prop]));
 

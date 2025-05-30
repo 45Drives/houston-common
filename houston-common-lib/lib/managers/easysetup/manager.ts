@@ -49,29 +49,31 @@ export class EasySetupConfigurator {
   ) {
 
     try {
-      // const total = config.splitPools ? 7 : 6;
-      const total = 7;
+      const total = 8;
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
 
+      await this.applyServerConfig(config);
+      progressCallback({ message: "Configured Admin Account and SSH Security", step: 2, total });
+
       await this.deleteZFSPoolAndSMBShares(config);
-      progressCallback({ message: "Made sure your server is good to continue", step: 2, total });
+      progressCallback({ message: "Cleared any existing ZFS and Samba data", step: 3, total });
 
       await this.updateHostname(config);
-      progressCallback({ message: "Updated Server Name", step: 3, total });
+      progressCallback({ message: "Updated Server Name", step: 4, total });
 
-      await this.createUser(config);
-      progressCallback({ message: "Created your User", step: 4, total });
+      await this.applyUsersAndGroups(config);
+      progressCallback({ message: "Created Users and Groups", step: 5, total });
 
       await this.applyZFSConfig(config);
-      progressCallback({ message: "Drive Configuration done", step: 5, total });
+      progressCallback({ message: "Drive Pool Configuration done", step: 6, total });
 
       await this.applySambaConfig(config);
-      progressCallback({ message: "Network configured", step: 6, total });
+      progressCallback({ message: "Configured Storage Sharing", step: 7, total });
 
       if (config.splitPools) {
-        progressCallback({ message: "Scheduled Active Backup tasks", step: 7, total });
+        progressCallback({ message: "Scheduled Active Backup tasks", step: 8, total });
       } else {
-        progressCallback({ message: "Scheduled Snapshot tasks", step: 7, total });
+        progressCallback({ message: "Scheduled Snapshot tasks", step: 8, total });
       }
       
       await storeEasySetupConfig(config);
@@ -82,27 +84,6 @@ export class EasySetupConfigurator {
     }
 
   }
-
-  private async createUser(config: EasySetupConfig) {
-    if (!config.smbUser || !config.smbPass) {
-      throw new Error("user and password not set in config");
-    }
-
-    const smbUserLogin = config.smbUser;
-    const smbUserPassword = config.smbPass;
-    server
-      .getUserByLogin(smbUserLogin)
-      .orElse(() => server.addUser({ login: smbUserLogin }))
-      .andThen((user) =>
-        server
-          .getGroupByName("smbusers")
-          .orElse(() => server.createGroup("smbusers"))
-          .map(() => user)
-      )
-      .andThen((user) => server.addUserToGroups(user, "wheel", "smbusers"))
-      .andThen((user) => server.changePassword(user, smbUserPassword));
-  }
-  
 
   private async updateHostname(config: EasySetupConfig) {
     if (config.srvrName) {
@@ -271,6 +252,138 @@ export class EasySetupConfigurator {
     }
   }
 
+  private async applyServerConfig(config: EasySetupConfig) {
+    const serverCfg = config.serverConfig;
+    const adminUser = serverCfg?.adminUser || "admin";
+    const adminPass = serverCfg?.adminPass || "45Dr!ves";
+
+    // 1. Add admin user if not exists
+    await unwrap(
+      server
+        .getUserByLogin(adminUser)
+        .orElse(() => server.addUser({ login: adminUser }))
+        .andThen((user) =>
+          server
+            .getGroupByName("wheel")
+            .orElse(() => server.createGroup("wheel"))
+            .map(() => user)
+        )
+        .andThen((user) => server.addUserToGroups(user, "wheel"))
+        .andThen((user) => server.changePassword(user, adminPass))
+    );
+
+    // 2. Disable root SSH login (default = true unless explicitly set false)
+    if (serverCfg?.disableRootSSH !== false) {
+      await unwrap(
+        server.execute(
+          new Command([
+            "sed",
+            "-i",
+            "s/^#*PermitRootLogin.*/PermitRootLogin no/",
+            "/etc/ssh/sshd_config",
+          ], this.commandOptions)
+        )
+      );
+      await unwrap(server.execute(new Command(["systemctl", "reload", "sshd"], this.commandOptions)));
+    }
+
+    // 3. Set timezone if requested
+    if (serverCfg?.setTimezone && serverCfg.timezone) {
+      await unwrap(
+        server.execute(
+          new Command(["timedatectl", "set-timezone", serverCfg.timezone], this.commandOptions)
+        )
+      );
+    }
+
+    // 4. Enable NTP if requested (default to true)
+    if (serverCfg?.useNTP !== false) {
+      await unwrap(
+        server.execute(
+          new Command(["timedatectl", "set-ntp", "true"], this.commandOptions)
+        )
+      );
+    }
+  }
+  
+  
+  private async applyUsersAndGroups(config: EasySetupConfig) {
+    const userGroupCfg = config.usersAndGroups ?? { users: [], groups: [] };
+
+    // If smbUser is provided, inject it as a user spec
+    if (config.smbUser && config.smbPass) {
+      userGroupCfg.users.push({
+        username: config.smbUser,
+        password: config.smbPass,
+        groups: ["wheel", "smbusers"],
+      });
+    }
+
+    // 1. Create all groups
+    for (const group of userGroupCfg.groups) {
+      await unwrap(
+        server.getGroupByName(group.name)
+          .orElse(() => server.createGroup(group.name))
+      );
+
+      if (group.members?.length) {
+        for (const member of group.members) {
+          await unwrap(
+            server.getUserByLogin(member)
+              .andThen(user => server.addUserToGroups(user, group.name))
+          );
+        }
+      }
+    }
+
+    // 2. Create all users
+    for (const userSpec of userGroupCfg.users) {
+      const userResult = await unwrap(
+        server.getUserByLogin(userSpec.username)
+          .orElse(() => server.addUser({ login: userSpec.username }))
+      );
+
+      await unwrap(server.changePassword(userResult, userSpec.password));
+
+      // Ensure group membership
+      for (const groupName of userSpec.groups) {
+        await unwrap(
+          server.getGroupByName(groupName)
+            .orElse(() => server.createGroup(groupName))
+            .map(() => userResult)
+            .andThen(user => server.addUserToGroups(user, groupName))
+        );
+      }
+
+      // Optional SSH key setup
+      if (userSpec.sshKey) {
+        if (!/^(ssh-(rsa|ed25519)|ecdsa)-/.test(userSpec.sshKey)) {
+          console.warn(`Invalid SSH key format for user ${userSpec.username}, skipping key install.`);
+          continue;
+        }
+
+        const userHomeDir = `/home/${userSpec.username}`;
+        const sshDir = `${userHomeDir}/.ssh`;
+        const authKeysPath = `${sshDir}/authorized_keys`;
+
+        await unwrap(server.execute(new Command(["mkdir", "-p", sshDir], this.commandOptions)));
+        await unwrap(server.execute(new Command(["chmod", "700", sshDir], this.commandOptions)));
+        await unwrap(server.execute(new Command(["touch", authKeysPath], this.commandOptions)));
+
+        await unwrap(
+          server.execute(new Command([
+            "bash", "-c",
+            `echo "${userSpec.sshKey}" >> ${authKeysPath}`
+          ], this.commandOptions))
+        );
+
+        await unwrap(server.execute(new Command(["chmod", "600", authKeysPath], this.commandOptions)));
+        await unwrap(server.execute(new Command(["chown", "-R", `${userSpec.username}:${userSpec.username}`, sshDir], this.commandOptions)));
+      }
+    }
+  }
+  
+  
 
   private async applyZFSConfig(_config: EasySetupConfig) {
     let storageZfsConfig = _config!.zfsConfigs![0];
@@ -555,20 +668,14 @@ export class EasySetupConfigurator {
   
 
   private async applySambaConfig(config: EasySetupConfig) {
-    if (config.smbUser == undefined) {
-      throw new ValueError("config.smbUser is undefined!");
-    }
-    if (config.smbPass == undefined) {
-      throw new ValueError("config.smbPass is undefined!");
-    }
-    if (config.sambaConfig == undefined) {
-      throw new ValueError("config.sambaConfig is undefined!");
-    }
+    if (!config.smbUser) throw new ValueError("config.smbUser is undefined!");
+    if (!config.smbPass) throw new ValueError("config.smbPass is undefined!");
+    if (!config.sambaConfig) throw new ValueError("config.sambaConfig is undefined!");
 
     await unwrap(this.sambaManager.setUserPassword(config.smbUser, config.smbPass));
-
     await unwrap(this.sambaManager.editGlobal(config.sambaConfig.global));
 
+    // Ensure config includes 'include registry'
     await unwrap(
       this.sambaManager
         .checkIfSambaConfIncludesRegistry("/etc/samba/smb.conf")
@@ -579,8 +686,14 @@ export class EasySetupConfigurator {
         )
     );
 
-    // Apply share configurations and ensure correct ownership/permissions
-    const shares = config.sambaConfig!.shares;
+    // ✅ Ensure 'smbusers' group exists
+    await unwrap(
+      server.getGroupByName("smbusers")
+        .orElse(() => server.createGroup("smbusers"))
+    );
+
+    // Apply shares
+    const shares = config.sambaConfig.shares;
     for (let i = 0; i < shares.length; i++) {
       let share = shares[i];
       const sharePath = `/${config.zfsConfigs![0]!.pool.name}/${config.folderName!}`;
@@ -594,6 +707,7 @@ export class EasySetupConfigurator {
       }
     }
   }
+  
 
   static async loadConfig(
     easyConfigName: keyof typeof defaultConfigs

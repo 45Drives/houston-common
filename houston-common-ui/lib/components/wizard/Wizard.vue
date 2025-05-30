@@ -10,7 +10,6 @@ const props = defineProps<{
   steps: WizardStep[];
   onComplete: (data: any) => void;
   hideHeader?: boolean;
-  showProg?: boolean;
 }>();
 
 const emit = defineEmits(["goBack", "onComplete"]);

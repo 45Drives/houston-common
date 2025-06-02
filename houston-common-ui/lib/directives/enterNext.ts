@@ -9,16 +9,16 @@ export const enterNextDirective: Directive = {
       if (!form) return;
 
       // Prevent default unless it's a checkbox or select (we don't want to hijack those)
-      if (
-        el instanceof HTMLInputElement &&
-        (el.type === "checkbox" || el.type === "radio")
-      ) {
-        return;
-      }
+      // if (
+      //   el instanceof HTMLInputElement &&
+      //   (el.type === "checkbox" || el.type === "radio")
+      // ) {
+      //   return;
+      // }
 
-      if (el instanceof HTMLSelectElement) {
-        return;
-      }
+      // if (el instanceof HTMLSelectElement) {
+      //   return;
+      // }
 
       e.preventDefault();
       e.stopImmediatePropagation();

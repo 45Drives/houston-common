@@ -9,7 +9,7 @@ export type EasySetupConfig = {
   srvrName?: string
   folderName?: string
   splitPools?: boolean
-  serverConfig?: ServerConfig;
+  serverConfig?: ServerInfoConfig;
   usersAndGroups?: UsersAndGroupsConfig;
 };
 
@@ -23,7 +23,7 @@ export type BackupLog = {
   [ipAddress: string]: BackupLogEntry;
 }
 
-export type ServerConfig = {
+export type ServerInfoConfig = {
   adminUser: string;
   adminPass: string;
   disableRootSSH: boolean;

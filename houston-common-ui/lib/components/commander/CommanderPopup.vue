@@ -74,7 +74,7 @@ const typeMessage = async (newMessage: string) => {
             displayedText.value += '<br/>';
         } else {
             displayedText.value += newMessage[i];
-            await new Promise(resolve => setTimeout(resolve, 20));
+            await new Promise(resolve => setTimeout(resolve, 10));
         }
 
         i++;

@@ -53,7 +53,7 @@ export class EasySetupConfigurator {
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
 
       await this.applyServerConfig(config);
-      progressCallback({ message: "Configured Admin Account and SSH Security", step: 2, total });
+      progressCallback({ message: "Configured SSH Security", step: 2, total });
 
       await this.deleteZFSPoolAndSMBShares(config);
       progressCallback({ message: "Cleared any existing ZFS and Samba data", step: 3, total });
@@ -65,7 +65,7 @@ export class EasySetupConfigurator {
       progressCallback({ message: "Created Users and Groups", step: 5, total });
 
       await this.applyZFSConfig(config);
-      progressCallback({ message: "Drive Pool Configuration done", step: 6, total });
+      progressCallback({ message: "Configured ZFS Storage with available drives", step: 6, total });
 
       await this.applySambaConfig(config);
       progressCallback({ message: "Configured Storage Sharing", step: 7, total });
@@ -122,116 +122,101 @@ export class EasySetupConfigurator {
   }
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
+    if (!config.zfsConfigs) return;
 
-    if (!config.zfsConfigs) {
+    const storageZfsConfig = config.zfsConfigs[0]!;
+    const backupZfsConfig = config.zfsConfigs[1]!;
+
+    const storagePoolName = storageZfsConfig!.pool.name;
+    const backupPoolName = backupZfsConfig!.pool.name;
+
+    const allShares = await this.sambaManager.getShares().unwrapOr(undefined);
+    if (allShares) {
+      for (let share of allShares) {
+        if (share.path.startsWith(`/${storagePoolName}`)) {
+          try {
+            await unwrap(this.sambaManager.closeSambaShare(share.name));
+          } catch (e) {
+            console.warn(`Close share failed for ${share.name}:`, e);
+          }
+          try {
+            await unwrap(this.sambaManager.removeShare(share));
+          } catch (e) {
+            console.warn(`Remove share failed for ${share.name}:`, e);
+          }
+        }
+      }
+    }
+
+    console.log(`Unmounting and destroying ${storagePoolName}...`);
+    await this.unmountAndRemovePoolIfExists(storageZfsConfig);
+
+    console.log(`Unmounting and destroying ${backupPoolName}...`);
+    await this.unmountAndRemovePoolIfExists(backupZfsConfig);
+  }
+
+  private async poolExists(poolName: string): Promise<boolean> {
+    const result = await server.execute(
+      new Command(["zpool", "list", "-H", "-o", "name", `${poolName}`], this.commandOptions)
+    ).unwrapOr(null);
+  
+    const output = result?.stdout;
+    if (!output) return false;
+  
+    const decoded = new TextDecoder().decode(output); // ← converts Uint8Array to string
+    return decoded.includes(poolName);
+  }
+  
+
+  private async isMountPoint(path: string): Promise<boolean> {
+    const result = await server.execute(
+      new Command(["mountpoint", "-q", path], this.commandOptions)
+    );
+    return result.isOk();
+  }
+
+  private async unmountAndRemovePoolIfExists(config: ZFSConfig) {
+    const poolName = config.pool.name;
+    const datasetName = config.dataset.name;
+
+    if (!(await this.poolExists(poolName))) {
+      console.log(`Skipping destruction. Pool '${poolName}' does not exist.`);
       return;
     }
 
-    let storageZfsConfig = config!.zfsConfigs![0];
-    let backupZfsConfig = config!.zfsConfigs![1];
+    const datasetPath = `/${poolName}/${datasetName}`;
+    const poolPath = `/${poolName}`;
 
-    const storagePoolName = storageZfsConfig!.pool.name;
-
-    const allShares = await (this.sambaManager.getShares().unwrapOr(undefined));
-    if (allShares) {
-      console.log('existing samba shares:', allShares);
-      for (let share of allShares) {
-        if (share.path.startsWith("/" + storagePoolName)) {
-          console.log('existing share found on pool:', share);
-          try {
-            await unwrap(this.sambaManager.closeSambaShare(share.name));
-          } catch (error) {
-            console.log(error);
-          }
-          // Don't undo this!!!!
-          try {
-            await unwrap(this.sambaManager.removeShare(share));
-          } catch (error) {
-            console.log(error);
-          }
-        } else {
-          console.log(`Share ${share} doesn't exist on pool ${storagePoolName} so we didn't remove it.`)
-        }
+    if (await this.isMountPoint(datasetPath)) {
+      try {
+        await unwrap(server.execute(new Command(["umount", datasetPath], this.commandOptions)));
+      } catch (e) {
+        console.warn(`Failed to unmount dataset ${datasetPath}:`, e);
       }
-    } else {
-
-      console.log(`No shares found!`)
     }
 
-    console.log('existing storage pool found:', config.zfsConfigs[0]!.pool);
-    console.log('existing backup pool found:', config.zfsConfigs[1]!.pool);
-
-    await this.unmountAndRemovePool(storageZfsConfig!);
-    await this.unmountAndRemovePool(backupZfsConfig!);
-  }
-
-  private async unmountAndRemovePool(config: ZFSConfig) {
-    const poolName = config!.pool.name;
-    const datasetName = config!.dataset.name;
-
-    try {
-      await unwrap(
-        server.execute(new Command(["umount", `${poolName}/${datasetName}`], this.commandOptions))
-      );
-    } catch (error) {
-      console.log(error);
-    }
-
-    try {
-      await unwrap(
-        server.execute(new Command(["umount", poolName], this.commandOptions))
-      );
-    } catch (error) {
-      console.log(error);
+    if (await this.isMountPoint(poolPath)) {
+      try {
+        await unwrap(server.execute(new Command(["umount", poolPath], this.commandOptions)));
+      } catch (e) {
+        console.warn(`Failed to unmount pool ${poolPath}:`, e);
+      }
     }
 
     try {
       await this.zfsManager.destroyPool(poolName, { force: true });
-      await this.tryDestroyPoolWithRetries(poolName)
-    } catch (error) {
-      console.log(error);
+      await this.tryDestroyPoolWithRetries(poolName);
+    } catch (e) {
+      console.warn(`Error destroying pool ${poolName}:`, e);
     }
 
     try {
-      await unwrap(
-        server.execute(
-          new Command(["systemctl", "enable", "avahi-daemon"], this.commandOptions),
-          true
-        )
-      );
-      await unwrap(
-        server.execute(
-          new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions),
-          true
-        )
-      );
-    } catch (error) {
-      console.log(error);
-    }
-
-    try {
-      await unwrap(
-        server.execute(
-          new Command(["rm", "-rf", `/${poolName}`], this.commandOptions),
-          true
-        )
-      );
-    } catch (error) {
-      console.log(error);
-    }
-
-    try {
-      await unwrap(
-        server.execute(
-          new Command(["umount", `/${poolName}`], this.commandOptions),
-          true
-        )
-      );
-    } catch (error) {
-      console.log(error);
+      await unwrap(server.execute(new Command(["rm", "-rf", poolPath], this.commandOptions)));
+    } catch (e) {
+      console.warn(`Failed to clean up pool dir ${poolPath}:`, e);
     }
   }
-
+  
   private async tryDestroyPoolWithRetries(poolName: string, maxRetries = 3, delayMs = 1000) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -254,63 +239,103 @@ export class EasySetupConfigurator {
 
   private async applyServerConfig(config: EasySetupConfig) {
     const serverCfg = config.serverConfig;
-    const adminUser = serverCfg?.adminUser || "admin";
-    const adminPass = serverCfg?.adminPass || "45Dr!ves";
 
-    // 1. Add admin user if not exists
-    await unwrap(
-      server
-        .getUserByLogin(adminUser)
-        .orElse(() => server.addUser({ login: adminUser }))
-        .andThen((user) =>
-          server
-            .getGroupByName("wheel")
-            .orElse(() => server.createGroup("wheel"))
-            .map(() => user)
-        )
-        .andThen((user) => server.addUserToGroups(user, "wheel"))
-        .andThen((user) => server.changePassword(user, adminPass))
-    );
-
-    // 2. Disable root SSH login (default = true unless explicitly set false)
     if (serverCfg?.disableRootSSH !== false) {
-      await unwrap(
-        server.execute(
-          new Command([
-            "sed",
-            "-i",
-            "s/^#*PermitRootLogin.*/PermitRootLogin no/",
-            "/etc/ssh/sshd_config",
-          ], this.commandOptions)
-        )
-      );
+      await unwrap(server.execute(
+        new Command([
+          "sed", "-i", "s/^#*PermitRootLogin.*/PermitRootLogin no/", "/etc/ssh/sshd_config"
+        ], this.commandOptions)
+      ));
       await unwrap(server.execute(new Command(["systemctl", "reload", "sshd"], this.commandOptions)));
     }
 
-    // 3. Set timezone if requested
     if (serverCfg?.setTimezone && serverCfg.timezone) {
-      await unwrap(
-        server.execute(
-          new Command(["timedatectl", "set-timezone", serverCfg.timezone], this.commandOptions)
-        )
-      );
+      await unwrap(server.execute(new Command(["timedatectl", "set-timezone", serverCfg.timezone], this.commandOptions)));
     }
 
-    // 4. Enable NTP if requested (default to true)
     if (serverCfg?.useNTP !== false) {
-      await unwrap(
-        server.execute(
-          new Command(["timedatectl", "set-ntp", "true"], this.commandOptions)
+      await unwrap(server.execute(new Command(["timedatectl", "set-ntp", "true"], this.commandOptions)));
+    }
+  }
+
+/*   private async createUser(userLogin: string, userPassword: string) {
+    if (!userLogin || !userPassword) {
+      throw new Error("user and password not provided");
+    }
+
+    server
+      .getUserByLogin(userLogin)
+      .orElse(() => server.addUser({ login: userLogin }))
+        .andThen((user) =>
+          server
+            .getGroupByName("users")
+            .orElse(() => server.createGroup("users"))
+            .map(() => user)
         )
-      );
+        .andThen((user) => server.addUserToGroups(user, "wheel", "users"))
+        .andThen((user) => server.changePassword(user, userPassword));
+  } */
+
+  private createUsersAndPasswords(users: { username: string; password: string }[]) {
+    users.forEach(({ username, password }, index) => {
+      const isAdmin = index === 0;
+
+      server
+        .getUserByLogin(username)
+        .orElse(() => server.addUser({ login: username }))
+        .andThen((user) =>
+          server
+            .getGroupByName("smbusers")
+            .orElse(() => server.createGroup("smbusers"))
+            .map(() => user)
+        )
+        .andThen((user) => {
+          if (isAdmin) {
+            return server.addUserToGroups(user, "wheel", "smbusers");
+          } else {
+            return server.addUserToGroups(user, "smbusers");
+          }
+        })
+        .andThen((user) => server.changePassword(user, password));
+    });
+  }
+  
+  
+  private createGroupsAndAddMembers(groups: { name: string; members?: string[] }[]) {
+    for (const { name, members = [] } of groups) {
+      server
+        .getGroupByName(name)
+        .orElse(() => server.createGroup(name));
+
+      for (const member of members) {
+        server
+          .getUserByLogin(member)
+          .andThen((user) => server.addUserToGroups(user, name));
+      }
     }
   }
   
   
+  private assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
+    for (const { username, groups } of users) {
+      server
+        .getUserByLogin(username)
+        .map((user) => {
+          for (const groupName of groups) {
+            server
+              .getGroupByName(groupName)
+              .orElse(() => server.createGroup(groupName))
+              .map(() => user)
+              .andThen((u) => server.addUserToGroups(u, groupName));
+          }
+        });
+    }
+  }
+
+  
   private async applyUsersAndGroups(config: EasySetupConfig) {
     const userGroupCfg = config.usersAndGroups ?? { users: [], groups: [] };
 
-    // If smbUser is provided, inject it as a user spec
     if (config.smbUser && config.smbPass) {
       userGroupCfg.users.push({
         username: config.smbUser,
@@ -319,70 +344,35 @@ export class EasySetupConfigurator {
       });
     }
 
-    // 1. Create all groups
-    for (const group of userGroupCfg.groups) {
-      await unwrap(
-        server.getGroupByName(group.name)
-          .orElse(() => server.createGroup(group.name))
-      );
-
-      if (group.members?.length) {
-        for (const member of group.members) {
-          await unwrap(
-            server.getUserByLogin(member)
-              .andThen(user => server.addUserToGroups(user, group.name))
-          );
+    const declaredUsers = new Set(userGroupCfg.users.map(u => u.username));
+    for (const group of userGroupCfg.groups ?? []) {
+      for (const member of group.members ?? []) {
+        if (!declaredUsers.has(member)) {
+          throw new ValueError(`Group '${group.name}' references unknown user '${member}'`);
         }
       }
     }
 
-    // 2. Create all users
-    for (const userSpec of userGroupCfg.users) {
-      const userResult = await unwrap(
-        server.getUserByLogin(userSpec.username)
-          .orElse(() => server.addUser({ login: userSpec.username }))
-      );
+    this.createUsersAndPasswords(userGroupCfg.users);
+    this.createGroupsAndAddMembers(userGroupCfg.groups ?? []);
+    this.assignGroupsToUsers(userGroupCfg.users);
 
-      await unwrap(server.changePassword(userResult, userSpec.password));
+    for (const user of userGroupCfg.users) {
+      if (!user.sshKey || !/^(ssh-(rsa|ed25519)|ecdsa)-/.test(user.sshKey)) continue;
 
-      // Ensure group membership
-      for (const groupName of userSpec.groups) {
-        await unwrap(
-          server.getGroupByName(groupName)
-            .orElse(() => server.createGroup(groupName))
-            .map(() => userResult)
-            .andThen(user => server.addUserToGroups(user, groupName))
-        );
-      }
+      const sshDir = `/home/${user.username}/.ssh`;
+      const authFile = `${sshDir}/authorized_keys`;
 
-      // Optional SSH key setup
-      if (userSpec.sshKey) {
-        if (!/^(ssh-(rsa|ed25519)|ecdsa)-/.test(userSpec.sshKey)) {
-          console.warn(`Invalid SSH key format for user ${userSpec.username}, skipping key install.`);
-          continue;
-        }
-
-        const userHomeDir = `/home/${userSpec.username}`;
-        const sshDir = `${userHomeDir}/.ssh`;
-        const authKeysPath = `${sshDir}/authorized_keys`;
-
-        await unwrap(server.execute(new Command(["mkdir", "-p", sshDir], this.commandOptions)));
-        await unwrap(server.execute(new Command(["chmod", "700", sshDir], this.commandOptions)));
-        await unwrap(server.execute(new Command(["touch", authKeysPath], this.commandOptions)));
-
-        await unwrap(
-          server.execute(new Command([
-            "bash", "-c",
-            `echo "${userSpec.sshKey}" >> ${authKeysPath}`
-          ], this.commandOptions))
-        );
-
-        await unwrap(server.execute(new Command(["chmod", "600", authKeysPath], this.commandOptions)));
-        await unwrap(server.execute(new Command(["chown", "-R", `${userSpec.username}:${userSpec.username}`, sshDir], this.commandOptions)));
-      }
+      server.execute(new Command(["mkdir", "-p", sshDir], this.commandOptions));
+      server.execute(new Command(["chmod", "700", sshDir], this.commandOptions));
+      server.execute(new Command(["touch", authFile], this.commandOptions));
+      server.execute(new Command(["bash", "-c", `echo "${user.sshKey}" >> ${authFile}`], this.commandOptions));
+      server.execute(new Command(["chmod", "600", authFile], this.commandOptions));
+      server.execute(new Command(["chown", "-R", `${user.username}:${user.username}`, sshDir], this.commandOptions));
     }
+    
   }
-  
+
   
 
   private async applyZFSConfig(_config: EasySetupConfig) {

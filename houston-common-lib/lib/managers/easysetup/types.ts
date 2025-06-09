@@ -27,6 +27,7 @@ export type ServerInfoConfig = {
   adminUser: string;
   adminPass: string;
   disableRootSSH: boolean;
+  newRootPass?: string;
   timezone?: string;
   setTimezone?: boolean;
   useNTP?: boolean;

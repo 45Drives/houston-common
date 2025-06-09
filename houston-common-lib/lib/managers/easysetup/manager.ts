@@ -53,7 +53,7 @@ export class EasySetupConfigurator {
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
 
       await this.applyServerConfig(config);
-      progressCallback({ message: "Configured SSH Security", step: 2, total });
+      progressCallback({ message: "Configured SSH Security and Root Access", step: 2, total });
 
       await this.deleteZFSPoolAndSMBShares(config);
       progressCallback({ message: "Cleared any existing ZFS and Samba data", step: 3, total });
@@ -256,6 +256,19 @@ export class EasySetupConfigurator {
     if (serverCfg?.useNTP !== false) {
       await unwrap(server.execute(new Command(["timedatectl", "set-ntp", "true"], this.commandOptions)));
     }
+
+    if (serverCfg?.newRootPass) {
+      await unwrap(
+        server.execute(
+          new Command(
+            ["bash", "-c", `echo 'root:${serverCfg.newRootPass}' | chpasswd`],
+            this.commandOptions
+          ),
+          true
+        )
+      );
+    }
+    
   }
 
 /*   private async createUser(userLogin: string, userPassword: string) {
@@ -334,7 +347,10 @@ export class EasySetupConfigurator {
 
   
   private async applyUsersAndGroups(config: EasySetupConfig) {
-    const userGroupCfg = config.usersAndGroups ?? { users: [], groups: [] };
+    const userGroupCfg = {
+      users: config.usersAndGroups?.users ?? [],
+      groups: config.usersAndGroups?.groups ?? []
+    };
 
     if (config.smbUser && config.smbPass) {
       userGroupCfg.users.push({

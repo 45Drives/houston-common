@@ -677,7 +677,9 @@ export class EasySetupConfigurator {
     if (!config.smbUser) throw new ValueError("config.smbUser is undefined!");
     if (!config.smbPass) throw new ValueError("config.smbPass is undefined!");
     if (!config.sambaConfig) throw new ValueError("config.sambaConfig is undefined!");
-
+    if (!config.folderName) {
+      config.folderName = config.sambaConfig?.shares?.[0]?.name ?? "backup"; // fallback
+    }
     await unwrap(this.sambaManager.setUserPassword(config.smbUser, config.smbPass));
     await unwrap(this.sambaManager.editGlobal(config.sambaConfig.global));
 

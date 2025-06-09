@@ -8,7 +8,28 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
     const configSavePath = `/etc/45drives/simple-setup-log.json`;
     const ipAddress = (await server.getIpAddress())._unsafeUnwrap();
 
-    const configuredShare = config.sambaConfig?.shares[0];
+    if (!config.sambaConfig) {
+        console.error("Missing sambaConfig");
+    }
+    if (!config.sambaConfig?.shares?.[0]) {
+        console.error("No shares found in sambaConfig");
+    }
+    if (!config.sambaConfig?.shares?.[0]!.name) {
+        console.error("First share has no name");
+    }
+    if (!config.srvrName) {
+        console.error("Missing srvrName");
+    }
+      
+    const configuredShare = config.sambaConfig?.shares?.find(s => s?.name && typeof s.name === 'string');
+    if (!configuredShare || !config.srvrName) {
+        console.error('❌ Cannot log setup: Missing share or server name.', {
+            shares: config.sambaConfig?.shares,
+            srvrName: config.srvrName
+        });
+        return;
+    }
+
     if (!configuredShare) {
         console.error('No configured share found to store.');
         return;

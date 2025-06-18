@@ -22,7 +22,7 @@ const state = defineWizardSteps(props.steps, createWizardInjectionKey(props.id))
 watch(
   () => state.completedSteps, // Watch only completedSteps
   (newCompletedSteps) => {
-    console.log(newCompletedSteps);
+    // console.log(newCompletedSteps);
 
     if (
       newCompletedSteps.value.filter((completed) => completed === true).length ===

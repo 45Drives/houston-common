@@ -14,10 +14,10 @@ const props = defineProps<{
 
 const emit = defineEmits(["goBack", "onComplete"]);
 
-console.log(props.id);
+// console.log(props.id);
 
 const state = defineWizardSteps(props.steps, createWizardInjectionKey(props.id));
-console.log("defined");
+// console.log("defined");
 
 watch(
   () => state.completedSteps, // Watch only completedSteps

@@ -33,6 +33,10 @@ export class IPCMessageRouterRenderer<
     });
   }
 
+  public async invoke<T = any>(channel: string, ...args: any[]): Promise<T> {
+    return await window.electron.ipcRenderer.invoke<T>(channel, ...args);
+  }
+
   setCockpitWebView(webviewElement: any) {
     this.webviewElement = webviewElement;
     this.webviewElement.addEventListener("console-message", (event: any) => {

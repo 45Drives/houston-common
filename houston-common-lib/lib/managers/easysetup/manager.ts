@@ -721,7 +721,7 @@ export class EasySetupConfigurator {
     easyConfigName: keyof typeof defaultConfigs
   ): Promise<EasySetupConfig | null> {
     console.log("loading config for:", easyConfigName);
-    console.log("list of defaultconfigs:", defaultConfigs);
+    // console.log("list of defaultconfigs:", defaultConfigs);
     const dc = defaultConfigs[easyConfigName];
     return SambaConfParser()
       .apply(dc.smbconf)

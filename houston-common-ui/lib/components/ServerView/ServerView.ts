@@ -745,7 +745,10 @@ export class ServerView extends THREE.EventDispatcher<
         console.log("is component slot:", componentSlot instanceof ServerComponentSlot);
       } else {
         console.log(this.componentSlots);
-        globalThis.reportHoustonError(new Error(`Drive slot not found: ${slot.slotId}`));
+        // globalThis.reportHoustonError(new Error(`Drive slot not found: ${slot.slotId}`));
+        (globalThis as {
+          reportHoustonError?: (err: Error | Error[], context?: string) => unknown;
+        }).reportHoustonError?.(new Error(`Drive slot not found: ${slot.slotId}`));
       }
     });
     const selected = this.getSelectedComponents();

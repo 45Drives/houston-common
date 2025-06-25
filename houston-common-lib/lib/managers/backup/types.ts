@@ -34,16 +34,9 @@ export const backupTaskTag = "houston-client-manager-backup-task"
 
 export interface FileEntry {
   path: string;
-  isDir: boolean;
-  selected?: boolean;
+  selected: boolean;
 }
 
-export interface FileNode extends FileEntry {
-  name: string;
-  depth: number;
-  expanded: boolean;
-  children?: FileNode[];
-}
 
 export interface BackupEntry {
   uuid: string

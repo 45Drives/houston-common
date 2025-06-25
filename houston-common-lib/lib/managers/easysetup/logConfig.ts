@@ -75,3 +75,66 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
     }
 }
 
+/**
+ * Patch global console so every console.* call is ALSO appended
+ * to `logPath` on the same host the app is configuring.
+ */
+export function patchConsoleToFile(
+    logPath = "/var/log/45drives/simple-setup.log"
+) {
+    const logFile = new File(server, logPath);
+
+    /** Serialise writes so they never overlap */
+    let queue: Promise<void> = Promise.resolve();
+
+    function append(line: string) {
+        queue = queue.then(async () => {
+            try {
+                // Make sure the log file exists once; ignore errors if it already does
+                const exists = await logFile.exists();
+                if (exists.isErr()) return; // can't do much
+
+                if (!exists.value) {
+                    await logFile.create(true);
+                }
+
+                const res = await logFile
+                    .write(line, { append: true, superuser: "try" });
+
+                if (res.isErr()) {
+                    // Surface but don't crash
+                    originalConsole.error("LOGGER-FS-ERROR:", res.error.message);
+                }
+            } catch (err) {
+                originalConsole.error("LOGGER-UNEXPECTED:", (err as Error).message);
+            }
+        });
+    }
+
+    /** Preserve originals so we can still print to DevTools/terminal */
+    const originalConsole = {
+        log: console.log.bind(console),
+        info: console.info.bind(console),
+        warn: console.warn.bind(console),
+        error: console.error.bind(console),
+        debug: console.debug.bind(console),
+    };
+
+    (["log", "info", "warn", "error", "debug"] as const).forEach((lvl) => {
+        console[lvl] = (...args: unknown[]) => {
+            // 1 ▸ echo to original console
+            (originalConsole as any)[lvl](...args);
+
+            // 2 ▸ build a text line and queue the append
+            const stamp = new Date().toISOString();
+            const line =
+                `[${stamp}] [${lvl.toUpperCase()}] ` +
+                args
+                    .map((a) => (typeof a === "string" ? a : JSON.stringify(a, null, 2)))
+                    .join(" ") +
+                "\n";
+
+            append(line);        // fire-and-forget
+        };
+    });
+  }

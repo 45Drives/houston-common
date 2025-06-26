@@ -23,7 +23,7 @@ import { storeEasySetupConfig } from './logConfig';
 import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
-import { AutomatedSnapshotTaskTemplate, TaskSchedule } from "@/scheduler";
+import { AutomatedSnapshotTaskTemplate, ScrubTaskTemplate, TaskSchedule } from "@/scheduler";
 
 
 export interface EasySetupProgress {
@@ -415,8 +415,15 @@ export class EasySetupConfigurator {
         backupZfsConfig!.datasetOptions
       );
       await this.clearReplicationTasks();
-      const tasks = await this.createReplicationTasks(storageZfsConfig!, backupZfsConfig!);
-      tasks.forEach(task => {
+      await this.clearScrubTasks();
+      const repTasks = await this.createReplicationTasks(storageZfsConfig!, backupZfsConfig!);
+      repTasks.forEach(task => {
+        console.log('new Task created:', task);
+        taskInstances.push(task);
+        myScheduler.registerTaskInstance(task);
+      });
+      const scrubTasks = await this.createScrubTasks(storageZfsConfig!, backupZfsConfig!)
+      scrubTasks.forEach(task => {
         console.log('new Task created:', task);
         taskInstances.push(task);
         myScheduler.registerTaskInstance(task);
@@ -424,8 +431,14 @@ export class EasySetupConfigurator {
     } else {
       await this.clearSnapshotTasks();
       await this.clearReplicationTasks();
-      const tasks = await this.createAutoSnapshotTasks(storageZfsConfig!);
-      tasks.forEach(task => {
+      const snapTasks = await this.createAutoSnapshotTasks(storageZfsConfig!);
+      snapTasks.forEach(task => {
+        console.log('new Task created:', task);
+        taskInstances.push(task);
+        myScheduler.registerTaskInstance(task);
+      });
+      const scrubTasks = await this.createScrubTasks(storageZfsConfig!)
+      scrubTasks.forEach(task => {
         console.log('new Task created:', task);
         taskInstances.push(task);
         myScheduler.registerTaskInstance(task);
@@ -464,6 +477,25 @@ export class EasySetupConfigurator {
       try {
         await scheduler.unregisterTaskInstance(task);
         console.log(`✅ Unregistered replication task: ${task.name}`);
+      } catch (error) {
+        console.error(`❌ Failed to unregister task ${task.name}:`, error);
+      }
+    }
+  }
+
+
+  private async clearScrubTasks() {
+    const scheduler = new Scheduler([new ScrubTaskTemplate()], []);
+    await scheduler.loadTaskInstances();
+
+    const scrubTasks = scheduler.taskInstances.filter(
+      task => task.template instanceof ScrubTaskTemplate
+    );
+
+    for (const task of scrubTasks) {
+      try {
+        await scheduler.unregisterTaskInstance(task);
+        console.log(`✅ Unregistered scrub task: ${task.name}`);
       } catch (error) {
         console.error(`❌ Failed to unregister task ${task.name}:`, error);
       }
@@ -669,6 +701,76 @@ export class EasySetupConfigurator {
 
     tasks.push(hourlyTask, dailyTask, weeklyTask);
     console.log('autoSnapshotTasks:', tasks);
+    return tasks;
+  }
+
+  private async createScrubTasks(zfsData: ZFSConfig, backupZfsData?: ZFSConfig) {
+    const tasks: TaskInstance[] = [];
+
+    const baseParams = (
+      taskName: string,
+      schedule: TaskSchedule,
+      notes: string
+    ): TaskInstance => {
+      const scrubParams = new ParameterNode('Scrub Task Config', 'scrubConfig')
+        .addChild(new ZfsDatasetParameter('Pool', 'pool', '', 0, '', zfsData.pool.name, `${zfsData.pool.name}`))
+
+      return new TaskInstance(
+        taskName,
+        new ScrubTaskTemplate(),
+        scrubParams,
+        schedule,
+        notes
+      );
+    };
+
+    // 📅 Weekly snapshots retained for 1 month (on Fridays at midnight)
+    const weeklySchedule = new TaskSchedule(true, [
+      new TaskScheduleInterval({
+        minute: { value: '0' },
+        hour: { value: '0' },
+        day: { value: '*' },
+        month: { value: '*' },
+        year: { value: '*' },
+        dayOfWeek: ['Fri'],
+      }),
+    ]);
+    const weeklyScrub = baseParams(
+      'WeeklyScrub',
+      weeklySchedule,
+      'Scrub storage pool weekly to ensure data integrity.'
+    );
+
+    tasks.push(weeklyScrub);
+
+    if (backupZfsData) {
+      const baseParams = (
+        taskName: string,
+        schedule: TaskSchedule,
+        notes: string
+      ): TaskInstance => {
+        const scrubParams = new ParameterNode('Scrub Task Config', 'scrubConfig')
+          .addChild(new ZfsDatasetParameter('Pool', 'pool', '', 0, '', backupZfsData.pool.name, `${backupZfsData.pool.name}`))
+
+        return new TaskInstance(
+          taskName,
+          new ScrubTaskTemplate(),
+          scrubParams,
+          schedule,
+          notes
+        );
+      };
+
+      const weeklyBackupScrub = baseParams(
+        'WeeklyScrub-Backup',
+        weeklySchedule,
+        'Scrub backup pool weekly to ensure data integrity.'
+      );
+
+      tasks.push(weeklyBackupScrub);
+    }
+
+    console.log('scrubtasks:', tasks);
     return tasks;
   }
   

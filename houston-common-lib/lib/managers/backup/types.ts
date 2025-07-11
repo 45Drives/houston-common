@@ -45,5 +45,6 @@ export interface BackupEntry {
   client: string
   lastBackup: string
   onSystem: boolean
-  files: FileEntry[]
+  files: FileEntry[],
+  mountPoint?: string
 }

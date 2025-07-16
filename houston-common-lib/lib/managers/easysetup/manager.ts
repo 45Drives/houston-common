@@ -816,9 +816,9 @@ export class EasySetupConfigurator {
         await this.setShareOwnershipAndPermissions(share.path, config.smbUser);
       }
     }
-
-    await unwrap(server.execute(new Command(["systemctl", "restart", "smbd"])));
-    await unwrap(server.execute(new Command(["systemctl", "enable", "smbd"])));
+    await unwrap(server.execute(new Command(["systemctl", "start", "smb"])));
+    await unwrap(server.execute(new Command(["systemctl", "restart", "smb"])));
+    await unwrap(server.execute(new Command(["systemctl", "enable", "smb"])));
   }
   
 

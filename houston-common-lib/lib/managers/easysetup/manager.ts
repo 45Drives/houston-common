@@ -99,26 +99,48 @@ export class EasySetupConfigurator {
     );
   }
 
-  private async setShareOwnershipAndPermissions(sharePath: string, adminUser: string) {
+  // private async setShareOwnershipAndPermissions(sharePath: string, adminUser: string) {
+  //   try {
+  //     console.log(`Setting ownership of ${sharePath} to ${adminUser}:smbusers...`);
+  //     await unwrap(
+  //       server.execute(
+  //         new Command(["chown", `${adminUser}:smbusers`, sharePath], this.commandOptions),
+  //         true
+  //       )
+  //     );
+
+  //     console.log(`Setting permissions for ${sharePath} to 2770 (group writable, others exec)...`);
+  //     await unwrap(
+  //       server.execute(
+  //         new Command(["chmod", "2770", sharePath], this.commandOptions),
+  //         true
+  //       )
+  //     );
+  //     await unwrap(
+  //       server.execute(
+  //         new Command(["chmod", "g+s", sharePath], this.commandOptions),
+  //         true
+  //       )
+  //     );
+  //   } catch (error) {
+  //     console.error(`Error setting ownership and permissions for ${sharePath}:`, error);
+  //   }
+  // }
+
+  private async setShareOwnershipAndPermissions(sharePath: string, smbUser: string) {
     try {
-      console.log(`Setting ownership of ${sharePath} to ${adminUser}:smbusers...`);
+      console.log(` Setting ownership of ${sharePath} to ${smbUser}:smbusers...`);
       await unwrap(
         server.execute(
-          new Command(["chown", `${adminUser}:smbusers`, sharePath], this.commandOptions),
+          new Command(["chown", `${smbUser}:smbusers`, sharePath], this.commandOptions),
           true
         )
       );
 
-      console.log(`Setting permissions for ${sharePath} to 2770 (group writable, others exec)...`);
+      console.log(`Setting permissions for ${sharePath} to 775...`);
       await unwrap(
         server.execute(
-          new Command(["chmod", "2770", sharePath], this.commandOptions),
-          true
-        )
-      );
-      await unwrap(
-        server.execute(
-          new Command(["chmod", "g+s", sharePath], this.commandOptions),
+          new Command(["chmod", "775", sharePath], this.commandOptions),
           true
         )
       );
@@ -126,7 +148,6 @@ export class EasySetupConfigurator {
       console.error(`Error setting ownership and permissions for ${sharePath}:`, error);
     }
   }
-
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
     if (!config.zfsConfigs) return;

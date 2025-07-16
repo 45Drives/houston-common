@@ -109,10 +109,16 @@ export class EasySetupConfigurator {
         )
       );
 
-      console.log(`Setting permissions for ${sharePath} to 0771 (group writable, others exec)...`);
+      console.log(`Setting permissions for ${sharePath} to 2770 (group writable, others exec)...`);
       await unwrap(
         server.execute(
-          new Command(["chmod", "0771", sharePath], this.commandOptions),
+          new Command(["chmod", "2770", sharePath], this.commandOptions),
+          true
+        )
+      );
+      await unwrap(
+        server.execute(
+          new Command(["chmod", "g+s", sharePath], this.commandOptions),
           true
         )
       );

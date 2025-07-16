@@ -99,20 +99,20 @@ export class EasySetupConfigurator {
     );
   }
 
-  private async setShareOwnershipAndPermissions(sharePath: string, smbUser: string) {
+  private async setShareOwnershipAndPermissions(sharePath: string, adminUser: string) {
     try {
-      console.log(` Setting ownership of ${sharePath} to ${smbUser}:smbusers...`);
+      console.log(`Setting ownership of ${sharePath} to ${adminUser}:smbusers...`);
       await unwrap(
         server.execute(
-          new Command(["chown", `${smbUser}:smbusers`, sharePath], this.commandOptions),
+          new Command(["chown", `${adminUser}:smbusers`, sharePath], this.commandOptions),
           true
         )
       );
 
-      console.log(`Setting permissions for ${sharePath} to 775...`);
+      console.log(`Setting permissions for ${sharePath} to 0771 (group writable, others exec)...`);
       await unwrap(
         server.execute(
-          new Command(["chmod", "775", sharePath], this.commandOptions),
+          new Command(["chmod", "0771", sharePath], this.commandOptions),
           true
         )
       );
@@ -120,6 +120,7 @@ export class EasySetupConfigurator {
       console.error(`Error setting ownership and permissions for ${sharePath}:`, error);
     }
   }
+
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
     if (!config.zfsConfigs) return;
@@ -270,24 +271,6 @@ export class EasySetupConfigurator {
     }
     
   }
-
-/*   private async createUser(userLogin: string, userPassword: string) {
-    if (!userLogin || !userPassword) {
-      throw new Error("user and password not provided");
-    }
-
-    server
-      .getUserByLogin(userLogin)
-      .orElse(() => server.addUser({ login: userLogin }))
-        .andThen((user) =>
-          server
-            .getGroupByName("users")
-            .orElse(() => server.createGroup("users"))
-            .map(() => user)
-        )
-        .andThen((user) => server.addUserToGroups(user, "wheel", "users"))
-        .andThen((user) => server.changePassword(user, userPassword));
-  } */
 
   private createUsersAndPasswords(users: { username: string; password: string }[]) {
     users.forEach(({ username, password }, index) => {
@@ -813,7 +796,10 @@ export class EasySetupConfigurator {
           share.path = sharePath;
         }
         await unwrap(this.sambaManager.addShare(share));
-        await this.setShareOwnershipAndPermissions(share.path, config.smbUser);
+        // await this.setShareOwnershipAndPermissions(share.path, config.smbUser);
+        const adminUser = config.usersAndGroups?.users?.[0]?.username || config.smbUser;
+        await this.setShareOwnershipAndPermissions(share.path, adminUser);
+
       }
     }
     await unwrap(server.execute(new Command(["systemctl", "start", "smb"])));

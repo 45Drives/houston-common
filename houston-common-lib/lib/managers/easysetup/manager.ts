@@ -99,34 +99,6 @@ export class EasySetupConfigurator {
     );
   }
 
-  // private async setShareOwnershipAndPermissions(sharePath: string, adminUser: string) {
-  //   try {
-  //     console.log(`Setting ownership of ${sharePath} to ${adminUser}:smbusers...`);
-  //     await unwrap(
-  //       server.execute(
-  //         new Command(["chown", `${adminUser}:smbusers`, sharePath], this.commandOptions),
-  //         true
-  //       )
-  //     );
-
-  //     console.log(`Setting permissions for ${sharePath} to 2770 (group writable, others exec)...`);
-  //     await unwrap(
-  //       server.execute(
-  //         new Command(["chmod", "2770", sharePath], this.commandOptions),
-  //         true
-  //       )
-  //     );
-  //     await unwrap(
-  //       server.execute(
-  //         new Command(["chmod", "g+s", sharePath], this.commandOptions),
-  //         true
-  //       )
-  //     );
-  //   } catch (error) {
-  //     console.error(`Error setting ownership and permissions for ${sharePath}:`, error);
-  //   }
-  // }
-
   private async setShareOwnershipAndPermissions(sharePath: string, smbUser: string) {
     try {
       console.log(` Setting ownership of ${sharePath} to ${smbUser}:smbusers...`);
@@ -299,61 +271,156 @@ export class EasySetupConfigurator {
     
   }
 
-  private createUsersAndPasswords(users: { username: string; password: string }[]) {
-    users.forEach(({ username, password }, index) => {
-      const isAdmin = index === 0;
+  // private createUsersAndPasswords(users: { username: string; password: string }[]) {
+  //   users.forEach(({ username, password }, index) => {
+  //     const isAdmin = index === 0;
 
-      server
-        .getUserByLogin(username)
-        .orElse(() => server.addUser({ login: username }))
-        .andThen((user) =>
-          server
-            .getGroupByName("smbusers")
-            .orElse(() => server.createGroup("smbusers"))
-            .map(() => user)
-        )
-        .andThen((user) => {
-          if (isAdmin) {
-            return server.addUserToGroups(user, "wheel", "smbusers");
-          } else {
-            return server.addUserToGroups(user, "smbusers");
-          }
-        })
-        .andThen((user) => server.changePassword(user, password));
-    });
-  }
-  
-  
-  private createGroupsAndAddMembers(groups: { name: string; members?: string[] }[]) {
-    for (const { name, members = [] } of groups) {
-      server
-        .getGroupByName(name)
-        .orElse(() => server.createGroup(name));
+  //     server
+  //       .getUserByLogin(username)
+  //       .orElse(() => server.addUser({ login: username }))
+  //       .andThen((user) =>
+  //         server
+  //           .getGroupByName("smbusers")
+  //           .orElse(() => server.createGroup("smbusers"))
+  //           .map(() => user)
+  //       )
+  //       .andThen((user) => {
+  //         if (isAdmin) {
+  //           return server.addUserToGroups(user, "wheel", "smbusers");
+  //         } else {
+  //           return server.addUserToGroups(user, "smbusers");
+  //         }
+  //       })
+  //       .andThen((user) => server.changePassword(user, password));
+  //   });
+  // }
+  private async createUsersAndPasswords(users: { username: string; password: string }[]) {
+    for (const { username, password } of users) {
+      const isAdmin = (username === users[0]!.username);
 
-      for (const member of members) {
-        server
-          .getUserByLogin(member)
-          .andThen((user) => server.addUserToGroups(user, name));
+      // Check if user exists, else add
+      let userResult = await server.getUserByLogin(username);
+      if (userResult.isErr()) {
+        userResult = await server.addUser({ login: username });
+        if (userResult.isErr()) {
+          console.error(`Failed to add user ${username}:`, userResult.error);
+          continue;
+        }
+      }
+
+      const user = userResult.value;
+
+      // Ensure smbusers group exists
+      const groupResult = await server.getGroupByName("smbusers");
+      if (groupResult.isErr()) {
+        const createGroupResult = await server.createGroup("smbusers");
+        if (createGroupResult.isErr()) {
+          console.error("Failed to create 'smbusers' group:", createGroupResult.error);
+          continue;
+        }
+      }
+
+      // Add user to groups
+      const addGroupsResult = isAdmin
+        ? await server.addUserToGroups(user, "wheel", "smbusers")
+        : await server.addUserToGroups(user, "smbusers");
+
+      if (addGroupsResult.isErr()) {
+        console.error(`Failed to add ${username} to groups:`, addGroupsResult.error);
+        continue;
+      }
+
+      // Set password
+      const passResult = await server.changePassword(user, password);
+      if (passResult.isErr()) {
+        console.error(`Failed to set password for ${username}:`, passResult.error);
       }
     }
   }
+
   
   
-  private assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
-    for (const { username, groups } of users) {
-      server
-        .getUserByLogin(username)
-        .map((user) => {
-          for (const groupName of groups) {
-            server
-              .getGroupByName(groupName)
-              .orElse(() => server.createGroup(groupName))
-              .map(() => user)
-              .andThen((u) => server.addUserToGroups(u, groupName));
+  // private createGroupsAndAddMembers(groups: { name: string; members?: string[] }[]) {
+  //   for (const { name, members = [] } of groups) {
+  //     server
+  //       .getGroupByName(name)
+  //       .orElse(() => server.createGroup(name));
+
+  //     for (const member of members) {
+  //       server
+  //         .getUserByLogin(member)
+  //         .andThen((user) => server.addUserToGroups(user, name));
+  //     }
+  //   }
+  // }
+  private async createGroupsAndAddMembers(groups: { name: string; members?: string[] }[]) {
+    for (const { name, members = [] } of groups) {
+      let groupRes = await server.getGroupByName(name);
+      if (groupRes.isErr()) {
+        const createRes = await server.createGroup(name);
+        if (createRes.isErr()) {
+          console.error(`Failed to create group '${name}':`, createRes.error);
+          continue;
+        }
+      }
+
+      for (const member of members) {
+        const userRes = await server.getUserByLogin(member);
+        if (userRes.isOk()) {
+          const addRes = await server.addUserToGroups(userRes.value, name);
+          if (addRes.isErr()) {
+            console.error(`Failed to add user '${member}' to group '${name}':`, addRes.error);
           }
-        });
+        } else {
+          console.error(`User '${member}' not found to add to group '${name}'`);
+        }
+      }
     }
   }
+
+  
+  
+  // private assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
+  //   for (const { username, groups } of users) {
+  //     server
+  //       .getUserByLogin(username)
+  //       .map((user) => {
+  //         for (const groupName of groups) {
+  //           server
+  //             .getGroupByName(groupName)
+  //             .orElse(() => server.createGroup(groupName))
+  //             .map(() => user)
+  //             .andThen((u) => server.addUserToGroups(u, groupName));
+  //         }
+  //       });
+  //   }
+  // }
+  private async assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
+    for (const { username, groups } of users) {
+      const userRes = await server.getUserByLogin(username);
+      if (userRes.isErr()) {
+        console.error(`User '${username}' not found for group assignment`);
+        continue;
+      }
+
+      for (const groupName of groups) {
+        let groupRes = await server.getGroupByName(groupName);
+        if (groupRes.isErr()) {
+          const createRes = await server.createGroup(groupName);
+          if (createRes.isErr()) {
+            console.error(`Failed to create group '${groupName}':`, createRes.error);
+            continue;
+          }
+        }
+
+        const addRes = await server.addUserToGroups(userRes.value, groupName);
+        if (addRes.isErr()) {
+          console.error(`Failed to add user '${username}' to group '${groupName}':`, addRes.error);
+        }
+      }
+    }
+  }
+
 
   
   private async applyUsersAndGroups(config: EasySetupConfig) {
@@ -379,9 +446,9 @@ export class EasySetupConfigurator {
       }
     }
 
-    this.createUsersAndPasswords(userGroupCfg.users);
-    this.createGroupsAndAddMembers(userGroupCfg.groups ?? []);
-    this.assignGroupsToUsers(userGroupCfg.users);
+    await this.createUsersAndPasswords(userGroupCfg.users);
+    await this.createGroupsAndAddMembers(userGroupCfg.groups ?? []);
+    await this.assignGroupsToUsers(userGroupCfg.users);
 
     for (const user of userGroupCfg.users) {
       if (!user.sshKey || !/^(ssh-(rsa|ed25519)|ecdsa)-/.test(user.sshKey)) continue;

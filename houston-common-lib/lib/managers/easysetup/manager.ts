@@ -447,7 +447,7 @@ export class EasySetupConfigurator {
     }
 
     await this.createUsersAndPasswords(userGroupCfg.users);
-    await this.createGroupsAndAddMembers(userGroupCfg.groups ?? []);
+    await this.createGroupsAndAddMembers(userGroupCfg.groups ?? ["smbusers"]);
     await this.assignGroupsToUsers(userGroupCfg.users);
 
     for (const user of userGroupCfg.users) {

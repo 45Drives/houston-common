@@ -271,6 +271,59 @@ export class EasySetupConfigurator {
     
   }
 
+  private async createUsersAndPasswordsEnsuringSMBGroup(users: { username: string; password: string; groups?: string[] }[]) {
+    // Ensure 'smbusers' exists
+    const smbGroupCheck = await server.getGroupByName("smbusers");
+    if (smbGroupCheck.isErr()) {
+      const createRes = await server.createGroup("smbusers");
+      if (createRes.isErr()) {
+        console.error("Failed to create smbusers group:", createRes.error);
+        return;
+      }
+    }
+
+    for (const { username, password, groups = [] } of users) {
+      let userResult = await server.getUserByLogin(username);
+      if (userResult.isErr()) {
+        userResult = await server.addUser({ login: username });
+        if (userResult.isErr()) {
+          console.error(`Failed to add user ${username}:`, userResult.error);
+          continue;
+        }
+      }
+
+      const user = userResult.value;
+
+      // Always add to smbusers
+      await server.addUserToGroups(user, "smbusers");
+
+      // Add to other groups
+      for (const group of groups) {
+        if (group === "smbusers") continue;
+        const groupCheck = await server.getGroupByName(group);
+        if (groupCheck.isErr()) {
+          const createRes = await server.createGroup(group);
+          if (createRes.isErr()) {
+            console.error(`Failed to create group '${group}':`, createRes.error);
+            continue;
+          }
+        }
+        const addRes = await server.addUserToGroups(user, group);
+        if (addRes.isErr()) {
+          console.error(`Failed to add ${username} to group '${group}':`, addRes.error);
+        }
+      }
+
+      // Set password
+      const passResult = await server.changePassword(user, password);
+      if (passResult.isErr()) {
+        console.error(`Failed to set password for ${username}:`, passResult.error);
+      }
+    }
+  }
+
+
+
   // private createUsersAndPasswords(users: { username: string; password: string }[]) {
   //   users.forEach(({ username, password }, index) => {
   //     const isAdmin = index === 0;
@@ -294,7 +347,8 @@ export class EasySetupConfigurator {
   //       .andThen((user) => server.changePassword(user, password));
   //   });
   // }
-  private async createUsersAndPasswords(users: { username: string; password: string; groups?: string[] }[]) {
+
+  /* private async createUsersAndPasswords(users: { username: string; password: string; groups?: string[] }[]) {
     for (const { username, password, groups = [] } of users) {
       // Check if user exists, else add
       let userResult = await server.getUserByLogin(username);
@@ -331,7 +385,7 @@ export class EasySetupConfigurator {
         console.error(`Failed to set password for ${username}:`, passResult.error);
       }
     }
-  }
+  } */
 
   
   
@@ -390,7 +444,7 @@ export class EasySetupConfigurator {
   //       });
   //   }
   // }
-  private async assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
+ /*  private async assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
     for (const { username, groups } of users) {
       const userRes = await server.getUserByLogin(username);
       if (userRes.isErr()) {
@@ -415,7 +469,38 @@ export class EasySetupConfigurator {
       }
     }
   }
+ */
+  private async assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
+    for (const { username, groups } of users) {
+      const userRes = await server.getUserByLogin(username);
+      if (userRes.isErr()) {
+        console.error(`User '${username}' not found for group assignment`);
+        continue;
+      }
 
+      const user = userRes.value;
+
+      // Always add to smbusers first
+      await server.addUserToGroups(user, "smbusers");
+
+      for (const groupName of groups) {
+        if (groupName === "smbusers") continue; // already added
+        let groupRes = await server.getGroupByName(groupName);
+        if (groupRes.isErr()) {
+          const createRes = await server.createGroup(groupName);
+          if (createRes.isErr()) {
+            console.error(`Failed to create group '${groupName}':`, createRes.error);
+            continue;
+          }
+        }
+
+        const addRes = await server.addUserToGroups(user, groupName);
+        if (addRes.isErr()) {
+          console.error(`Failed to add user '${username}' to group '${groupName}':`, addRes.error);
+        }
+      }
+    }
+  }
 
   
   private async applyUsersAndGroups(config: EasySetupConfig) {
@@ -454,7 +539,8 @@ export class EasySetupConfigurator {
       }
     }
 
-    await this.createUsersAndPasswords(userGroupCfg.users);
+    // await this.createUsersAndPasswords(userGroupCfg.users);
+    await this.createUsersAndPasswordsEnsuringSMBGroup(userGroupCfg.users);
     await this.createGroupsAndAddMembers(userGroupCfg.groups ?? []);
     await this.assignGroupsToUsers(userGroupCfg.users);
 

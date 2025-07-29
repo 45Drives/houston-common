@@ -4,25 +4,28 @@
             @mouseenter="() => { toggleCommander(); cancelHideTimeout(); }" @mouseleave="startHideTimeout" />
 
         <teleport to="body">
-            <div v-if="showCommander" ref="popupRef" class="absolute"
+            <div v-if="showCommander" ref="popupRef" class="absolute pointer-events-auto"
                 :style="{ top: commanderPosition.top, left: commanderPosition.left }" @mouseenter="cancelHideTimeout"
                 @mouseleave="startHideTimeout">
                 <CommanderPopup :message="message" :visible="showCommander" @close="showCommander = false"
                     :position="commanderPosition" :arrowOffset="commanderPosition.arrowOffset"
-                    :placement="commanderPosition.placement" :width="width" />
+                    :placement="props.placement!" :width="width" :arrowRef="arrowRef" />
             </div>
         </teleport>
     </span>
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onUnmounted } from "vue";
+import { ref, nextTick, onMounted, onUnmounted, type Ref } from "vue";
 import { InformationCircleIcon } from "@heroicons/vue/20/solid";
+import { computePosition, offset, flip, shift, arrow, type Placement } from '@floating-ui/dom';
 import CommanderPopup from "./CommanderPopup.vue";
 
 interface CommanderToolTipProps {
     message: string;
     width?: number;
+    placement?: 'top' | 'bottom';
+    strictPlacement?: boolean;
 }
 
 const props = defineProps<CommanderToolTipProps>();
@@ -34,9 +37,11 @@ const commanderPosition = ref({
     top: "0px",
     left: "0px",
     arrowOffset: 0,
-    placement: 'bottom' as 'top' | 'bottom'
+    placement: (props.placement ?? 'top') as Placement,
 });
 
+const arrowRef = ref<HTMLElement | null>(null);
+const strictPlacement = props.strictPlacement ?? false;
 
 const closePopup = () => {
     if (!isHovering.value) {
@@ -72,44 +77,40 @@ const toggleCommander = async () => {
     showCommander.value = true;
 
     await nextTick();
+    arrowRef.value = popupRef.value?.querySelector('[data-arrow]') as HTMLElement;
 
-    if (triggerRef.value) {
-        const rect = triggerRef.value.getBoundingClientRect();
-        const offset = 10;
-        const popupWidth = width;
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
+    if (!triggerRef.value || !popupRef.value) return;
 
-        const triggerCenterX = rect.left + rect.width / 2;
-        let left = triggerCenterX - popupWidth / 2;
-        left = Math.max(10, left);
-        if (left + popupWidth > viewportWidth - 10) {
-            left = viewportWidth - 10 - popupWidth;
+    const resolvedPlacement = (props.placement ?? 'bottom') as Placement;
+
+    const { x, y, placement: computedPlacement, middlewareData } = await computePosition(
+        triggerRef.value,
+        popupRef.value,
+        {
+            strategy: 'fixed',
+            // placement: resolvedPlacement,
+            placement: props.placement ?? 'bottom',
+            middleware: [
+                offset(10),
+                // strictPlacement ? undefined : flip({ fallbackPlacements: ['top', 'bottom'] }),
+                !strictPlacement ? flip({ fallbackPlacements: ['top', 'bottom'] }) : undefined,
+                shift({ padding: 10 }),
+                arrow({ element: arrowRef.value! }),
+            ].filter(Boolean),
         }
+    );
 
-        let placement: 'top' | 'bottom' = 'bottom';
-        let top = rect.bottom + window.scrollY + offset;
-        if (top + 200 > viewportHeight) {
-            placement = 'top';
-            top = rect.top + window.scrollY - 200 - offset;
-            if (top < 10) {
-                placement = 'bottom';
-                top = rect.bottom + window.scrollY + offset;
-            }
-        }
+    const arrowX = middlewareData.arrow?.x ?? 0;
 
-        const rawArrowOffset = triggerCenterX - left;
-        const ARROW_MARGIN = 12;
-        const maxOffset = popupWidth - ARROW_MARGIN;
-        const clampedOffset = Math.min(Math.max(rawArrowOffset, ARROW_MARGIN), maxOffset);
+    commanderPosition.value = {
+        top: `${y}px`,
+        left: `${x}px`,
+        arrowOffset: arrowX,
+        // ✅ If strict, force the original placement you passed in:
+        placement: strictPlacement ? resolvedPlacement : (computedPlacement as 'top' | 'bottom'),
+    };
 
-        commanderPosition.value = {
-            top: `${Math.max(10, top)}px`,
-            left: `${Math.max(10, left)}px`,
-            arrowOffset: clampedOffset,
-            placement
-        };
-    }
+    console.log('Requested:', resolvedPlacement, '→ Final:', computedPlacement);
 };
 
 onMounted(() => {

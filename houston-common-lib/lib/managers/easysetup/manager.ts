@@ -95,7 +95,7 @@ export class EasySetupConfigurator {
       if (config.splitPools) {
         progressCallback({ message: "Scheduled Active Backup tasks", step: 10, total });
       } else {
-        progressCallback({ message: "Scheduled Snapshot tasks", step: 9, total });
+        progressCallback({ message: "Scheduled Snapshot tasks", step: 10, total });
       }
 
       await storeEasySetupConfig(config);

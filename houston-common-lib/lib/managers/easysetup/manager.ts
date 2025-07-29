@@ -25,6 +25,16 @@ import * as defaultConfigs from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
 import { AutomatedSnapshotTaskTemplate, ScrubTaskTemplate, TaskSchedule } from "@/scheduler";
 
+import { exec } from "child_process";
+import * as fs from "fs";
+
+// List of required Samba ports
+const sambaPorts = [
+  { port: 137, protocol: "udp" },
+  { port: 138, protocol: "udp" },
+  { port: 139, protocol: "tcp" },
+  { port: 445, protocol: "tcp" },
+];
 
 export interface EasySetupProgress {
   message: string;
@@ -70,12 +80,24 @@ export class EasySetupConfigurator {
       await this.applySambaConfig(config);
       progressCallback({ message: "Configured Storage Sharing", step: 7, total });
 
-      if (config.splitPools) {
-        progressCallback({ message: "Scheduled Active Backup tasks", step: 8, total });
+      await this.applyOpenSambaPorts();
+      progressCallback({ message: "Opening Samba Port", step: 8, total });
+
+      const version = await this.getNodeVersion();
+      if (version?.startsWith("18.")) {
+        console.log(`✅ Node.js v${version} is already in use.`);
       } else {
-        progressCallback({ message: "Scheduled Snapshot tasks", step: 8, total });
+        console.log(`ℹ️ Current Node.js version: ${version ?? "Not installed"}`);
+        await this.ensureNode18();
       }
+      progressCallback({ message: `Ensure node version is 18`, step: 9, total });
       
+      if (config.splitPools) {
+        progressCallback({ message: "Scheduled Active Backup tasks", step: 10, total });
+      } else {
+        progressCallback({ message: "Scheduled Snapshot tasks", step: 9, total });
+      }
+
       await storeEasySetupConfig(config);
 
     } catch (error: any) {
@@ -83,6 +105,111 @@ export class EasySetupConfigurator {
       progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });
     }
 
+  }
+
+  // Run a shell command and return a Promise
+  private runCommand(cmd: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      exec(cmd, (err, stdout, stderr) => {
+        if (err) {
+          console.error(`Error: ${stderr}`);
+          reject(stderr.trim());
+        } else {
+          console.log(stdout.trim());
+          resolve(stdout.trim());
+        }
+      });
+    });
+  }
+
+  // Detect the Linux distro
+  private getLinuxDistro(): "rocky" | "ubuntu" | "unknown" {
+    try {
+      const osRelease = fs.readFileSync("/etc/os-release", "utf-8");
+      if (/rocky/i.test(osRelease)) return "rocky";
+      if (/ubuntu/i.test(osRelease)) return "ubuntu";
+    } catch {
+      // fall through
+    }
+    return "unknown";
+  }
+
+  // Apply firewall rules
+  private async applyOpenSambaPorts() {
+    const distro = this.getLinuxDistro();
+    console.log(`Detected distro: ${distro}`);
+
+    if (distro === "rocky") {
+      for (const { port, protocol } of sambaPorts) {
+        await this.runCommand(`sudo firewall-cmd --permanent --add-port=${port}/${protocol}`);
+      }
+      await this.runCommand("sudo firewall-cmd --reload");
+      console.log("✅ Samba ports opened using firewalld (Rocky).");
+    } else if (distro === "ubuntu") {
+      const allowCmds = [
+        "sudo ufw allow 137/udp",
+        "sudo ufw allow 138/udp",
+        "sudo ufw allow 139/tcp",
+        "sudo ufw allow 445/tcp",
+      ];
+
+      for (const cmd of allowCmds) {
+        await this.runCommand(cmd);
+      }
+      await this.runCommand("sudo ufw reload");
+      console.log("✅ Samba ports opened using ufw (Ubuntu).");
+    } else {
+      console.warn("⚠️ Unsupported Linux distribution. Please configure the firewall manually.");
+    }
+  }
+
+  // Check current Node.js version
+  private async getNodeVersion(): Promise<string | null> {
+    try {
+      const output = await this.runCommand("node -v");
+      return output.replace(/^v/, "");
+    } catch {
+      return null;
+    }
+  }
+
+  // Ensure NVM is installed
+  private async ensureNvmInstalled(): Promise<void> {
+    try {
+      await this.runCommand("command -v nvm");
+    } catch {
+      console.log("📥 Installing NVM...");
+      await this.runCommand("curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash");
+      console.log("✅ NVM installed. Reloading shell...");
+    }
+  }
+
+  // Load NVM into the current shell
+  private loadNvm() {
+    return `
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+  `;
+  }
+
+  // Ensure Node.js v18 is installed and set as default
+  private async ensureNode18() {
+    await this.ensureNvmInstalled();
+
+    const shellLoadNvm = this.loadNvm();
+
+    // Install Node 18 if not present
+    try {
+      await this.runCommand(`${shellLoadNvm} && nvm ls 18`);
+      console.log("✅ Node 18 is already installed.");
+    } catch {
+      console.log("📥 Installing Node.js v18...");
+      await this.runCommand(`${shellLoadNvm} && nvm install 18`);
+    }
+
+    // Set Node 18 as default
+    await this.runCommand(`${shellLoadNvm} && nvm alias default 18`);
+    console.log("✅ Node.js v18 set as default.");
   }
 
   private async updateHostname(config: EasySetupConfig) {
@@ -131,6 +258,7 @@ export class EasySetupConfigurator {
     const backupPoolName = backupZfsConfig!.pool.name;
 
     const allShares = await this.sambaManager.getShares().unwrapOr(undefined);
+    console.log(allShares)
     if (allShares) {
       for (let share of allShares) {
         if (share.path.startsWith(`/${storagePoolName}`)) {
@@ -159,14 +287,14 @@ export class EasySetupConfigurator {
     const result = await server.execute(
       new Command(["zpool", "list", "-H", "-o", "name", `${poolName}`], this.commandOptions)
     ).unwrapOr(null);
-  
+
     const output = result?.stdout;
     if (!output) return false;
-  
+
     const decoded = new TextDecoder().decode(output); // ← converts Uint8Array to string
     return decoded.includes(poolName);
   }
-  
+
 
   private async isMountPoint(path: string): Promise<boolean> {
     const result = await server.execute(
@@ -216,7 +344,7 @@ export class EasySetupConfigurator {
       console.warn(`Failed to clean up pool dir ${poolPath}:`, e);
     }
   }
-  
+
   private async tryDestroyPoolWithRetries(poolName: string, maxRetries = 3, delayMs = 1000) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -268,7 +396,7 @@ export class EasySetupConfigurator {
         )
       );
     }
-    
+
   }
 
   private async createUsersAndPasswordsEnsuringSMBGroup(users: { username: string; password: string; groups?: string[] }[]) {
@@ -387,8 +515,8 @@ export class EasySetupConfigurator {
     }
   } */
 
-  
-  
+
+
   // private createGroupsAndAddMembers(groups: { name: string; members?: string[] }[]) {
   //   for (const { name, members = [] } of groups) {
   //     server
@@ -427,8 +555,8 @@ export class EasySetupConfigurator {
     }
   }
 
-  
-  
+
+
   // private assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
   //   for (const { username, groups } of users) {
   //     server
@@ -444,32 +572,32 @@ export class EasySetupConfigurator {
   //       });
   //   }
   // }
- /*  private async assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
-    for (const { username, groups } of users) {
-      const userRes = await server.getUserByLogin(username);
-      if (userRes.isErr()) {
-        console.error(`User '${username}' not found for group assignment`);
-        continue;
-      }
-
-      for (const groupName of groups) {
-        let groupRes = await server.getGroupByName(groupName);
-        if (groupRes.isErr()) {
-          const createRes = await server.createGroup(groupName);
-          if (createRes.isErr()) {
-            console.error(`Failed to create group '${groupName}':`, createRes.error);
-            continue;
-          }
-        }
-
-        const addRes = await server.addUserToGroups(userRes.value, groupName);
-        if (addRes.isErr()) {
-          console.error(`Failed to add user '${username}' to group '${groupName}':`, addRes.error);
-        }
-      }
-    }
-  }
- */
+  /*  private async assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
+     for (const { username, groups } of users) {
+       const userRes = await server.getUserByLogin(username);
+       if (userRes.isErr()) {
+         console.error(`User '${username}' not found for group assignment`);
+         continue;
+       }
+ 
+       for (const groupName of groups) {
+         let groupRes = await server.getGroupByName(groupName);
+         if (groupRes.isErr()) {
+           const createRes = await server.createGroup(groupName);
+           if (createRes.isErr()) {
+             console.error(`Failed to create group '${groupName}':`, createRes.error);
+             continue;
+           }
+         }
+ 
+         const addRes = await server.addUserToGroups(userRes.value, groupName);
+         if (addRes.isErr()) {
+           console.error(`Failed to add user '${username}' to group '${groupName}':`, addRes.error);
+         }
+       }
+     }
+   }
+  */
   private async assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
     for (const { username, groups } of users) {
       const userRes = await server.getUserByLogin(username);
@@ -502,9 +630,9 @@ export class EasySetupConfigurator {
     }
   }
 
-  
+
   private async applyUsersAndGroups(config: EasySetupConfig) {
-    
+
     const userGroupCfg = {
       users: config.usersAndGroups?.users ?? [],
       groups: config.usersAndGroups?.groups ?? []
@@ -557,10 +685,10 @@ export class EasySetupConfigurator {
       server.execute(new Command(["chmod", "600", authFile], this.commandOptions));
       server.execute(new Command(["chown", "-R", `${user.username}:${user.username}`, sshDir], this.commandOptions));
     }
-    
+
   }
 
-  
+
 
   private async applyZFSConfig(_config: EasySetupConfig) {
     let storageZfsConfig = _config!.zfsConfigs![0];
@@ -791,7 +919,7 @@ export class EasySetupConfigurator {
   private async createAutoSnapshotTasks(zfsData: ZFSConfig): Promise<TaskInstance[]> {
     //  .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
     const tasks: TaskInstance[] = [];
-    
+
     const baseParams = (
       retentionValue: number,
       retentionUnit: 'days' | 'weeks' | 'months',
@@ -944,7 +1072,7 @@ export class EasySetupConfigurator {
     console.log('scrubtasks:', tasks);
     return tasks;
   }
-  
+
 
   private async applySambaConfig(config: EasySetupConfig) {
     if (!config.smbUser) throw new ValueError("config.smbUser is undefined!");
@@ -994,7 +1122,7 @@ export class EasySetupConfigurator {
     await unwrap(server.execute(new Command(["systemctl", "restart", "smb"])));
     await unwrap(server.execute(new Command(["systemctl", "enable", "smb"])));
   }
-  
+
 
   static async loadConfig(
     easyConfigName: keyof typeof defaultConfigs

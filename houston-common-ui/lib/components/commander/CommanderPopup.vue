@@ -4,13 +4,14 @@
             <div v-if="props.visible" id="commander-popup"
                 class="z-50 absolute flex items-start text-left bg-slate-800/95 text-white p-6 min-h-[100px] rounded-md shadow-lg user-select-none"
                 :style="{ width: props.width + 'px', top: props.position.top, left: props.position.left }">
-                <div class="absolute w-0 h-0 border-l-[12px] border-r-[12px] border-transparent" :class="{
-                    'border-b-[12px] border-b-slate-800/95 -top-[12px]': props.placement === 'bottom',
-                    'border-t-[12px] border-t-slate-800/95 -bottom-[12px]': props.placement === 'top'
-                }" :style="{
-                left: `${props.arrowOffset}px`,
-                transform: 'translateX(-50%)'
-            }" />
+                <div ref="arrowEl" data-arrow
+                    class="absolute w-0 h-0 border-l-[12px] border-r-[12px] border-transparent" :class="{
+                        'border-b-[12px] border-b-slate-800/95 -top-[12px]': props.placement === 'bottom',
+                        'border-t-[12px] border-t-slate-800/95 -bottom-[12px]': props.placement === 'top'
+                    }" :style="{
+                    left: `${props.arrowOffset}px`,
+                    transform: 'translateX(-50%)'
+                    }" />
 
                 <img :src="houstonPortrait" alt="Houston Portrait"
                     class="w-24 h-24 mr-4 rounded-lg object-cover flex-shrink-0" />
@@ -32,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onUnmounted, nextTick } from 'vue';
+import { ref, watch, onUnmounted, onMounted, nextTick, type Ref } from 'vue';
 import { XMarkIcon } from '@heroicons/vue/20/solid';
 import { houstonPortrait } from '@/img';
 
@@ -50,6 +51,8 @@ interface CommanderPopupProps {
 
 const props = defineProps<CommanderPopupProps>();
 const emit = defineEmits(['close']);
+
+const arrowEl = ref<HTMLElement | null>(null);
 
 const displayedText = ref('');
 const isTyping = ref(false);

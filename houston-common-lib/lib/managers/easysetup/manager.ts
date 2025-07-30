@@ -24,8 +24,6 @@ import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
 import { AutomatedSnapshotTaskTemplate, ScrubTaskTemplate, TaskSchedule } from "@/scheduler";
-
-import { exec } from "child_process";
 import * as fs from "fs";
 
 // List of required Samba ports
@@ -108,19 +106,19 @@ export class EasySetupConfigurator {
   }
 
   // Run a shell command and return a Promise
-  private runCommand(cmd: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      exec(cmd, (err, stdout, stderr) => {
-        if (err) {
-          console.error(`Error: ${stderr}`);
-          reject(stderr.trim());
-        } else {
-          console.log(stdout.trim());
-          resolve(stdout.trim());
-        }
-      });
-    });
-  }
+  // private runCommand(cmd: string): Promise<string> {
+  //   return new Promise((resolve, reject) => {
+  //     exec(cmd, (err, stdout, stderr) => {
+  //       if (err) {
+  //         console.error(`Error: ${stderr}`);
+  //         reject(stderr.trim());
+  //       } else {
+  //         console.log(stdout.trim());
+  //         resolve(stdout.trim());
+  //       }
+  //     });
+  //   });
+  // }
 
   // Detect the Linux distro
   private getLinuxDistro(): "rocky" | "ubuntu" | "unknown" {
@@ -141,22 +139,40 @@ export class EasySetupConfigurator {
 
     if (distro === "rocky") {
       for (const { port, protocol } of sambaPorts) {
-        await this.runCommand(`sudo firewall-cmd --permanent --add-port=${port}/${protocol}`);
+        // await this.runCommand(`sudo firewall-cmd --permanent --add-port=${port}/${protocol}`);
+        await unwrap(
+          server.execute(
+            new Command(["firewall-cmd", "--permanent", `--add-port=${port}/${protocol}`], this.commandOptions)
+          )
+        );
       }
-      await this.runCommand("sudo firewall-cmd --reload");
+      // await this.runCommand("sudo firewall-cmd --reload");
+      await unwrap(
+        server.execute(new Command(["firewall-cmd", "--reload"], this.commandOptions))
+      );
       console.log("✅ Samba ports opened using firewalld (Rocky).");
     } else if (distro === "ubuntu") {
-      const allowCmds = [
-        "sudo ufw allow 137/udp",
-        "sudo ufw allow 138/udp",
-        "sudo ufw allow 139/tcp",
-        "sudo ufw allow 445/tcp",
-      ];
+      // const allowCmds = [
+      //   "sudo ufw allow 137/udp",
+      //   "sudo ufw allow 138/udp",
+      //   "sudo ufw allow 139/tcp",
+      //   "sudo ufw allow 445/tcp",
+      // ];
 
-      for (const cmd of allowCmds) {
-        await this.runCommand(cmd);
+      const allowCmds = [
+        ["ufw", "allow", "137/udp"],
+        ["ufw", "allow", "138/udp"],
+        ["ufw", "allow", "139/tcp"],
+        ["ufw", "allow", "445/tcp"],
+      ];
+      for (const args of allowCmds) {
+        // await this.runCommand(cmd);
+        await unwrap(server.execute(new Command(args, this.commandOptions)));
       }
-      await this.runCommand("sudo ufw reload");
+      // await this.runCommand("sudo ufw reload");
+      await unwrap(
+        server.execute(new Command(["ufw", "reload"], this.commandOptions))
+      );
       console.log("✅ Samba ports opened using ufw (Ubuntu).");
     } else {
       console.warn("⚠️ Unsupported Linux distribution. Please configure the firewall manually.");
@@ -166,7 +182,11 @@ export class EasySetupConfigurator {
   // Check current Node.js version
   private async getNodeVersion(): Promise<string | null> {
     try {
-      const output = await this.runCommand("node -v");
+      // const output = await this.runCommand("node -v");
+      const result = await unwrap(
+        server.execute(new Command(["node", "-v"], this.commandOptions))
+      );
+      const output = new TextDecoder().decode(result.stdout);
       return output.replace(/^v/, "");
     } catch {
       return null;
@@ -176,10 +196,16 @@ export class EasySetupConfigurator {
   // Ensure NVM is installed
   private async ensureNvmInstalled(): Promise<void> {
     try {
-      await this.runCommand("command -v nvm");
+      // await this.runCommand("command -v nvm");
+      await unwrap(server.execute(new Command(["bash", "-c", "command -v nvm"], this.commandOptions)));
     } catch {
       console.log("📥 Installing NVM...");
-      await this.runCommand("curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash");
+      // await this.runCommand("curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash");
+      await unwrap(
+        server.execute(
+          new Command(["bash", "-c", "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash"], this.commandOptions)
+        )
+      );
       console.log("✅ NVM installed. Reloading shell...");
     }
   }
@@ -200,15 +226,24 @@ export class EasySetupConfigurator {
 
     // Install Node 18 if not present
     try {
-      await this.runCommand(`${shellLoadNvm} && nvm ls 18`);
+      // await this.runCommand(`${shellLoadNvm} && nvm ls 18`);
+      await unwrap(
+        server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm ls 18`], this.commandOptions))
+      );
       console.log("✅ Node 18 is already installed.");
     } catch {
       console.log("📥 Installing Node.js v18...");
-      await this.runCommand(`${shellLoadNvm} && nvm install 18`);
+      // await this.runCommand(`${shellLoadNvm} && nvm install 18`);
+      await unwrap(
+        server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm install 18`], this.commandOptions))
+      );
     }
 
     // Set Node 18 as default
-    await this.runCommand(`${shellLoadNvm} && nvm alias default 18`);
+    // await this.runCommand(`${shellLoadNvm} && nvm alias default 18`);
+    await unwrap(
+      server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm alias default 18`], this.commandOptions))
+    );
     console.log("✅ Node.js v18 set as default.");
   }
 

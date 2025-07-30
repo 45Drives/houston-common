@@ -4,6 +4,7 @@ import {
   SambaConfParser,
   SambaManagerNet,
   server,
+  File,
   unwrap,
   ZFSConfig,
   CommandOptions,
@@ -24,7 +25,6 @@ import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
 import { AutomatedSnapshotTaskTemplate, ScrubTaskTemplate, TaskSchedule } from "@/scheduler";
-import * as fs from "fs";
 
 // List of required Samba ports
 const sambaPorts = [
@@ -105,36 +105,31 @@ export class EasySetupConfigurator {
 
   }
 
-  // Run a shell command and return a Promise
-  // private runCommand(cmd: string): Promise<string> {
-  //   return new Promise((resolve, reject) => {
-  //     exec(cmd, (err, stdout, stderr) => {
-  //       if (err) {
-  //         console.error(`Error: ${stderr}`);
-  //         reject(stderr.trim());
-  //       } else {
-  //         console.log(stdout.trim());
-  //         resolve(stdout.trim());
-  //       }
-  //     });
-  //   });
-  // }
-
   // Detect the Linux distro
-  private getLinuxDistro(): "rocky" | "ubuntu" | "unknown" {
-    try {
-      const osRelease = fs.readFileSync("/etc/os-release", "utf-8");
-      if (/rocky/i.test(osRelease)) return "rocky";
-      if (/ubuntu/i.test(osRelease)) return "ubuntu";
-    } catch {
-      // fall through
+  private async getLinuxDistro(): Promise<"rocky" | "ubuntu" | "unknown"> {
+    const osReleaseFile = new File(server, "/etc/os-release");
+
+    const exists = await osReleaseFile.exists();
+    if (exists.isErr() || !exists.value) {
+      return "unknown";
     }
+
+    const readResult = await osReleaseFile.read();
+    if (readResult.isErr()) {
+      return "unknown";
+    }
+
+    const osRelease = readResult.value;
+
+    if (/rocky/i.test(osRelease)) return "rocky";
+    if (/ubuntu/i.test(osRelease)) return "ubuntu";
+
     return "unknown";
   }
 
   // Apply firewall rules
   private async applyOpenSambaPorts() {
-    const distro = this.getLinuxDistro();
+    const distro = await this.getLinuxDistro();
     console.log(`Detected distro: ${distro}`);
 
     if (distro === "rocky") {

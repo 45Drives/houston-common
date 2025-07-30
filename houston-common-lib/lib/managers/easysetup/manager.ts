@@ -212,10 +212,7 @@ export class EasySetupConfigurator {
 
   // Load NVM into the current shell
   private loadNvm() {
-    return `
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
-  `;
+    return 'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"';
   }
 
   // Ensure Node.js v18 is installed and set as default

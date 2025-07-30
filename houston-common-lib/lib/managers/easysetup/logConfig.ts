@@ -45,9 +45,22 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
         const logFile = new File(server, configSavePath);
         let backupLog: BackupLog = {};
 
-        // Check if file exists and read if so
         const exists = await logFile.exists();
-        if (exists.isOk() && exists.value) {
+
+        if (exists.isErr()) {
+            console.error("❌ Could not check if log file exists:", exists.error.message);
+            return;
+        }
+
+        if (!exists.value) {
+            // File doesn't exist — create it
+            const createRes = await logFile.create(true); // true = recursive
+            if (createRes.isErr()) {
+                console.error("❌ Failed to create log file:", createRes.error.message);
+                return;
+            }
+        } else {
+            // File exists — try to read it
             const readResult = await logFile.read();
             if (readResult.isOk() && readResult.value.trim() !== '') {
                 try {
@@ -58,20 +71,22 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
             }
         }
 
-        // Add or update entry for this IP
+        // Update log entry for this IP
         backupLog[ipAddress] = newEntry;
 
-        // Write back to file
-        const writeResult = await logFile.write(JSON.stringify(backupLog, null, 2));
+        // Write updated log
+        const writeResult = await logFile.write(JSON.stringify(backupLog, null, 2), {
+            superuser: "try",
+        });
 
         if (writeResult.isOk()) {
             console.log(`✅ Backup log saved at ${configSavePath}`);
         } else {
-            console.error('Failed to write backup log:', writeResult.error.message);
+            console.error("❌ Failed to write backup log:", writeResult.error.message);
         }
 
     } catch (error) {
-        console.error('Error saving setup config:', error);
+        console.error("❌ Error saving setup config:", error);
     }
 }
 

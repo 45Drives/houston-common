@@ -88,7 +88,7 @@ export class EasySetupConfigurator {
         console.log(`ℹ️ Current Node.js version: ${version ?? "Not installed"}`);
         await this.ensureNode18();
       }
-      progressCallback({ message: `Ensure node version is 18`, step: 9, total });
+      progressCallback({ message: `Ensure Required Node Version (18)`, step: 9, total });
       
       if (config.splitPools) {
         progressCallback({ message: "Scheduled Active Backup tasks", step: 10, total });

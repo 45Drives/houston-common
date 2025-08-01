@@ -4,14 +4,15 @@
             <div v-if="props.visible" id="commander-popup"
                 class="z-50 absolute flex items-start text-left bg-slate-800/95 text-white p-6 min-h-[100px] rounded-md shadow-lg user-select-none"
                 :style="{ width: props.width + 'px', top: props.position.top, left: props.position.left }">
-                <div ref="arrowEl" data-arrow
-                    class="absolute w-0 h-0 border-l-[12px] border-r-[12px] border-transparent" :class="{
-                        'border-b-[12px] border-b-slate-800/95 -top-[12px]': props.placement === 'bottom',
-                        'border-t-[12px] border-t-slate-800/95 -bottom-[12px]': props.placement === 'top'
-                    }" :style="{
-                    left: `${props.arrowOffset}px`,
-                    transform: 'translateX(-50%)'
-                    }" />
+                <div ref="arrowEl" data-arrow class="absolute w-0 h-0" :class="{
+                    'border-l-[12px] border-l-slate-800/95 -right-[12px] border-y-transparent border-t-[12px] border-b-[12px]': props.placement === 'right',
+                    'border-r-[12px] border-r-slate-800/95 -left-[12px] border-y-transparent border-t-[12px] border-b-[12px]': props.placement === 'left',
+                    'border-b-[12px] border-b-slate-800/95 -top-[12px] border-x-transparent border-l-[12px] border-r-[12px]': props.placement === 'bottom',
+                    'border-t-[12px] border-t-slate-800/95 -bottom-[12px] border-x-transparent border-l-[12px] border-r-[12px]': props.placement === 'top'
+                }" :style="{
+                    [props.placement === 'top' || props.placement === 'bottom' ? 'left' : 'top']: `${props.arrowOffset}px`,
+                    transform: 'translate' + (props.placement === 'top' || props.placement === 'bottom' ? 'X' : 'Y') + '(-50%)'
+                }" />
 
                 <img :src="houstonPortrait" alt="Houston Portrait"
                     class="w-24 h-24 mr-4 rounded-lg object-cover flex-shrink-0" />
@@ -42,7 +43,7 @@ interface CommanderPopupProps {
     visible: boolean;
     width?: number;
     arrowOffset: number;
-    placement: 'top' | 'bottom';
+    placement: 'top' | 'bottom' | 'left' | 'right';
     position: {
         top: string;
         left: string;

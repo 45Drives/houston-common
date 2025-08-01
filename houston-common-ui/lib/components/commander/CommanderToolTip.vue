@@ -24,7 +24,7 @@ import CommanderPopup from "./CommanderPopup.vue";
 interface CommanderToolTipProps {
     message: string;
     width?: number;
-    placement?: 'top' | 'bottom';
+    placement?: 'top' | 'bottom' | 'left' | 'right';
     strictPlacement?: boolean;
 }
 
@@ -92,22 +92,22 @@ const toggleCommander = async () => {
             placement: props.placement ?? 'bottom',
             middleware: [
                 offset(10),
-                // strictPlacement ? undefined : flip({ fallbackPlacements: ['top', 'bottom'] }),
-                !strictPlacement ? flip({ fallbackPlacements: ['top', 'bottom'] }) : undefined,
+                !strictPlacement ? flip({ fallbackPlacements: ['top', 'bottom', 'left', 'right'], }) : undefined,
                 shift({ padding: 10 }),
                 arrow({ element: arrowRef.value! }),
             ].filter(Boolean),
         }
     );
 
-    const arrowX = middlewareData.arrow?.x ?? 0;
+    const arrowOffset = computedPlacement.startsWith('left') || computedPlacement.startsWith('right')
+        ? middlewareData.arrow?.y ?? 0
+        : middlewareData.arrow?.x ?? 0;
 
     commanderPosition.value = {
         top: `${y}px`,
         left: `${x}px`,
-        arrowOffset: arrowX,
-        // ✅ If strict, force the original placement you passed in:
-        placement: strictPlacement ? resolvedPlacement : (computedPlacement as 'top' | 'bottom'),
+        arrowOffset,
+        placement: strictPlacement ? resolvedPlacement : (computedPlacement as Placement),
     };
 
     console.log('Requested:', resolvedPlacement, '→ Final:', computedPlacement);

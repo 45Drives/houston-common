@@ -213,11 +213,11 @@ export interface ZFSFileSystemInfo {
       value: string;
       unit: "kib" | "mib" | "gib" | "tib";
     };
-    used: number;
+    used?: number;
+    usedBySnapshots?: string;
   };
   parentFS?: string;
   children?: ZFSFileSystemInfo[];
-  usedBySnapshots: string;
 }
 
 //object for tracking pool scan (scrub/resilver) data

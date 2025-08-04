@@ -3,6 +3,10 @@ import { defineProps, defineModel, defineEmits } from "vue";
 
 defineProps<{
   show: boolean;
+  /**
+   * forces modal container to have w-full class instead of max-w-full
+   */
+  forceFullWidth?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -57,7 +61,7 @@ const emit = defineEmits<{
           class="fixed overflow-hidden z-10 inset-0 flex items-end sm:items-center justify-center px-4 pb-20 pt-4 sm:pb-4"
           @click.self="emit('clickOutside')"
         >
-          <div class="w-full max-h-full overflow-auto whitespace-normal">
+          <div :class="[forceFullWidth ? 'w-full' : 'max-w-full', 'max-h-full overflow-auto whitespace-normal']">
             <slot />
           </div>
         </div>

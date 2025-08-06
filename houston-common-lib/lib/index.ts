@@ -19,9 +19,9 @@
  *
  */
 
-/// <reference path="../typings/cockpit-typings/cockpit.d.ts" />
-/// <reference path="../typings/cockpit-typings/cockpit-extra.d.ts" />
-/// <reference path="../typings/cockpit-typings/cockpit-import-hack.d.ts" />
+/// <reference path="../../cockpit-typings/cockpit.d.ts" />
+/// <reference path="../../cockpit-typings/cockpit-extra.d.ts" />
+/// <reference path="../../cockpit-typings/cockpit-import-hack.d.ts" />
 /// <reference path="../typings/window.d.ts" />
 
 import { HoustonDriver as HoustonDriver_ } from "@/driver";

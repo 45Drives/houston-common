@@ -1,33 +1,24 @@
-// vite.config.js
+import path from "path";
+import { fileURLToPath } from "url";
 import { InlineConfig as VitestInlineConfig } from "vitest";
 import dts from "vite-plugin-dts";
-
-declare module "vite" {
-  interface UserConfig {
-    /**
-     * Options for Vitest
-     */
-    test?: VitestInlineConfig;
-  }
-}
 import { defineConfig } from "vite";
 
-import { resolve } from "path";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   base: "./",
   resolve: {
     alias: {
-      "@": new URL("./lib/", import.meta.url).pathname,
+      "@": path.resolve(__dirname, "lib"),
     },
   },
   build: {
     minify: false,
-    // lib property is set in build script
     lib: {
-      entry: new URL("./lib/index.ts", import.meta.url).pathname,
+      entry: path.resolve(__dirname, "lib/index.ts"),
       name: "Houston Common Library",
-      // the proper extensions will be added
       fileName: "index",
       formats: ["es", "cjs"],
     },
@@ -36,7 +27,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    environment: 'jsdom'
+    environment: "jsdom",
   },
   plugins: [
     dts({

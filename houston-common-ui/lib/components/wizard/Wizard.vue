@@ -10,6 +10,7 @@ const props = defineProps<{
   steps: WizardStep[];
   onComplete: (data: any) => void;
   hideHeader?: boolean;
+  hideProgress?: boolean;
 }>();
 
 const emit = defineEmits(["goBack", "onComplete"]);
@@ -44,7 +45,7 @@ const progress = computed(() => {
 <template>
   <div class="flex flex-col">
     <StepsHeader v-if="!hideHeader" v-bind="state" />
-    <ProgressBar class="w-full" v-if="hideHeader" :percent="progress" />
+    <ProgressBar v-if="hideHeader && !hideProgress" class="w-full" :percent="progress" />
     <WizardStepView v-bind="state" class="grow" @goBack="emit('goBack')" />
   </div>
 </template>

@@ -478,85 +478,6 @@ export class EasySetupConfigurator {
   }
 
 
-
-  // private createUsersAndPasswords(users: { username: string; password: string }[]) {
-  //   users.forEach(({ username, password }, index) => {
-  //     const isAdmin = index === 0;
-
-  //     server
-  //       .getUserByLogin(username)
-  //       .orElse(() => server.addUser({ login: username }))
-  //       .andThen((user) =>
-  //         server
-  //           .getGroupByName("smbusers")
-  //           .orElse(() => server.createGroup("smbusers"))
-  //           .map(() => user)
-  //       )
-  //       .andThen((user) => {
-  //         if (isAdmin) {
-  //           return server.addUserToGroups(user, "wheel", "smbusers");
-  //         } else {
-  //           return server.addUserToGroups(user, "smbusers");
-  //         }
-  //       })
-  //       .andThen((user) => server.changePassword(user, password));
-  //   });
-  // }
-
-  /* private async createUsersAndPasswords(users: { username: string; password: string; groups?: string[] }[]) {
-    for (const { username, password, groups = [] } of users) {
-      // Check if user exists, else add
-      let userResult = await server.getUserByLogin(username);
-      if (userResult.isErr()) {
-        userResult = await server.addUser({ login: username });
-        if (userResult.isErr()) {
-          console.error(`Failed to add user ${username}:`, userResult.error);
-          continue;
-        }
-      }
-
-      const user = userResult.value;
-
-      // Ensure groups exist and add user to them
-      for (const group of groups) {
-        const groupCheck = await server.getGroupByName(group);
-        if (groupCheck.isErr()) {
-          const createGroupRes = await server.createGroup(group);
-          if (createGroupRes.isErr()) {
-            console.error(`Failed to create group '${group}':`, createGroupRes.error);
-            continue;
-          }
-        }
-
-        const addRes = await server.addUserToGroups(user, group);
-        if (addRes.isErr()) {
-          console.error(`Failed to add ${username} to group '${group}':`, addRes.error);
-        }
-      }
-
-      // Set password
-      const passResult = await server.changePassword(user, password);
-      if (passResult.isErr()) {
-        console.error(`Failed to set password for ${username}:`, passResult.error);
-      }
-    }
-  } */
-
-
-
-  // private createGroupsAndAddMembers(groups: { name: string; members?: string[] }[]) {
-  //   for (const { name, members = [] } of groups) {
-  //     server
-  //       .getGroupByName(name)
-  //       .orElse(() => server.createGroup(name));
-
-  //     for (const member of members) {
-  //       server
-  //         .getUserByLogin(member)
-  //         .andThen((user) => server.addUserToGroups(user, name));
-  //     }
-  //   }
-  // }
   private async createGroupsAndAddMembers(groups: { name: string; members?: string[] }[]) {
     for (const { name, members = [] } of groups) {
       let groupRes = await server.getGroupByName(name);
@@ -583,48 +504,6 @@ export class EasySetupConfigurator {
   }
 
 
-
-  // private assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
-  //   for (const { username, groups } of users) {
-  //     server
-  //       .getUserByLogin(username)
-  //       .map((user) => {
-  //         for (const groupName of groups) {
-  //           server
-  //             .getGroupByName(groupName)
-  //             .orElse(() => server.createGroup(groupName))
-  //             .map(() => user)
-  //             .andThen((u) => server.addUserToGroups(u, groupName));
-  //         }
-  //       });
-  //   }
-  // }
-  /*  private async assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
-     for (const { username, groups } of users) {
-       const userRes = await server.getUserByLogin(username);
-       if (userRes.isErr()) {
-         console.error(`User '${username}' not found for group assignment`);
-         continue;
-       }
- 
-       for (const groupName of groups) {
-         let groupRes = await server.getGroupByName(groupName);
-         if (groupRes.isErr()) {
-           const createRes = await server.createGroup(groupName);
-           if (createRes.isErr()) {
-             console.error(`Failed to create group '${groupName}':`, createRes.error);
-             continue;
-           }
-         }
- 
-         const addRes = await server.addUserToGroups(userRes.value, groupName);
-         if (addRes.isErr()) {
-           console.error(`Failed to add user '${username}' to group '${groupName}':`, addRes.error);
-         }
-       }
-     }
-   }
-  */
   private async assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
     for (const { username, groups } of users) {
       const userRes = await server.getUserByLogin(username);
@@ -756,7 +635,7 @@ export class EasySetupConfigurator {
       });
     } else {
       await this.clearSnapshotTasks();
-      await this.clearReplicationTasks();
+      await this.clearScrubTasks();
       const snapTasks = await this.createAutoSnapshotTasks(storageZfsConfig!);
       snapTasks.forEach(task => {
         console.log('new Task created:', task);

@@ -73,7 +73,7 @@ export interface ZPool extends ZPoolBase {
   createFileSystem?: boolean;
 }
 
-export type DiskIdentifier = "vdev_path" | "phy_path" | "sd_path";
+export type DiskIdentifier = "vdev_path" | "phy_path" | "sd_path" | "wwn_path";
 
 export interface VDevDisk {
   path: string;
@@ -87,6 +87,7 @@ export interface VDevDisk {
   phy_path?: string;
   sd_path?: string;
   vdev_path?: string;
+  wwn_path?: string;
   serial?: string;
   temp?: string;
   powerOnCount?: string;

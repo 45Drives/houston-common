@@ -8,9 +8,11 @@ const {currentComponent, index} = props;
 </script>
 
 <template>
-  <KeepAlive>
-    <component :is="currentComponent" :key="currentComponent.name" />
-  </KeepAlive>
+  <Transition mode="out-in">
+    <KeepAlive>
+      <component :is="currentComponent" :key="currentComponent.name" />
+    </KeepAlive>
+  </Transition>
 </template>
 
 <style scoped>

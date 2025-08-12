@@ -1,4 +1,4 @@
-import { onActivated, onDeactivated } from 'vue';
+import { onActivated, onDeactivated, onMounted, onUnmounted } from 'vue';
 
 let globalActiveHandler: ((e: KeyboardEvent) => void) | null = null;
 let globalHandlerId: number | null = null;
@@ -77,11 +77,8 @@ export function useEnterToAdvance(
     }
   };
 
-  onActivated(() => {
-    installHandler();
-  });
-
-  onDeactivated(() => {
-    removeHandler();
-  });
+  onMounted(installHandler)
+  onUnmounted(removeHandler)
+  onActivated(installHandler)
+  onDeactivated(removeHandler)
 }

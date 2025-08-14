@@ -14,6 +14,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "lib"),
     },
   },
+  assetsInclude: ["**/*.py"],
   build: {
     minify: false,
     lib: {
@@ -21,6 +22,15 @@ export default defineConfig({
       name: "Houston Common Library",
       fileName: "index",
       formats: ["es", "cjs"],
+    },
+    rollupOptions: {
+      external: (id) => {
+        // only externalize TS/JS test files, not .py?raw imports with test in the name
+        return (
+          (id.endsWith('.test.ts') || id.endsWith('.test.js')) ||
+          (id.endsWith('.spec.ts') || id.endsWith('.spec.js'))
+        );
+      }
     },
     sourcemap: true,
     emptyOutDir: true,

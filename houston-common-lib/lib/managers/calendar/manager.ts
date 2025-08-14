@@ -1,5 +1,6 @@
 
 import { Interval, TimeUnit } from './types';
+import { TaskSchedule } from '../backup';
 
 function getMonthName(number: number): string {
     const months = [
@@ -18,6 +19,14 @@ function getDaySuffix(day: number): string {
         default: return 'th';
     }
 }
+
+function formatTime12h(hour: number, minute: number): string {
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    const h = (hour % 12) === 0 ? 12 : hour % 12;
+    const m = minute.toString().padStart(2, '0');
+    return `${h}:${m} ${suffix}`;
+}
+
 
 function formatUnit(value: string, type: TimeUnit): string {
     if (value === '*') {
@@ -106,19 +115,17 @@ export function parseIntervalIntoString(interval: Interval): string {
 export function formatCronToHumanReadable(cron: string): string {
     const [minute, hour, day, month, dayOfWeek] = cron.split(' ');
 
-    const formattedMinute = formatCronPart(minute!, 'minute');
-    const formattedHour = formatCronPart(hour!, 'hour');
+    const cronMinute = minute === '*' ? 0 : parseInt(minute!);
+    const cronHour = hour === '*' ? 0 : parseInt(hour!);
+    const timeString = (minute === '*' && hour === '*')
+        ? 'every hour'
+        : `at ${formatTime12h(cronHour, cronMinute)}`;
+
     const formattedDay = formatCronPart(day!, 'day');
     const formattedMonth = formatCronPart(month!, 'month');
     const formattedDayOfWeek = formatCronPart(dayOfWeek!, 'dayOfWeek');
 
-    let result = '';
-
-    if (formattedMinute && formattedHour) {
-        result += `At ${formattedHour} ${formattedMinute}`;
-    } else if (formattedMinute) {
-        result += formattedMinute;
-    }
+    let result = `${timeString}`;
 
     if (formattedDay !== 'every day') {
         result += ` on ${formattedDay}`;
@@ -134,6 +141,7 @@ export function formatCronToHumanReadable(cron: string): string {
 
     return result.trim();
 }
+
 
 function formatCronPart(value: string, type: TimeUnit): string {
     if (value === '*') {
@@ -158,7 +166,7 @@ function formatCronPart(value: string, type: TimeUnit): string {
     }
 
     if (type === 'minute' || type === 'hour') {
-        return `at ${value} ${type}`;
+        return value;
     }
 
     if (type === 'day') {
@@ -214,3 +222,48 @@ export function validateCronField(value: string, type: TimeUnit): boolean {
 
     return false;
 }
+
+export function parseTaskScheduleIntoString(schedule: TaskSchedule): string {
+    const elements: string[] = [];
+
+    const startDay = schedule.startDate.getDate();
+    const startMonth = schedule.startDate.toLocaleString("en-US", { month: "long" });
+    const startHour = schedule.startDate.getHours().toString().padStart(2, '0');
+    const startMinute = schedule.startDate.getMinutes().toString().padStart(2, '0');
+
+    const startTimeString = `at ${startHour}:${startMinute}`;
+
+    switch (schedule.repeatFrequency) {
+        case "hour":
+            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)} ${startTimeString}`);
+            elements.push("every hour");
+            break;
+        case "day":
+            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)} ${startTimeString}`);
+            elements.push(`every day at ${startHour}:${startMinute}`);
+            break;
+        case "week":
+            const dayOfWeek = schedule.startDate.toLocaleString("en-US", { weekday: "long" });
+            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)} ${startTimeString}`);
+            elements.push(`every week on ${dayOfWeek} at ${startHour}:${startMinute}`);
+            break;
+        case "month":
+            elements.push(`starting on ${startMonth} ${startDay}${getOrdinalSuffix(startDay)} ${startTimeString}`);
+            elements.push(`every month on the ${startDay}${getOrdinalSuffix(startDay)} at ${startHour}:${startMinute}`);
+            break;
+    }
+
+    return elements.filter(e => e).join(", ");
+}
+
+// Helper function to format ordinal numbers (1st, 2nd, 3rd, etc.)
+function getOrdinalSuffix(n: number): string {
+    if (n >= 11 && n <= 13) return "th";
+    switch (n % 10) {
+        case 1: return "st";
+        case 2: return "nd";
+        case 3: return "rd";
+        default: return "th";
+    }
+}
+

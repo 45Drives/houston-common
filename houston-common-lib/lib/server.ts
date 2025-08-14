@@ -9,7 +9,6 @@ import { safeJsonParse } from "./utils";
 import { assertProp } from "./utils";
 
 import DiskInfoPy from "@/scripts/disk_info.py?raw";
-import { lookupServerModel, ServerModel } from "@/serverModels";
 
 import {
   DriveSlot,
@@ -199,14 +198,8 @@ export class Server {
       .map((lsdev) => lsdev as { rows: LSDevDisk[][] });
   }
 
-  getServerModel(): ResultAsync<ServerModel, ProcessError | ParsingError> {
-    return this.getServerInfo().andThen((serverInfo) => {
-      const model = lookupServerModel(serverInfo.Model);
-      if (!model) {
-        return err(new ParsingError(`Model lookup failed: ${serverInfo.Model}`));
-      }
-      return ok(model);
-    });
+  getServerModel(): ResultAsync<string, ProcessError | ParsingError> {
+    return this.getServerInfo().map((serverInfo) => serverInfo.Model);
   }
 
   getHostname(cache: boolean = true): ResultAsync<string, ProcessError> {
@@ -220,11 +213,49 @@ export class Server {
 
   setHostname(hostname: string): ResultAsync<null, ProcessError> {
     if (this.hostname === undefined || this.hostname !== hostname) {
-      return this.execute(new Command(["hostnamectl", "set-hostname", hostname]), true).map(
-        () => null
-      );
+      return this.execute(new Command(["hostnamectl", "set-hostname", hostname], { superuser: "try" }))
+        .orElse((err) => {
+          if (err.message.includes("Could not set property: Access denied")) {
+            return this.execute(new Command(["hostnamectl", "set-hostname", hostname], { superuser: "try" }));
+          }
+          return errAsync(err);
+        })
+        .map(() => null)
+        .orElse(() => okAsync(null));
     }
     return okAsync(null);
+  }
+
+  writeHostnameFiles(hostname: string): ResultAsync<null, ProcessError> {
+    console.log(`Writing hostname files for: ${hostname}`);
+
+    return this.execute(new Command(["sh", "-c", `echo '${hostname}' > /etc/hostname`], { superuser: "try" }))
+      .map((result) => {
+        console.log("Successfully wrote to /etc/hostname");
+        return result;
+      })
+      .orElse((err) => {
+        console.log("Failed to write to /etc/hostname:", err.message);
+        return errAsync(err);
+      })
+      .andThen(() => {
+        console.log("Writing pretty hostname to /etc/machine-info");
+        return this.execute(
+          new Command(["sh", "-c", `echo 'PRETTY_HOSTNAME=\"${hostname}\"' > /etc/machine-info`], {
+            superuser: "try",
+          })
+        )
+          .map((result) => {
+            console.log("Successfully wrote to /etc/machine-info");
+            return result;
+          })
+          .orElse((err) => {
+            console.log("Failed to write to /etc/machine-info:", err.message);
+            return errAsync(err);
+          });
+      })
+      .map(() => null)
+      .orElse(() => okAsync(null)); // Ignore any errors and return null in the end
   }
 
   getIpAddress(cache: boolean = true): ResultAsync<string, ProcessError | ParsingError> {
@@ -362,6 +393,16 @@ export class Server {
       );
   }
 
+  getUserByName(name: string): ResultAsync<LocalUser, ProcessError | ValueError> {
+    return this.getLocalUsers()
+      .map((localUsers) => localUsers.filter((user) => user.name === name))
+      .andThen((userMatches) =>
+        userMatches.length === 0
+          ? err(new ValueError(`User not found: ${name}`))
+          : ok(userMatches[0]!)
+      );
+  }
+
   getUserByUid(uid: number): ResultAsync<User, ProcessError> {
     return this.getLocalUsers()
       .map((localUsers) => localUsers.filter((user) => user.uid === uid))
@@ -448,5 +489,15 @@ export class Server {
       });
   }
 
-
+  reboot(): ResultAsync<null, ProcessError> {
+    return this.execute(new Command(['reboot', 'now'], { superuser: 'try' }))
+      .map(() => {
+        console.log(`${this.toString()}: Reboot triggered.`);
+        return null;
+      })
+      .orElse((err) => {
+        console.error(`${this.toString()}: Failed to trigger reboot`, err);
+        return errAsync(err);
+      });
+  }
 }

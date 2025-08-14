@@ -19,10 +19,10 @@
  *
  */
 
-/// <reference path="../../cockpit-typings/cockpit.d.ts" />
-/// <reference path="../../cockpit-typings/cockpit-extra.d.ts" />
-/// <reference path="../../cockpit-typings/cockpit-import-hack.d.ts" />
-/// <reference path="../typings/window.d.ts" />
+/// <reference path="../typings/cockpit-typings/cockpit.d.ts" />
+/// <reference path="../typings/cockpit-typings/cockpit-extra.d.ts" />
+/// <reference path="../typings/cockpit-typings/cockpit-import-hack.d.ts" />
+/// <reference path="../typings/globalThis.d.ts" />
 
 import { HoustonDriver as HoustonDriver_ } from "@/driver";
 
@@ -34,6 +34,7 @@ export const HoustonDriver = HoustonDriver_ as Pick<
 export * from "@/houston";
 export * from "@/syntax";
 export * from "@/utils";
+export * from "@/electronIPC";
 export * from "@/errors";
 export * from "@/download";
 export * from "@/upload";
@@ -42,12 +43,20 @@ export * from "@/unwrap";
 export * from "@/managers";
 export * from "@/disks";
 export * from "@/user";
-export * from "@/serverModels";
 export * from "@/driveSlots/types";
+
+export type { DayOfWeek as SchedulerDayOfWeek } from "@/scheduler";
+export type { TimeUnit as SchedulerTimeUnit } from "@/scheduler";
+export type { TaskSchedule as SchedulerTaskSchedule } from "@/scheduler";
+
+export * from "@/scheduler";
+
+export type { TaskSchedule } from "@/managers";
+export type { DayOfWeek, TimeUnit } from "@/managers";
 
 export * as legacy from "@/legacy";
 
-window.reportHoustonError ??= (e, ctx: string = "") => {
+globalThis.reportHoustonError ??= (e, ctx: string = "") => {
   console.error(ctx, e);
   return e;
 };

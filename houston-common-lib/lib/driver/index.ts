@@ -7,8 +7,10 @@ import { factory as nodeDriverFactory } from "@/driver/nodeDriver";
 import { factory as webDriverFactory } from "@/driver/webDriver";
 
 function determineHoustonDriver(): IHoustonDriver {
-  if ("cockpit" in window) {
-    return cockpitDriverFactory();
+  if (typeof window !== "undefined") {
+    if ("cockpit" in window) {
+      return cockpitDriverFactory();
+    }
   }
   if (typeof process === "object" && process.release?.name === "node") {
     return nodeDriverFactory();

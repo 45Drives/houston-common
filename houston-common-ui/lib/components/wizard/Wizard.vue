@@ -1,20 +1,51 @@
 <script setup lang="ts">
-import { defineWizardSteps, type WizardStep } from "./index";
+import { createWizardInjectionKey, defineWizardSteps, type WizardStep } from "./index";
 import WizardStepView from "./WizardStepView.vue";
-import StepsHeader from "@/components/wizard/StepsHeader.vue";
-import { computed, defineProps } from "vue";
+import StepsHeader from "./StepsHeader.vue";
+import { computed, defineProps, ref, watch } from "vue";
+import { ProgressBar } from "@/components";
 
 const props = defineProps<{
+  id: string;
   steps: WizardStep[];
+  onComplete: (data: any) => void;
+  hideHeader?: boolean;
+  hideProgress?: boolean;
 }>();
 
-const state = defineWizardSteps(props.steps);
+const emit = defineEmits(["goBack", "onComplete"]);
 
+// console.log(props.id);
+
+const state = defineWizardSteps(props.steps, createWizardInjectionKey(props.id));
+// console.log("defined");
+
+watch(
+  () => state.completedSteps, // Watch only completedSteps
+  (newCompletedSteps) => {
+    // console.log(newCompletedSteps);
+
+    if (
+      newCompletedSteps.value.filter((completed) => completed === true).length ===
+      props.steps.length
+    ) {
+      props.onComplete(state.data);
+    }
+  },
+  { deep: true } // Ensure it tracks changes inside the array
+);
+
+const progress = computed(() => {
+  const total = props.steps.length;
+  const current = state.index.value;
+  return Math.round((current / total) * 100);
+});
 </script>
 
 <template>
   <div class="flex flex-col">
-    <StepsHeader v-bind="state" />
-    <WizardStepView v-bind="state" class="grow" />
+    <StepsHeader v-if="!hideHeader" v-bind="state" />
+    <ProgressBar v-if="hideHeader && !hideProgress" class="w-full" :percent="progress" />
+    <WizardStepView v-bind="state" class="grow" @goBack="emit('goBack')" />
   </div>
 </template>

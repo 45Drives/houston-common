@@ -14,7 +14,10 @@ import {
   VDevDisk,
   ZPoolDestroyOptions,
   convertToBytes,
-  ExitedProcess
+  ExitedProcess, 
+  formatBytes,
+  Dataset,
+  Snapshot
 } from "@/index";
 
 export interface IZFSManager {
@@ -27,7 +30,11 @@ export interface IZFSManager {
   getDiskCapacity(path: string): Promise<string>;
   // TODO:
   getPools(): Promise<ZPool[]>;
-
+  getDatasets(): Promise<Dataset[]>;
+  getSnapshots(filesystem: string): Promise<Snapshot[]>;
+  createSnapshot(): Promise<void>;
+  destroySnapshot(): Promise<void>;
+  rollbackSnapshot(): Promise<void>;
 }
 
 export class ZFSManager implements IZFSManager {
@@ -87,9 +94,8 @@ export class ZFSManager implements IZFSManager {
 
     // Filter out invalid paths and replace NVMe vdev_path with sd_path
     const validDisks = vdev.disks
-      .map((disk) => (disk.vdev_path && disk.vdev_path !== "N/A") ? disk.vdev_path : (disk.sd_path ?? ""))
+      .map((disk) => (disk.path && disk.path !== "N/A") ? disk.path : (disk.sd_path ?? ""))
       .filter((path): path is string => path !== "N/A" && path !== ""); // Type assertion to remove undefined values
-
     if (validDisks.length === 0) {
       throw new ValueError(`VDev of type ${vdev.type} has no valid disks!`);
     }
@@ -144,6 +150,9 @@ export class ZFSManager implements IZFSManager {
   async createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<ExitedProcess> {
     const argv = ["zpool", "create", pool.name];
 
+    console.log('createPool pool:', pool);
+    console.log('createPool poolOptions:', pool);
+    
     // set up pool properties
     const poolProps: string[] = [];
 
@@ -170,6 +179,18 @@ export class ZFSManager implements IZFSManager {
     if (options.compression !== undefined) fsProps.push(`compression=${options.compression}`);
     if (options.recordsize !== undefined) fsProps.push(`recordsize=${options.recordsize}`);
     if (options.dedup !== undefined) fsProps.push(`dedup=${options.dedup}`);
+
+    // Handle refreservation
+    if (options.refreservationPercent !== undefined) {
+      // Estimate total disk capacity from all vdevs
+      const totalBytes = pool.vdevs.flatMap(v => v.disks)
+        .map(disk => convertToBytes(disk.capacity ?? "0"))
+        .reduce((acc, curr) => acc + curr, 0);
+
+      const fraction = Math.min(Math.max(options.refreservationPercent, 0), 100) / 100;
+      const refreservationBytes = Math.floor(totalBytes * fraction);
+      fsProps.push(`refreservation=${refreservationBytes}`);
+    }
 
     // fs props are ['-O', 'prop=value']
     argv.push(...fsProps.flatMap((prop) => ["-O", prop]));
@@ -213,61 +234,163 @@ export class ZFSManager implements IZFSManager {
     return [];
   }
 
+  async getDatasets(): Promise<Dataset[]> {
+    // TODO
+    return [];
+  }
+
+  /**
+   * List all snapshots under a filesystem (recursively).
+   */
+  async getSnapshots(filesystem: string): Promise<Snapshot[]> {
+    const argv = [
+      "zfs", "list", "-H",
+      "-t", "snapshot",
+      "-o", "name,guid,creation",
+      "-r", filesystem,
+      "-p"        // raw numeric output for creation (seconds since epoch)
+    ];
+    const proc = await unwrap(
+      this.server.execute(new Command(argv, this.commandOptions))
+    );
+    return proc.getStdout()
+      .trim()
+      .split("\n")
+      .filter(line => line.length > 0)
+      .map(line => {
+        const parts = line.split("\t");
+        if (parts.length < 3) {
+          throw new Error(`malformed zfs output: ${line}`);
+        }
+        const name = parts[0]!;
+        const guid = parts[1]!;
+        const creationSec = parts[2];
+        return {
+          name,
+          guid,
+          creation: new Date(+creationSec! * 1000),
+        };
+      });
+  }
+
+
+  /**
+   * Given two snapshot lists, find the most recent common one by GUID.
+   */
+  getMostRecentCommonSnap(
+    sourceSnaps: Snapshot[],
+    destSnaps: Snapshot[]
+  ): Snapshot | null {
+    const destByGuid = new Map(destSnaps.map(s => [s.guid, s] as const));
+    const commons = sourceSnaps
+      .filter(s => destByGuid.has(s.guid))
+      .sort((a, b) => b.creation.getTime() - a.creation.getTime());
+    return commons.length > 0 ? commons[0]! : null;
+  }
+
+  /**
+   * Send a snapshot locally (or incrementally from a base snapshot).
+   */
+  async sendSnapshot(
+    sendName: string,
+    options: {
+      incrementalFrom?: string;
+      compressed?: boolean;
+      raw?: boolean;
+    } = {}
+  ): Promise<ExitedProcess> {
+    const argv = ["zfs", "send"];
+    if (options.compressed) argv.push("-Lce");
+    if (options.raw) argv.push("-w");
+    if (options.incrementalFrom) {
+      argv.push("-i", options.incrementalFrom);
+    }
+    argv.push(sendName);
+    return unwrap(
+      this.server.execute(new Command(argv, this.commandOptions))
+    );
+  }
+
+  /**
+   * Receive a stream into a given dataset name.
+   */
+  async receiveSnapshot(
+    recvName: string,
+    options: { forceOverwrite?: boolean } = {}
+  ): Promise<ExitedProcess> {
+    const argv = ["zfs", "recv"];
+    if (options.forceOverwrite) argv.push("-F");
+    argv.push(recvName);
+    return unwrap(
+      this.server.execute(new Command(argv, this.commandOptions))
+    );
+  }
+
+  async createSnapshot(): Promise<void> {
+    // TODO
+  }
+
+  async destroySnapshot(): Promise<void> {
+    // TODO                                               
+  }
+
+
+  async rollbackSnapshot(): Promise<void> {
+    // TODO
+  }
 
   /**
    * Fetches only the disk paths and returns them as VDevDisk[]
    */
   async getBaseDisks(): Promise<VDevDisk[]> {
     return unwrap(
-      this.server.getDiskInfo()
-        .map((diskInfoData) =>
-          diskInfoData.rows!.map((disk: any): VDevDisk => ({
-            path: disk["dev"],
-          }))
-        )
+      this.server.getDriveSlots({ excludeEmpty: true }).map((slots) =>
+        slots.map((slot): VDevDisk => ({
+          // path: slot.drive.path,
+          path: `/dev/disk/by-vdev/${slot.slotId}`
+        }))
+      )
     );
   }
+
 
   /**
    * Fetches full disk information by merging fetchLsdev() and fetchDiskInfo()
    */
   async getFullDisks(): Promise<VDevDisk[]> {
-    return Promise.all([
-      unwrap(this.server.getLsDev()),
-      unwrap(this.server.getDiskInfo()),
-    ])
-      .then(([lsdevData, diskInfoData]) => {
-        const lsdevRows = lsdevData.rows.flat(); // Flatten nested arrays in `lsdev`
-        const diskInfoRows = diskInfoData.rows!;
-        // console.log('lsdevRows:', lsdevRows);
-        // console.log('diskInfoRows:', diskInfoRows);
-        return diskInfoRows.map((disk: any): VDevDisk => {
-          const matchingDisk = lsdevRows.find((lsdev: any) => lsdev.dev === disk.dev);
+    return unwrap(
+      this.server.getDriveSlots({ excludeEmpty: true }).map((slots) =>
+        slots.map((slot): VDevDisk => {
+          const drive = slot.drive;
 
           return {
-            path: `/dev/disk/by-vdev/${disk["bay-id"]}`,
-            name: matchingDisk?.["bay-id"] || "Unknown",
-            capacity: matchingDisk?.capacity || "Unknown",
-            model: matchingDisk?.["model-name"] || "Unknown",
-            guid: matchingDisk?.serial || "Unknown",
-            type: (matchingDisk?.disk_type as "SSD" | "HDD" | "NVMe") || "HDD",
-            health: matchingDisk?.health || "Unknown",
+            path: `/dev/disk/by-vdev/${slot.slotId}`,
+            name: slot.slotId,
+            capacity: formatBytes(drive.capacity, "both"),
+            model: drive.model,
+            guid: drive.serial,
+            type: drive.rotationRate ? "HDD" : "SSD",
+            health: drive.smartInfo?.health ?? "Unknown",
             stats: {},
-            phy_path: disk["dev-by-path"],
-            sd_path: disk.dev,
-            vdev_path: `/dev/disk/by-vdev/${disk["bay-id"]}`,
-            serial: matchingDisk?.serial || "Unknown",
-            temp: matchingDisk?.["temp-c"] || "N/A",
-            powerOnCount: matchingDisk?.["power-cycle-count"] || "0",
-            powerOnHours: Number(matchingDisk?.["power-on-time"]) || 0,
-            rotationRate: Number(matchingDisk?.["rotation-rate"]) || 0,
+            phy_path: drive.pathByPath,
+            sd_path: drive.path,
+            vdev_path: `/dev/disk/by-vdev/${slot.slotId}`,
+            serial: drive.serial,
+            temp: drive.smartInfo ? this.formatTemperature(drive.smartInfo.temperature) : "N/A",
+            powerOnCount: drive.smartInfo?.powerCycleCount?.toString() ?? "0",
+            powerOnHours: drive.smartInfo?.powerOnHours ?? 0,
+            rotationRate: drive.rotationRate ?? 0,
           };
-        });
-      })
-      .catch((error) => {
-        console.error("Error fetching full disks:", error);
-        return [];
-      });
+        })
+      )
+    ).catch((error) => {
+      console.error("Error fetching full disks:", error);
+      return [];
+    });
+  }
+
+  private formatTemperature(tempC: number): string {
+    return `${tempC}°C / ${(tempC * 9) / 5 + 32}°F`;
   }
 
   /**

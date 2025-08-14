@@ -52,7 +52,7 @@ export type SmartInfo = {
    * "OK"
    */
   health: string;
-  freshness: 'NEW' | 'USED' | 'OLD'
+  // freshness: 'NEW' | 'USED' | 'OLD'
 };
 
 function formatTemperature(tempC: number): string {
@@ -89,6 +89,7 @@ export namespace DriveSlot {
         { label: "Device Path (by-path)", value: slot.drive.pathByPath },
         { label: "Drive Type", value: slot.drive.rotationRate ? "HDD" : "SSD" },
         { label: "Model Name", value: slot.drive.model },
+        { label: "Manufacturer", value: modelToManufacturer(slot.drive.model) },
         { label: "Serial", value: slot.drive.serial },
         { label: "Firmware Version", value: slot.drive.firmwareVersion },
         { label: "Capacity", value: formatBytes(slot.drive.capacity, "both") },
@@ -115,7 +116,35 @@ export namespace DriveSlot {
 
     return props;
   }
+
+  function modelToManufacturer(model: string): string {
+    const manufacturers: Record<string, string> = {
+      "ST": "Seagate",       // Example: ST1000DM003
+      "WD": "Western Digital", // Example: WD40EZRX
+      "HGST": "HGST",         // Example: HGST HUS726T4TALA6L4
+      "SAMSUNG": "Samsung",   // Example: SAMSUNG MZ7LN256HCHP
+      "TOSHIBA": "Toshiba",   // Example: TOSHIBA DT01ACA100
+      "HITACHI": "Hitachi",   // Example: HITACHI HDS721010CLA332
+      "INTEL": "Intel",       // Example: INTEL SSDSC2KW256G8
+      "CRUCIAL": "Crucial",   // Example: CRUCIAL CT500MX500SSD1
+      "KINGSTON": "Kingston", // Example: KINGSTON SA400S37/240G
+      "ADATA": "ADATA",       // Example: ADATA SU800
+      "SAN": "SanDisk",       // Example: SanDisk SDSSDH3-500G-G25
+      "PLEXTOR": "Plextor",   // Example: PLEXTOR PX-256M9PeG
+      "MICRON": "Micron",     // Example: MICRON 1100 SATA 256GB
+    };
+  
+    for (const prefix in manufacturers) {
+      if (model.toUpperCase().startsWith(prefix)) {
+        return manufacturers[prefix] || "";
+      }
+    }
+  
+    return "Unknown Manufacturer";
+  };
+  
 }
+
 
 export type GetDriveSlotsOpts = {
   /**

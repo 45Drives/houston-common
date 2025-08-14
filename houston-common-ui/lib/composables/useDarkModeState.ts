@@ -51,3 +51,11 @@ setDarkMode();
 export function useDarkModeState(): Ref<boolean> {
   return darkModeState;
 }
+
+export function toggleDarkMode() {
+  const newStyle = darkModeState.value ? "light" : "dark";
+  localStorage.setItem("shell:style", newStyle);
+  window.dispatchEvent(new CustomEvent("cockpit-style", {
+    detail: { style: newStyle }
+  }));
+}

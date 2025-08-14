@@ -26,6 +26,8 @@ export { default as Table } from "./Table.vue";
 export { default as ByteInput } from "./ByteInput.vue";
 export { default as ServerOverview } from "./ServerOverview.vue";
 export { default as DiskCanvas } from "./DiskCanvas.vue";
+export { default as DynamicBrandingLogo } from "./branding/DynamicBrandingLogo.vue";
+export { default as ProgressBar } from "./ProgressBar.vue";
 
 export * from "./tabs";
 export * from "./modals";

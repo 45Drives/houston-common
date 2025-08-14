@@ -50,12 +50,7 @@ def get_smart_info(device: pyudev.Device) -> dict:
         if "smart_status" in smart_json.keys() and smart_json["smart_status"]["passed"]
         else "POOR"
     )
-    smart_info["freshness"] = get_freshness(smart_info) 
     return smart_info
-
-
-def get_freshness(smart_info: dict):
-    return "NEW"
 
 
 def get_drive(device: pyudev.Device) -> dict:
@@ -135,15 +130,17 @@ def get_slots(udev_ctx: pyudev.Context, args):
             slotId = device["SLOT_NAME"]
         elif "ID_VDEV" in device:
             slotId = device["ID_VDEV"]
-        
+
         if slotId is not None:
             slotMap[slotId] = get_drive(device)
         elif args.include_non_aliased:
             nonAliased.append(get_drive(device))
-    
+
     aliasedSlots = list(map(lambda x: {"slotId": x[0], "drive": x[1]}, slotMap.items()))
 
-    return aliasedSlots + list(map(lambda drive: {"slotId": "unknown", "drive": drive}, nonAliased))
+    return aliasedSlots + list(
+        map(lambda drive: {"slotId": "unknown", "drive": drive}, nonAliased)
+    )
 
 
 def report_initial(udev_ctx: pyudev.Context, args):
@@ -157,7 +154,9 @@ def report_initial(udev_ctx: pyudev.Context, args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--live", action="store_true", default=False, required=False)
-    parser.add_argument("--include-non-aliased", action="store_true", default=False, required=False)
+    parser.add_argument(
+        "--include-non-aliased", action="store_true", default=False, required=False
+    )
     args = parser.parse_args()
 
     udev_ctx = pyudev.Context()

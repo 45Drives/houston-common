@@ -1,9 +1,10 @@
 export * from "@/components";
 export * from "@/composables";
+export * from "@/directives";
 
 import { reportError } from ".";
 
-window.onerror = (event) => {
+globalThis.onerror = (event) => {
   if (typeof event === "string") {
     reportError(new Error(event));
   } else {
@@ -17,4 +18,4 @@ window.onerror = (event) => {
   return false;
 };
 
-window.reportHoustonError = reportError;
+(globalThis as any).reportHoustonError = reportError;

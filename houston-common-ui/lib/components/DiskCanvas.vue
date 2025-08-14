@@ -1,12 +1,37 @@
 <template>
-  <div ref="canvasParent" class="overflow-hidden"></div>
+  <div ref="canvasParent" class="overflow-hidden relative">
+    <div
+      class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center transition-opacity ease-out duration-1000 z-10"
+      :class="[showLoading ? 'opacity-100' : 'opacity-0']"
+    >
+      <div
+        class="inline-flex flex-col items-center justify-center gap-2 bg-default p-2 rounded-md w-1/2"
+      >
+        <div class="text-default text-sm text-center">
+          {{ loadingText }}
+        </div>
+        <ProgressBar :percent="loadingPercent" class="w-full rounded-md" />
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { useTemplateRef, onBeforeUnmount, watchEffect, type WatchHandle, onMounted } from "vue";
-import { Server, type DriveSlot } from "@45drives/houston-common-lib";
+import {
+  useTemplateRef,
+  onBeforeUnmount,
+  watchEffect,
+  type WatchHandle,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from "vue";
+import { Server, unwrap, type DriveSlot } from "@45drives/houston-common-lib";
 
 import { useDarkModeState } from "@/composables";
+
+import { ProgressBar } from "@/components";
 
 const props = withDefaults(
   defineProps<{
@@ -27,6 +52,10 @@ const props = withDefaults(
 
 let unmountCallback: (() => void) | undefined = undefined;
 
+const showLoading = ref(true);
+const loadingText = ref("Loading...");
+const loadingPercent = ref(0);
+
 const canvasParent = useTemplateRef<HTMLDivElement>("canvasParent");
 
 const selectedDriveSlots = defineModel<DriveSlot[]>("selectedDriveSlots", { default: [] });
@@ -35,25 +64,45 @@ const driveSlots = defineModel<DriveSlot[]>("driveSlots", { default: [] });
 
 const darkMode = useDarkModeState();
 
-const serverView = import("./ServerView").then(({ ServerView, DriveSlotComponent }) => {
-  const serverView = new ServerView(props.server);
-
-  serverView.addEventListener("selectionchange", (e) => {
-    selectedDriveSlots.value = e.components
-      .filter((c): c is InstanceType<typeof DriveSlotComponent> => c instanceof DriveSlotComponent)
-      .map((driveSlot) => driveSlot.userData);
-  });
-
-  serverView.addEventListener("driveslotchange", (e) => {
-    driveSlots.value = [...e.slots];
-  });
-
-  return serverView;
-});
-
-onMounted(() => {
-  serverView.then((serverView) => {
+const serverView = Promise.all([import("./ServerView"), props.server.getServerModel()]).then(
+  async ([{ ServerView, ServerDriveSlot }, serverModel]) => {
     const watchHandles: WatchHandle[] = [];
+
+    const serverView = new ServerView(await unwrap(serverModel));
+
+    let hideLoadingTimeout: ReturnType<typeof setTimeout> | undefined = undefined;
+
+    serverView.onLoadingStart = (status, loaded, total) => {
+      clearTimeout(hideLoadingTimeout);
+      showLoading.value = true;
+      loadingText.value = `${status} (${loaded}/${total})`;
+      loadingPercent.value = Math.round((loaded / total) * 100);
+    };
+    serverView.onLoadingProgress = (status, loaded, total) => {
+      clearTimeout(hideLoadingTimeout);
+      showLoading.value = true;
+      loadingText.value = `${status} (${loaded}/${total})`;
+      loadingPercent.value = Math.round((loaded / total) * 100);
+    };
+    serverView.onLoadingEnd = (status) => {
+      clearTimeout(hideLoadingTimeout);
+      hideLoadingTimeout = setTimeout(() => {
+        showLoading.value = false;
+      }, 1000);
+      loadingText.value = status;
+      loadingPercent.value = 100;
+    };
+
+    serverView.addEventListener("selectionchange", (e) => {
+      selectedDriveSlots.value = e.components
+        .filter((c): c is InstanceType<typeof ServerDriveSlot> => c instanceof ServerDriveSlot)
+        .map((driveSlot) => driveSlot.driveSlot);
+    });
+
+    const liveDriveSlotsHandle = props.server.setupLiveDriveSlotInfo((slots) => {
+      driveSlots.value = slots;
+      serverView.setDriveSlotInfo(slots);
+    });
 
     watchHandles.push(
       watchEffect(() => {
@@ -61,6 +110,13 @@ onMounted(() => {
           return;
         }
         serverView.start(canvasParent.value);
+        serverView
+          .setView("InitialView")
+          .then(() => new Promise((resolve) => setTimeout(resolve, 1000)))
+          .then(() => {
+            serverView.revealDrives();
+            serverView.setView("DriveView");
+          });
       })
     );
 
@@ -80,12 +136,19 @@ onMounted(() => {
     );
 
     unmountCallback = () => {
+      liveDriveSlotsHandle.stop();
       serverView.stop();
       for (const wh of watchHandles) {
         wh.stop();
       }
     };
-  });
+
+    return serverView;
+  }
+);
+
+defineExpose({
+  serverView,
 });
 
 onBeforeUnmount(() => {

@@ -109,8 +109,8 @@ export interface ISambaManager {
 
   /**
    * Rename a share
-   * @param oldName 
-   * @param newName 
+   * @param oldName
+   * @param newName
    */
   renameShare(
     oldName: string,
@@ -119,20 +119,16 @@ export interface ISambaManager {
 
   /**
    * Add samba user with specific passwd
-   * @param user 
-   * @param passwd 
+   * @param user
+   * @param passwd
    */
   setUserPassword(user: string, passwd: string): ResultAsync<void, ProcessError>;
-  
-  /**
-   * Stop Samba services
-   */
-  stopSambaService(): ResultAsync<void, ProcessError>;
 
   /**
- * Start Samba services
- */
-  startSambaService(): ResultAsync<void, ProcessError>;
+   * Kick clients from share
+   * @param sharename
+   */
+  closeSambaShare(sharename: string): ResultAsync<void, ProcessError>;
 }
 
 export abstract class SambaManagerBase implements ISambaManager {
@@ -195,11 +191,12 @@ export abstract class SambaManagerBase implements ISambaManager {
 
   abstract importConfig(config: string): ResultAsync<this, ProcessError>;
 
-  
   setUserPassword(user: string, passwd: string): ResultAsync<void, ProcessError> {
-    const proc = server.spawnProcess(new Command(['smbpasswd', '-a', '-s', user], { superuser: 'try' }));
+    const proc = server.spawnProcess(
+      new Command(["smbpasswd", "-a", "-s", user], { superuser: "try" })
+    );
     proc.write(`${passwd}\n${passwd}\n`);
-    
+
     return proc.wait().map(() => {});
   }
 
@@ -226,29 +223,10 @@ export abstract class SambaManagerBase implements ISambaManager {
     );
   }
 
-  stopSambaService(): ResultAsync<void, ProcessError> {
-    const proc = server.spawnProcess(new Command(['systemctl', 'stop', 'smb', 'nmb', 'winbind'], { superuser: 'try' }));
-
-    return proc.wait().map(() => { });
-  }
-
-  startSambaService(): ResultAsync<void, ProcessError> {
-    const proc = server.spawnProcess(new Command(['systemctl', 'start', 'smb', 'nmb', 'winbind'], { superuser: 'try' }));
-
-    return proc.wait().map(() => { });
-  }
-
   closeSambaShare(sharename: string): ResultAsync<void, ProcessError> {
-    const proc = server.spawnProcess(new Command(['smbcontrol', 'smbd', 'close-share', sharename], { superuser: 'try' }));
-
-    return proc.wait().map(() => { });
-  }
-
-
-  restartSambaService(): ResultAsync<void, ProcessError> {
-    const proc = server.spawnProcess(new Command(['systemctl', 'restart', 'smbd'], { superuser: 'try' }));
-
-    return proc.wait().map(() => { });
+    return server
+      .execute(new Command(["smbcontrol", "smbd", "close-share", sharename], { superuser: "try" }))
+      .map(() => {});
   }
 }
 
@@ -360,7 +338,7 @@ export class SambaManagerNet extends SambaManagerBase implements ISambaManager {
   }
 
   addShare(share: SambaShareConfig) {
-    console.log("addshare:", share)
+    console.log("addshare:", share);
 
     return SambaShareParser(share.name)
       .unapply(share)

@@ -4,6 +4,15 @@ import { InlineConfig as VitestInlineConfig } from "vitest";
 import dts from "vite-plugin-dts";
 import { defineConfig } from "vite";
 
+declare module "vite" {
+  interface UserConfig {
+    /**
+     * Options for Vitest
+     */
+    test?: VitestInlineConfig;
+  }
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -27,10 +36,12 @@ export default defineConfig({
       external: (id) => {
         // only externalize TS/JS test files, not .py?raw imports with test in the name
         return (
-          (id.endsWith('.test.ts') || id.endsWith('.test.js')) ||
-          (id.endsWith('.spec.ts') || id.endsWith('.spec.js'))
+          id.endsWith(".test.ts") ||
+          id.endsWith(".test.js") ||
+          id.endsWith(".spec.ts") ||
+          id.endsWith(".spec.js")
         );
-      }
+      },
     },
     sourcemap: true,
     emptyOutDir: true,

@@ -56,12 +56,18 @@ const emit = defineEmits<{
         @afterLeave="emit('afterLeave')"
         @leaveCancelled="emit('leaveCancelled')"
       >
+        <!-- ask Josh before changing anything below -->
         <div
           v-if="show"
-          class="fixed overflow-hidden z-10 inset-0 flex items-end sm:items-center justify-center px-4 pb-20 pt-4 sm:pb-4"
+          class="fixed overflow-auto z-10 inset-0 flex items-end sm:items-center justify-center px-4 pb-20 pt-4 sm:pb-4"
           @click.self="emit('clickOutside')"
         >
-          <div :class="[forceFullWidth ? 'w-full' : 'max-w-full', 'max-h-full overflow-auto whitespace-normal']">
+          <div
+            :class="[
+              forceFullWidth ? 'w-full' : 'max-w-full',
+              'max-h-full overflow-show whitespace-normal',
+            ]"
+          >
             <slot />
           </div>
         </div>

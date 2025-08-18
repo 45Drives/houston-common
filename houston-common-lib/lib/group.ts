@@ -6,9 +6,16 @@ export type Group = {
 	name?: string;
 	gid: number;
 	members?: string[];
+	domain?: boolean;
 };
 
-export type LocalGroup = Required<Group>;
+export type LocalGroup = Required<Group> & {domain: false};
+
+export type DomainGroup = {
+	name: string;
+	gid: string;
+	domain: true;
+}
 
 export function Group(
 	server: Server,
@@ -117,4 +124,3 @@ export async function getGroups() {
 		throw new Error(`Failed to fetch groups: ${errorString(error)}`);
 	}
 }
-

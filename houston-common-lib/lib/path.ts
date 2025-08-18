@@ -67,9 +67,14 @@ export class Ownership {
     }
   }
 
-  toChownString(): string {
-    return `${this.user ? this.user.login ?? this.user.uid.toString() : ""}:${
-      this.group ? this.group.name ?? this.group.gid.toString() : ""
+  toChownString(human?: boolean): string {
+    if (human) {
+      return `${this.user ? (this.user.login ?? this.user.uid.toString()) : ""}:${
+        this.group ? (this.group.name ?? this.group.gid.toString()) : ""
+      }`;
+    }
+    return `${this.user ? (this.user.uid.toString() ?? this.user.login) : ""}:${
+      this.group ? (this.group.gid.toString() ?? this.group.name) : ""
     }`;
   }
 }

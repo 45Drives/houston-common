@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, defineProps, watchEffect, defineEmits, defineExpose } from "vue";
+import { ref, defineProps, watchEffect, defineEmits, defineExpose, computed, watch } from "vue";
 import {
   Server,
   ProcessError,
@@ -7,7 +7,7 @@ import {
   FileSystemNode,
   Mode,
   Ownership,
-  HoustonDriver
+  HoustonDriver,
 } from "@45drives/houston-common-lib";
 import { reportSuccess } from "@/components/NotificationView.vue";
 import { wrapActions } from "@/composables/wrapActions";
@@ -24,6 +24,7 @@ const props = withDefaults(
     server?: ResultAsync<Server, ProcessError>;
     includeSystemUsers?: boolean;
     includeSystemGroups?: boolean;
+    includeDomain?: boolean;
   }>(),
   { server: () => getServer() }
 );
@@ -33,22 +34,28 @@ const emit = defineEmits<{
   (e: "cancel"): void;
 }>();
 
-const makeFsNode = (path: string) =>
-  props.server.map((s) => new FileSystemNode(s, path));
+const makeFsNode = (path: string) => props.server.map((s) => new FileSystemNode(s, path));
 
 const mode = ref<Mode>();
 const fetchMode = () =>
   makeFsNode(props.path)
     .andThen((node) => node.getMode({ superuser: "try" }))
     .map((m) => (mode.value = m));
-watchEffect(fetchMode);
 
 const ownership = ref<Ownership>();
 const fetchOwner = () =>
   makeFsNode(props.path)
     .andThen((node) => node.getOwnership({ superuser: "try" }))
     .map((o) => (ownership.value = o));
-watchEffect(fetchOwner);
+
+watch(
+  () => props.path,
+  () => {
+    fetchMode();
+    fetchOwner();
+  },
+  { immediate: true }
+);
 
 const apply = (path: string, mode: Mode, ownership: Ownership) =>
   makeFsNode(path)
@@ -59,7 +66,7 @@ const apply = (path: string, mode: Mode, ownership: Ownership) =>
       reportSuccess(
         `Updated permissions of ${path}:
 mode: ${mode.toString()}
-owner: ${ownership.toChownString()}.`
+owner: ${ownership.toChownString(true)}.`
       );
     });
 
@@ -78,18 +85,13 @@ const cancel = () => {
 defineExpose({
   cancel,
   apply: () =>
-    mode.value &&
-    ownership.value &&
-    actions.apply(props.path, mode.value, ownership.value),
+    mode.value && ownership.value && actions.apply(props.path, mode.value, ownership.value),
 });
 </script>
 
 <template>
   <div class="space-y-content">
-    <div
-      v-if="mode"
-      class="inline-grid grid-cols-[2fr_1fr_1fr_1fr] gap-2 justify-items-center"
-    >
+    <div v-if="mode" class="inline-grid grid-cols-[2fr_1fr_1fr_1fr] gap-2 justify-items-center">
       <label class="justify-self-start block text-sm font-medium"></label>
       <label class="text-label">{{ _("Read") }}</label>
       <label class="text-label">{{ _("Write") }}</label>
@@ -111,9 +113,7 @@ defineExpose({
       <input type="checkbox" class="input-checkbox" v-model="mode.other.x" />
 
       <label class="justify-self-start text-label">{{ _("Mode") }}</label>
-      <span class="col-span-3 font-mono font-medium whitespace-nowrap">{{
-        mode.toString()
-      }}</span>
+      <span class="col-span-3 font-mono font-medium whitespace-nowrap">{{ mode.toString() }}</span>
     </div>
 
     <template v-if="ownership">
@@ -125,6 +125,7 @@ defineExpose({
           v-model="ownership.user"
           :server="server"
           :includeSystemUsers="includeSystemUsers"
+          :includeDomainUsers="includeDomain"
         />
       </InputLabelWrapper>
       <InputLabelWrapper>
@@ -135,6 +136,7 @@ defineExpose({
           v-model="ownership.group"
           :server="server"
           :includeSystemGroups="includeSystemGroups"
+          :includeDomainGroups="includeDomain"
         />
       </InputLabelWrapper>
     </template>

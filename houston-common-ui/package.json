@@ -26,8 +26,8 @@
     "preinstall": "node ./scripts/fix-dependencies.js"
   },
   "dependencies": {
-    "@45drives/houston-common-css": "file:../houston-common-css",
-    "@45drives/houston-common-lib": "file:../houston-common-lib",
+    "@45drives/houston-common-css": "workspace:^",
+    "@45drives/houston-common-lib": "workspace:^",
     "@floating-ui/dom": "^1.7.2",
     "@headlessui/vue": "^1.7.22",
     "@heroicons/vue": "^2.1.3",

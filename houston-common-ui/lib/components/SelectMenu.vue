@@ -7,7 +7,16 @@ export type SelectMenuOption<T> = {
 </script>
 
 <script setup lang="ts">
-import { defineProps, defineModel, defineEmits, ref, computed, watchEffect, watch } from "vue";
+import {
+  defineProps,
+  defineModel,
+  defineEmits,
+  ref,
+  computed,
+  watchEffect,
+  watch,
+  nextTick,
+} from "vue";
 import Disclosure from "@/components/Disclosure.vue";
 import { ChevronDownIcon } from "@heroicons/vue/20/solid";
 
@@ -91,24 +100,27 @@ watchEffect(() => {
     });
   }
 });
+
+const scrollToSelection = () => {
+  optionRefs.value[currentSelectionIndex.value ?? 0]?.scrollIntoView({
+    block: "nearest",
+    inline: "start",
+  });
+}
+
 </script>
 
 <template>
   <div
     class="inline-block w-full"
-    @focusin="
-      showOptions = true;
-      optionRefs[currentSelectionIndex ?? 0]?.scrollIntoView({
-        block: 'nearest',
-        inline: 'start',
-      });
-    "
+    @focusin="showOptions = true"
     @focusout="showOptions = false"
     @keypress="onInput"
   >
     <div
       class="inline-flex flex-row justify-between gap-2 border input-textlike min-w-16 w-full sm:w-auto px-3 py-2 text-left"
       tabindex="0"
+      @click="scrollToSelection()"
     >
       <span>
         {{

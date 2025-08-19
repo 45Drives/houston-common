@@ -11,3 +11,4 @@ docs/
 !.yarn/sdks
 !.yarn/versions
 .pnp.*
+vite.config.ts.timestamp-*.mjs

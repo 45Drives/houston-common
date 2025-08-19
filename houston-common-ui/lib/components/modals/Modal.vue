@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { useGlobalProcessingState } from '@/composables/useGlobalProcessingState';
-import { defineProps, defineModel, defineEmits, withDefaults, computed } from "vue";
+import { defineProps, defineEmits, withDefaults } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -49,15 +48,11 @@ const emit = defineEmits<{
   (e: "afterLeave"): void;
   (e: "leaveCancelled"): void;
 }>();
-
-
-const globalProcessingState = useGlobalProcessingState();
-
 </script>
 
 <template>
   <Teleport to="body">
-    <div class="fixed z-10 text-default" :class="{ '!cursor-wait': globalProcessingState !== 0 }">
+    <div class="fixed z-10 text-default">
       <Transition
         mode="out-in"
         enter-active-class="ease-out duration-500"

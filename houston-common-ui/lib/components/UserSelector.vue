@@ -54,20 +54,18 @@ const loadUsers = wrapAction((invalidateCache?: boolean) =>
     .map((loadedUsers) => (users.value = loadedUsers))
 );
 
-const userOptions = computed<SelectMenuOption<LocalUser | DomainUser>[]>(() =>
-  users.value.map(
-    (user) =>
-      ({
-        label: `${user.login} (${user.uid})` + (user.domain ? " *" : ""),
-        value: user,
-        hoverText:
-          `${"name" in user ? user.name || user.login : user.login} (UID=${user.uid})` +
-          (user.domain ? " (AD/domain user)" : ""),
-      }) as SelectMenuOption<LocalUser>
-  )
-);
+function userToSelectOption(user: AnyUser): SelectMenuOption<AnyUser> {
+  const login = user.login ?? "<unknown user>";
+  return {
+    label: `${login} (${user.uid})` + (user.domain ? " *" : ""),
+    value: user,
+    hoverText:
+      `${"name" in user ? user.name || login : login} (UID=${user.uid})` +
+      (user.domain ? " (AD/domain user)" : ""),
+  };
+}
 
-onMounted(() => loadUsers(true));
+onMounted(() => loadUsers());
 
 watch(
   () => props.includeSystemUsers,
@@ -87,13 +85,17 @@ defineExpose({
   refresh: loadUsers,
 });
 
-
 function optionKey(u: AnyUser) {
   return u.uid;
 }
-
 </script>
 
 <template>
-  <SelectMenu v-model="user" :options="userOptions" :optionKey="(optionKey as any)" />
+  <SelectMenu
+    v-model="user"
+    :values="users"
+    :valueToOption="userToSelectOption"
+    :optionKey="optionKey as any"
+    placeholder="Select a user"
+  />
 </template>

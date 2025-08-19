@@ -53,23 +53,40 @@ const loadGroups = wrapAction((invalidateCache?: boolean) =>
     .map((loadedGroups) => (groups.value = loadedGroups))
 );
 
-const groupOptions = computed<SelectMenuOption<LocalGroup | DomainGroup>[]>(() =>
-  groups.value.map(
-    (group) =>
-      ({
-        label: `${group.name} (${group.gid})` + (group.domain ? " *" : ""),
-        value: group,
-        hoverText: `${group.name} (GID=${group.gid})` + (group.domain ? " (AD/domain group)" : ""),
-      }) as SelectMenuOption<LocalGroup | DomainGroup>
-  )
+// const groupOptions = computed<SelectMenuOption<LocalGroup | DomainGroup>[]>(() =>
+//   groups.value.map(
+//     (group) =>
+//       ({
+//         label: `${group.name} (${group.gid})` + (group.domain ? " *" : ""),
+//         value: group,
+//         hoverText: `${group.name} (GID=${group.gid})` + (group.domain ? " (AD/domain group)" : ""),
+//       }) as SelectMenuOption<LocalGroup | DomainGroup>
+//   )
+// );
+
+function groupToSelectOption(group: AnyGroup): SelectMenuOption<AnyGroup> {
+  const name = group.name ?? "<unknown group>";
+  return {
+    label: `${name} (${group.gid})` + (group.domain ? " *" : ""),
+    value: group,
+    hoverText: `${name} (GID=${group.gid})` + (group.domain ? " (AD/domain group)" : ""),
+  };
+}
+
+onMounted(() => loadGroups());
+
+watch(
+  () => props.includeSystemGroups,
+  () => {
+    loadGroups(true);
+  }
 );
 
 watch(
-  props,
+  () => props.includeDomainGroups,
   () => {
     loadGroups(true);
-  },
-  { immediate: true }
+  }
 );
 
 defineExpose({
@@ -79,9 +96,14 @@ defineExpose({
 function optionKey(g: AnyGroup) {
   return g.gid;
 }
-
 </script>
 
 <template>
-  <SelectMenu v-model="group" :options="groupOptions" :optionKey="(optionKey as any)" />
+  <SelectMenu
+    v-model="group"
+    :values="groups"
+    :valueToOption="groupToSelectOption"
+    :optionKey="optionKey as any"
+    placeholder="Select a group"
+  />
 </template>

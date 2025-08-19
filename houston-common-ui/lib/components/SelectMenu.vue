@@ -7,16 +7,7 @@ export type SelectMenuOption<T> = {
 </script>
 
 <script setup lang="ts">
-import {
-  defineProps,
-  defineModel,
-  defineEmits,
-  ref,
-  computed,
-  watchEffect,
-  watch,
-  nextTick,
-} from "vue";
+import { defineProps, defineModel, defineEmits, ref, computed, watchEffect, watch } from "vue";
 import Disclosure from "@/components/Disclosure.vue";
 import { ChevronDownIcon } from "@heroicons/vue/20/solid";
 
@@ -25,13 +16,22 @@ const model = defineModel<unknown>();
 type OptionType = typeof model.value;
 
 const props = withDefaults(
-  defineProps<{
-    options: SelectMenuOption<OptionType>[];
-    disabled?: boolean;
-    placeholder?: string;
-    onKeyboardInput?: "focus" | "scroll";
-    optionKey?: (o: OptionType) => any;
-  }>(),
+  defineProps<
+    (
+      | {
+          options: SelectMenuOption<OptionType>[];
+        }
+      | {
+          values: OptionType[];
+          valueToOption: (v: OptionType) => SelectMenuOption<OptionType>;
+        }
+    ) & {
+      disabled?: boolean;
+      placeholder?: string;
+      onKeyboardInput?: "focus" | "scroll";
+      optionKey?: (o: OptionType) => any;
+    }
+  >(),
   {
     placeholder: "",
     onKeyboardInput: "focus",
@@ -43,14 +43,34 @@ const emit = defineEmits<{
   (e: "change", value: unknown): void;
 }>();
 
+const options = computed(() => {
+  if ("options" in props && Array.isArray(props.options)) {
+    return props.options;
+  }
+  if ("values" in props && Array.isArray(props.values)) {
+    return props.values.map((v) => props.valueToOption(v));
+  }
+  return [];
+});
+
 const currentSelectionIndex = computed<number | undefined>(() => {
-  const index = props.options.findIndex(
-    (o) => props.optionKey(o.value) === props.optionKey(model.value)
-  );
+  const index =
+    options.value?.findIndex((o) => props.optionKey(o.value) === props.optionKey(model.value)) ??
+    -1;
   if (index === -1) {
     return undefined;
   }
   return index;
+});
+
+const currentSelectionLabel = computed<string>(() => {
+  if (currentSelectionIndex.value !== undefined) {
+    return options.value[currentSelectionIndex.value].label;
+  }
+  if ("values" in props) {
+    return props.valueToOption?.(model.value).label ?? props.placeholder;
+  }
+  return props.placeholder;
 });
 
 const showOptions = ref(false);
@@ -84,9 +104,9 @@ watchEffect(() => {
   if (searchText === undefined) {
     return;
   }
-  let focusIndex = props.options.findIndex((o) => o.label.toLowerCase().startsWith(searchText));
+  let focusIndex = options.value.findIndex((o) => o.label.toLowerCase().startsWith(searchText));
   if (focusIndex === -1) {
-    focusIndex = props.options.findIndex((o) => o.label.toLowerCase().includes(searchText));
+    focusIndex = options.value.findIndex((o) => o.label.toLowerCase().includes(searchText));
   }
   if (focusIndex === -1) {
     return;
@@ -106,8 +126,7 @@ const scrollToSelection = () => {
     block: "nearest",
     inline: "start",
   });
-}
-
+};
 </script>
 
 <template>
@@ -123,9 +142,7 @@ const scrollToSelection = () => {
       @click="scrollToSelection()"
     >
       <span>
-        {{
-          currentSelectionIndex !== undefined ? options[currentSelectionIndex]!.label : placeholder
-        }}
+        {{ currentSelectionLabel }}
       </span>
       <ChevronDownIcon class="icon-default size-icon" />
     </div>

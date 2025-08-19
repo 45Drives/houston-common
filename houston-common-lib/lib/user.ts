@@ -3,60 +3,70 @@ import { Server } from "@/server";
 // import { useSpawn, errorString } from '@/legacy/useSpawn';
 
 export type User = {
-	server: Server;
-	login?: string;
-	uid: number;
-	gid?: number;
-	name?: string;
-	home?: Directory;
-	shell?: File;
+  server: Server;
+  login?: string;
+  uid: number;
+  gid?: number;
+  name?: string;
+  home?: Directory;
+  shell?: File;
+  domain?: boolean;
 };
 
 export type NewUser = {
-	/**
-	 * User's login name
-	 */
-	login: string;
-	/**
-	 * Full name
-	 */
-	name?: string;
-	/**
-	 * Home path
-	 */
-	home?: string;
-	/**
-	 * Shell path
-	 */
-	shell?: string;
-}
+  /**
+   * User's login name
+   */
+  login: string;
+  /**
+   * Full name
+   */
+  name?: string;
+  /**
+   * Home path
+   */
+  home?: string;
+  /**
+   * Shell path
+   */
+  shell?: string;
+};
 
-export type LocalUser = Required<User>;
+export type LocalUser = Required<User> & { domain: false };
+
+export type DomainUser = {
+  /**
+   * User's login name
+   */
+  login: string;
+  uid: number;
+  domain: true;
+};
 
 export function User(
-	server: Server,
-	login: string | undefined,
-	uid: number,
-	gid: number | undefined,
-	name: string | undefined,
-	home: Directory | undefined,
-	shell: File | undefined
+  server: Server,
+  login: string | undefined,
+  uid: number,
+  gid: number | undefined,
+  name: string | undefined,
+  home: Directory | undefined,
+  shell: File | undefined
 ): User {
-	return {
-		server,
-		login,
-		uid,
-		gid,
-		name,
-		home,
-		shell,
-	};
+  return {
+    server,
+    login,
+    uid,
+    gid,
+    name,
+    home,
+    shell,
+  };
 }
 
 export function isLocalUser(user: User): user is LocalUser {
-	return [user.login, user.gid, user.name, user.home, user.shell].every(
-		(prop) => prop !== undefined
-	);
+  return [user.login, user.gid, user.name, user.home, user.shell].every(
+    (prop) => prop !== undefined
+  );
 }
 
 // /**
@@ -148,7 +158,6 @@ export function isLocalUser(user: User): user is LocalUser {
 // 		return { success: false, error: `Failed to add user '${user.user}': ${errorString(error)}` };
 // 	}
 // }
-
 
 // /**
 //  * Fetches a list of system users.

@@ -7,15 +7,7 @@ export type SelectMenuOption<T> = {
 </script>
 
 <script setup lang="ts">
-import {
-  defineProps,
-  defineModel,
-  defineEmits,
-  ref,
-  computed,
-  watchEffect,
-  watch,
-} from "vue";
+import { defineProps, defineModel, defineEmits, ref, computed, watchEffect, watch } from "vue";
 import Disclosure from "@/components/Disclosure.vue";
 import { ChevronDownIcon } from "@heroicons/vue/20/solid";
 
@@ -24,25 +16,61 @@ const model = defineModel<unknown>();
 type OptionType = typeof model.value;
 
 const props = withDefaults(
-  defineProps<{
-    options: SelectMenuOption<OptionType>[];
-    disabled?: boolean;
-    placeholder?: string;
-    onKeyboardInput?: "focus" | "scroll";
-  }>(),
-  { placeholder: "", onKeyboardInput: "focus" }
+  defineProps<
+    (
+      | {
+          options: SelectMenuOption<OptionType>[];
+        }
+      | {
+          values: OptionType[];
+          valueToOption: (v: OptionType) => SelectMenuOption<OptionType>;
+        }
+    ) & {
+      disabled?: boolean;
+      placeholder?: string;
+      onKeyboardInput?: "focus" | "scroll";
+      optionKey?: (o: OptionType) => any;
+    }
+  >(),
+  {
+    placeholder: "",
+    onKeyboardInput: "focus",
+    optionKey: (o: any) => o,
+  }
 );
 
 const emit = defineEmits<{
   (e: "change", value: unknown): void;
 }>();
 
+const options = computed(() => {
+  if ("options" in props && Array.isArray(props.options)) {
+    return props.options;
+  }
+  if ("values" in props && Array.isArray(props.values)) {
+    return props.values.map((v) => props.valueToOption(v));
+  }
+  return [];
+});
+
 const currentSelectionIndex = computed<number | undefined>(() => {
-  const index = props.options.findIndex((o) => o.value === model.value);
+  const index =
+    options.value?.findIndex((o) => props.optionKey(o.value) === props.optionKey(model.value)) ??
+    -1;
   if (index === -1) {
     return undefined;
   }
   return index;
+});
+
+const currentSelectionLabel = computed<string>(() => {
+  if (currentSelectionIndex.value !== undefined) {
+    return options.value[currentSelectionIndex.value].label;
+  }
+  if ("values" in props) {
+    return props.valueToOption?.(model.value).label ?? props.placeholder;
+  }
+  return props.placeholder;
 });
 
 const showOptions = ref(false);
@@ -69,20 +97,16 @@ const { inputBuffer, onInput } = useTempInputBuffer(1000);
 
 const optionRefs = ref<HTMLButtonElement[]>([]);
 
-watch(model, () => emit('change', model.value), {deep: true, immediate: true})
+watch(model, () => emit("change", model.value), { deep: true, immediate: true });
 
 watchEffect(() => {
   const searchText = inputBuffer.value?.toLowerCase();
   if (searchText === undefined) {
     return;
   }
-  let focusIndex = props.options.findIndex((o) =>
-    o.label.toLowerCase().startsWith(searchText)
-  );
+  let focusIndex = options.value.findIndex((o) => o.label.toLowerCase().startsWith(searchText));
   if (focusIndex === -1) {
-    focusIndex = props.options.findIndex((o) =>
-      o.label.toLowerCase().includes(searchText)
-    );
+    focusIndex = options.value.findIndex((o) => o.label.toLowerCase().includes(searchText));
   }
   if (focusIndex === -1) {
     return;
@@ -96,6 +120,13 @@ watchEffect(() => {
     });
   }
 });
+
+const scrollToSelection = () => {
+  optionRefs.value[currentSelectionIndex.value ?? 0]?.scrollIntoView({
+    block: "nearest",
+    inline: "start",
+  });
+};
 </script>
 
 <template>
@@ -108,13 +139,10 @@ watchEffect(() => {
     <div
       class="inline-flex flex-row justify-between gap-2 border input-textlike min-w-16 w-full sm:w-auto px-3 py-2 text-left"
       tabindex="0"
+      @click="scrollToSelection()"
     >
       <span>
-        {{
-          currentSelectionIndex !== undefined
-            ? options[currentSelectionIndex]!.label
-            : placeholder
-        }}
+        {{ currentSelectionLabel }}
       </span>
       <ChevronDownIcon class="icon-default size-icon" />
     </div>
@@ -140,6 +168,7 @@ watchEffect(() => {
             class="px-3 text-left hover:bg-accent whitespace-nowrap"
             ref="optionRefs"
             :title="option.hoverText ?? option.label"
+            :key="props.optionKey(option.value)"
           >
             {{ option.label }}
           </button>

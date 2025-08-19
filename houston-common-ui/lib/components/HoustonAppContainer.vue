@@ -61,7 +61,7 @@ const globalProcessingState = useGlobalProcessingState();
             <button @click="setShow(true)">
               <QuestionMarkCircleIcon class="size-icon icon-default" />
             </button>
-            <Modal @clickOutside="setShow(false)" :show="show">
+            <Modal @clickOutside="setShow(false)" :show="show" appearFrom="bottom-right">
               <CardContainer>
                 <template #header>
                   {{ `${moduleName} ${appVersion}` }}

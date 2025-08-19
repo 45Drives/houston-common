@@ -1,12 +1,14 @@
 import { ResultAsync, ok, okAsync, err, errAsync } from "neverthrow";
-import { Command, Process, ExitedProcess, PythonCommand } from "@/process";
-import { User, LocalUser, isLocalUser, NewUser } from "@/user";
-import { Group, LocalGroup, isLocalGroup } from "@/group";
+import { Command, Process, ExitedProcess, PythonCommand, BashCommand } from "@/process";
+import { User, LocalUser, isLocalUser, NewUser, DomainUser } from "@/user";
+import { DomainGroup, Group, LocalGroup, isLocalGroup } from "@/group";
 import { Directory, File } from "@/path";
 import { ParsingError, ProcessError, ValueError } from "@/errors";
 import { Download } from "@/download";
 import { safeJsonParse } from "./utils";
 import { assertProp } from "./utils";
+
+import { getentBashScriptJsonOuptut } from "./scripts/getent";
 
 import DiskInfoPy from "@/scripts/disk_info.py?raw";
 
@@ -87,6 +89,8 @@ export class Server {
   private ipAddress?: string;
   private localUsers?: LocalUser[];
   private localGroups?: LocalGroup[];
+  private domainUsers?: DomainUser[];
+  private domainGroups?: DomainGroup[];
 
   constructor(host?: string) {
     this.host = host;
@@ -162,7 +166,7 @@ export class Server {
    * onMounted(() => {
    *     liveDriveSlotsHandle = server.setupLiveDriveSlotInfo((slots) => driveSlots.value = slots);
    * });
-   * 
+   *
    * onUnmounted(() => {
    *     liveDriveSlotsHandle?.stop();
    * });
@@ -213,10 +217,14 @@ export class Server {
 
   setHostname(hostname: string): ResultAsync<null, ProcessError> {
     if (this.hostname === undefined || this.hostname !== hostname) {
-      return this.execute(new Command(["hostnamectl", "set-hostname", hostname], { superuser: "try" }))
+      return this.execute(
+        new Command(["hostnamectl", "set-hostname", hostname], { superuser: "try" })
+      )
         .orElse((err) => {
           if (err.message.includes("Could not set property: Access denied")) {
-            return this.execute(new Command(["hostnamectl", "set-hostname", hostname], { superuser: "try" }));
+            return this.execute(
+              new Command(["hostnamectl", "set-hostname", hostname], { superuser: "try" })
+            );
           }
           return errAsync(err);
         })
@@ -229,7 +237,9 @@ export class Server {
   writeHostnameFiles(hostname: string): ResultAsync<null, ProcessError> {
     console.log(`Writing hostname files for: ${hostname}`);
 
-    return this.execute(new Command(["sh", "-c", `echo '${hostname}' > /etc/hostname`], { superuser: "try" }))
+    return this.execute(
+      new Command(["sh", "-c", `echo '${hostname}' > /etc/hostname`], { superuser: "try" })
+    )
       .map((result) => {
         console.log("Successfully wrote to /etc/hostname");
         return result;
@@ -354,6 +364,26 @@ export class Server {
     return okAsync(this.localGroups);
   }
 
+  getDomainUsers(cache: boolean = true): ResultAsync<DomainUser[], ProcessError> {
+    if (this.domainUsers === undefined || cache === false) {
+      return this.execute(new BashCommand(getentBashScriptJsonOuptut("passwd", true)))
+        .map((proc) => proc.getStdout())
+        .andThen(safeJsonParse<DomainUser[]>)
+        .map((users) => (this.domainUsers = users as DomainUser[]));
+    }
+    return okAsync(this.domainUsers);
+  }
+
+  getDomainGroups(cache: boolean = true): ResultAsync<DomainGroup[], ProcessError> {
+    if (this.domainGroups === undefined || cache === false) {
+      return this.execute(new BashCommand(getentBashScriptJsonOuptut("group", true)))
+        .map((proc) => proc.getStdout())
+        .andThen(safeJsonParse<DomainGroup[]>)
+        .map((groups) => (this.domainGroups = groups as DomainGroup[]));
+    }
+    return okAsync(this.domainGroups);
+  }
+
   getUserGroups(user: User): ResultAsync<LocalGroup[], ProcessError | ValueError> {
     if (!isLocalUser(user)) {
       return errAsync(new ValueError(`Can't get groups from non-local user ${user.uid}`));
@@ -459,10 +489,10 @@ export class Server {
   }
 
   createGroup(group: string): ResultAsync<LocalGroup, ProcessError> {
-    return this.execute(new Command(["groupadd", group], { superuser: "try" }), true)
-      .andThen(() => this.getGroupByName(group));
+    return this.execute(new Command(["groupadd", group], { superuser: "try" }), true).andThen(() =>
+      this.getGroupByName(group)
+    );
   }
-
 
   addUserToGroups(
     user: LocalUser,
@@ -478,19 +508,20 @@ export class Server {
   }
 
   isServerDomainJoined(): ResultAsync<boolean, ProcessError> {
-    return this.execute(new Command(["net", "ads", "testjoin"], { superuser: "try" }), false)
-      .map((proc) => {
+    return this.execute(new Command(["net", "ads", "testjoin"], { superuser: "try" }), false).map(
+      (proc) => {
         const output = (proc.getStdout() + proc.getStderr()).toLowerCase();
         if (output.includes("join is ok")) {
           return true;
         } else {
           return false;
         }
-      });
+      }
+    );
   }
 
   reboot(): ResultAsync<null, ProcessError> {
-    return this.execute(new Command(['reboot', 'now'], { superuser: 'try' }))
+    return this.execute(new Command(["reboot", "now"], { superuser: "try" }))
       .map(() => {
         console.log(`${this.toString()}: Reboot triggered.`);
         return null;

@@ -1,13 +1,42 @@
 <script setup lang="ts">
-import { defineProps, defineModel, defineEmits } from "vue";
+import { useGlobalProcessingState } from '@/composables/useGlobalProcessingState';
+import { defineProps, defineModel, defineEmits, withDefaults, computed } from "vue";
 
-defineProps<{
-  show: boolean;
-  /**
-   * forces modal container to have w-full class instead of max-w-full
-   */
-  forceFullWidth?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    show: boolean;
+    /**
+     * forces modal container to have w-full class instead of max-w-full
+     */
+    forceFullWidth?: boolean;
+    appearFrom?:
+      | "center"
+      | "top"
+      | "bottom"
+      | "left"
+      | "right"
+      | `${"top" | "bottom"}-${"left" | "right"}`;
+  }>(),
+  { appearFrom: "center" }
+);
+
+const classPositioning = (direction: "from" | "to") => {
+  if (props.appearFrom === "center") {
+    return `translate-y-4 sm:translate-y-0 ${direction == "from" ? "sm:scale-90" : "sm:scale-75"}`;
+  }
+  let classes = ["scale-0"];
+  if (props.appearFrom.includes("top")) {
+    classes.push("-translate-y-1/2");
+  } else if (props.appearFrom.includes("bottom")) {
+    classes.push("translate-y-1/2");
+  }
+  if (props.appearFrom.includes("left")) {
+    classes.push("-translate-x-1/2");
+  } else if (props.appearFrom.includes("right")) {
+    classes.push("translate-x-1/2");
+  }
+  return classes.join(" ");
+};
 
 const emit = defineEmits<{
   (e: "clickOutside"): void;
@@ -20,11 +49,15 @@ const emit = defineEmits<{
   (e: "afterLeave"): void;
   (e: "leaveCancelled"): void;
 }>();
+
+
+const globalProcessingState = useGlobalProcessingState();
+
 </script>
 
 <template>
   <Teleport to="body">
-    <div class="fixed z-10 text-default">
+    <div class="fixed z-10 text-default" :class="{ '!cursor-wait': globalProcessingState !== 0 }">
       <Transition
         mode="out-in"
         enter-active-class="ease-out duration-500"
@@ -42,11 +75,11 @@ const emit = defineEmits<{
       <Transition
         mode="out-in"
         enter-active-class="ease-out duration-300"
-        enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-90"
+        :enter-from-class="classPositioning('from') + ' opacity-0'"
         enter-to-class="opacity-100 translate-y-0 sm:scale-100"
         leave-active-class="ease-in duration-100"
         leave-from-class="opacity-100 translate-y-0 sm:scale-100"
-        leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-75"
+        :leave-to-class="classPositioning('to') + ' opacity-0'"
         @beforeEnter="emit('beforeEnter')"
         @enter="emit('enter')"
         @afterEnter="emit('afterEnter')"

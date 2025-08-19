@@ -12,3 +12,4 @@ export * from "./validation";
 export * from './useAutoFocus';
 export * from './useAutoFocusRef';
 export * from './useEnterToAdvance';
+export * from './hint';

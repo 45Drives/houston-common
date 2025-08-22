@@ -7,7 +7,7 @@ const packageJsonPath = path.join(__dirname, 'package.json');
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
 // Check if Yarn is being used
-const isYarn = fs.existsSync(path.join(__dirname, '../.yarnrc'));
+const isYarn = process.env["npm_config_user_agent"]?.includes("yarn") ?? false;
 
 // Update dependencies accordingly
 if (isYarn) {

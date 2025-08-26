@@ -26,6 +26,10 @@ const props = defineProps<{
   tabs?: HoustonAppTabEntry[];
   noScroll?: boolean;
   notificationComponent?: any;
+  /**
+   * set to true to not keep tabs alive
+   */
+  noKeepAlive?: boolean;
 }>();
 
 const {
@@ -50,7 +54,7 @@ const globalProcessingState = useGlobalProcessingState();
     <div :class="['grow basis-0 flex flex-col items-stretch', (noScroll? '' : 'overflow-y-auto')]">
       <div :class="['bg-well grow', (noScroll? '' : 'overflow-y-auto')]" style="scrollbar-gutter: stable both-edges">
         <slot>
-          <TabView v-if="tabs" :currentComponent="currentComponent" />
+          <TabView v-if="tabs" :currentComponent="currentComponent" :noKeepAlive="noKeepAlive" />
         </slot>
       </div>
       <div class="grow-0 overflow-visible relative">

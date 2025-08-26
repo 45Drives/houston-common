@@ -3,12 +3,13 @@ import { computed, defineProps, type Component } from "vue";
 import { type HoustonAppTabEntry } from "@/components/tabs";
 
 const props = defineProps<{
-  currentComponent?: Component
+  currentComponent?: Component;
+  noKeepAlive?: boolean;
 }>();
 </script>
 
 <template>
-  <KeepAlive>
+  <KeepAlive :max="noKeepAlive ? 0 : undefined">
     <component v-if="currentComponent" :is="currentComponent" :key="currentComponent.name" />
   </KeepAlive>
 </template>

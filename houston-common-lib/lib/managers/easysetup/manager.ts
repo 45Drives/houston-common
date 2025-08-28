@@ -18,7 +18,8 @@ import {
   IntParameter,
   StringParameter,
   SnapshotRetentionParameter,
-  TaskScheduleInterval
+  TaskScheduleInterval,
+  SambaShareConfig
 } from "@/index";
 import { storeEasySetupConfig } from './logConfig';
 import { ZFSManager } from "@/index";
@@ -89,7 +90,7 @@ export class EasySetupConfigurator {
         await this.ensureNode18();
       }
       progressCallback({ message: `Ensure Required Node Version (18)`, step: 9, total });
-      
+
       if (config.splitPools) {
         progressCallback({ message: "Scheduled Active Backup tasks", step: 10, total });
       } else {
@@ -253,27 +254,34 @@ export class EasySetupConfigurator {
     );
   }
 
-  private async setShareOwnershipAndPermissions(sharePath: string, smbUser: string) {
-    try {
-      console.log(` Setting ownership of ${sharePath} to ${smbUser}:smbusers...`);
-      await unwrap(
-        server.execute(
-          new Command(["chown", `${smbUser}:smbusers`, sharePath], this.commandOptions),
-          true
-        )
-      );
-
-      console.log(`Setting permissions for ${sharePath} to 775...`);
-      await unwrap(
-        server.execute(
-          new Command(["chmod", "775", sharePath], this.commandOptions),
-          true
-        )
-      );
-    } catch (error) {
-      console.error(`Error setting ownership and permissions for ${sharePath}:`, error);
-    }
+  private async getAdminGroupName(): Promise<"wheel" | "sudo"> {
+    const distro = await this.getLinuxDistro();
+    return distro === "ubuntu" ? "sudo" : "wheel";
   }
+
+  private normalizeAdminGroup(name: string, admin: string) {
+    return (name === "wheel" || name === "sudo") ? admin : name;
+  }
+
+  private async setGroupOwnedTree(path: string, group = "smbusers") {
+    // // Owner user = root (or a service account), group = smbusers
+    // await unwrap(server.execute(new Command(["chown", "-R", `root:${group}`, path], this.commandOptions), true));
+    // // rwx for user/group, rx for others; +setgid so children inherit group
+    // await unwrap(server.execute(new Command(["chmod", "-R", "2775", path], this.commandOptions), true));
+
+    // // Optional but helpful if ACLs are available; ignore errors if setfacl isn't present
+    // await server.execute(new Command(["setfacl", "-m", `g:${group}:rwx`, path], this.commandOptions));
+    // await server.execute(new Command(["setfacl", "-d", "-m", `g:${group}:rwx`, path], this.commandOptions)); // default ACL
+
+    await unwrap(server.execute(new Command(["chown", `root:${group}`, path], this.commandOptions), true));
+    // await unwrap(server.execute(new Command(["chmod", "2775", path], this.commandOptions), true));
+    await unwrap(server.execute(new Command(["chmod", "2770", path], this.commandOptions), true));
+    // defaults for future children
+    await server.execute(new Command(["setfacl", "-m", `g:${group}:rwx`, path], this.commandOptions));
+    await server.execute(new Command(["setfacl", "-d", "-m", `g:${group}:rwx`, path], this.commandOptions));
+
+  }
+
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
     if (!config.zfsConfigs) return;
@@ -426,174 +434,91 @@ export class EasySetupConfigurator {
 
   }
 
-  private async createUsersAndPasswordsEnsuringSMBGroup(users: { username: string; password: string; groups?: string[] }[]) {
-    // Ensure 'smbusers' exists
-    const smbGroupCheck = await server.getGroupByName("smbusers");
-    if (smbGroupCheck.isErr()) {
-      const createRes = await server.createGroup("smbusers");
-      if (createRes.isErr()) {
-        console.error("Failed to create smbusers group:", createRes.error);
-        return;
-      }
-    }
-
-    for (const { username, password, groups = [] } of users) {
-      let userResult = await server.getUserByLogin(username);
-      if (userResult.isErr()) {
-        userResult = await server.addUser({ login: username });
-        if (userResult.isErr()) {
-          console.error(`Failed to add user ${username}:`, userResult.error);
-          continue;
-        }
-      }
-
-      const user = userResult.value;
-
-      // Always add to smbusers
-      await server.addUserToGroups(user, "smbusers");
-
-      // Add to other groups
-      for (const group of groups) {
-        if (group === "smbusers") continue;
-        const groupCheck = await server.getGroupByName(group);
-        if (groupCheck.isErr()) {
-          const createRes = await server.createGroup(group);
-          if (createRes.isErr()) {
-            console.error(`Failed to create group '${group}':`, createRes.error);
-            continue;
-          }
-        }
-        const addRes = await server.addUserToGroups(user, group);
-        if (addRes.isErr()) {
-          console.error(`Failed to add ${username} to group '${group}':`, addRes.error);
-        }
-      }
-
-      // Set password
-      const passResult = await server.changePassword(user, password);
-      if (passResult.isErr()) {
-        console.error(`Failed to set password for ${username}:`, passResult.error);
-      }
+  private async ensureGroupsExist(groups: string[]) {
+    for (const g of groups) {
+      const exists = await server.getGroupByName(g);
+      if (exists.isErr()) await server.createGroup(g);
     }
   }
-
-
-  private async createGroupsAndAddMembers(groups: { name: string; members?: string[] }[]) {
-    for (const { name, members = [] } of groups) {
-      let groupRes = await server.getGroupByName(name);
-      if (groupRes.isErr()) {
-        const createRes = await server.createGroup(name);
-        if (createRes.isErr()) {
-          console.error(`Failed to create group '${name}':`, createRes.error);
-          continue;
-        }
-      }
-
-      for (const member of members) {
-        const userRes = await server.getUserByLogin(member);
-        if (userRes.isOk()) {
-          const addRes = await server.addUserToGroups(userRes.value, name);
-          if (addRes.isErr()) {
-            console.error(`Failed to add user '${member}' to group '${name}':`, addRes.error);
-          }
-        } else {
-          console.error(`User '${member}' not found to add to group '${name}'`);
-        }
-      }
-    }
-  }
-
-
-  private async assignGroupsToUsers(users: { username: string; groups: string[] }[]) {
-    for (const { username, groups } of users) {
-      const userRes = await server.getUserByLogin(username);
-      if (userRes.isErr()) {
-        console.error(`User '${username}' not found for group assignment`);
-        continue;
-      }
-
-      const user = userRes.value;
-
-      // Always add to smbusers first
-      await server.addUserToGroups(user, "smbusers");
-
-      for (const groupName of groups) {
-        if (groupName === "smbusers") continue; // already added
-        let groupRes = await server.getGroupByName(groupName);
-        if (groupRes.isErr()) {
-          const createRes = await server.createGroup(groupName);
-          if (createRes.isErr()) {
-            console.error(`Failed to create group '${groupName}':`, createRes.error);
-            continue;
-          }
-        }
-
-        const addRes = await server.addUserToGroups(user, groupName);
-        if (addRes.isErr()) {
-          console.error(`Failed to add user '${username}' to group '${groupName}':`, addRes.error);
-        }
-      }
-    }
-  }
-
 
   private async applyUsersAndGroups(config: EasySetupConfig) {
-
     const userGroupCfg = {
       users: config.usersAndGroups?.users ?? [],
       groups: config.usersAndGroups?.groups ?? []
     };
 
+    // Always have smbusers (group)
     if (!userGroupCfg.groups.some(g => g.name === "smbusers")) {
       userGroupCfg.groups.push({ name: "smbusers", members: [] });
     }
 
-    // Ensure all users are in smbusers
-    for (const user of userGroupCfg.users) {
-      if (!user.groups) user.groups = [];
-      if (!user.groups.includes("smbusers")) {
-        user.groups.push("smbusers");
+    const declaredUsers = new Set(userGroupCfg.users.map(u => u.username));
+    for (const g of userGroupCfg.groups) {
+      for (const m of g.members ?? []) {
+        if (!declaredUsers.has(m)) throw new ValueError(`Group '${g.name}' references unknown user '${m}'`);
       }
     }
 
+    const adminGroup = await this.getAdminGroupName();
+
+    // Normalize group objects (wheel/sudo -> correct admin group)
+    userGroupCfg.groups = userGroupCfg.groups.map(g => ({
+      ...g,
+      name: this.normalizeAdminGroup(g.name, adminGroup)
+    }));
+
+    // Add the SMB admin user, and put them in the correct admin group (ONLY them)
     if (config.smbUser && config.smbPass) {
       userGroupCfg.users.push({
         username: config.smbUser,
         password: config.smbPass,
-        groups: ["wheel", "smbusers"],
+        groups: [adminGroup, "smbusers"],  // only this user gets admin
       });
     }
 
-    const declaredUsers = new Set(userGroupCfg.users.map(u => u.username));
-    for (const group of userGroupCfg.groups ?? []) {
-      for (const member of group.members ?? []) {
-        if (!declaredUsers.has(member)) {
-          throw new ValueError(`Group '${group.name}' references unknown user '${member}'`);
-        }
+    // Build map group->members (after normalization)
+    const groupsByUser = new Map<string, Set<string>>();
+    for (const g of userGroupCfg.groups) {
+      for (const m of g.members ?? []) {
+        if (!groupsByUser.has(m)) groupsByUser.set(m, new Set());
+        groupsByUser.get(m)!.add(g.name);
       }
     }
 
-    // await this.createUsersAndPasswords(userGroupCfg.users);
-    await this.createUsersAndPasswordsEnsuringSMBGroup(userGroupCfg.users);
-    await this.createGroupsAndAddMembers(userGroupCfg.groups ?? []);
-    await this.assignGroupsToUsers(userGroupCfg.users);
+    // Create/ensure users, passwords, and final group set
+    for (const u of userGroupCfg.users) {
+      const userRes = await server.getUserByLogin(u.username).orElse(() => server.addUser({ login: u.username }));
+      if (userRes.isErr()) { console.error("Failed to ensure user", u.username, userRes.error); continue; }
+      if (u.password) await server.changePassword(userRes.value, u.password);
 
-    for (const user of userGroupCfg.users) {
-      if (!user.sshKey || !/^(ssh-(rsa|ed25519)|ecdsa)-/.test(user.sshKey)) continue;
+      // Normalize any wheel/sudo in per-user lists too
+      const normalizedUserGroups = (u.groups ?? []).map(g => this.normalizeAdminGroup(g, adminGroup));
 
-      const sshDir = `/home/${user.username}/.ssh`;
-      const authFile = `${sshDir}/authorized_keys`;
+      // Always include smbusers
+      const finalGroupsSet = new Set<string>(["smbusers", ...normalizedUserGroups]);
+      for (const g of (groupsByUser.get(u.username) ?? [])) finalGroupsSet.add(g);
 
-      server.execute(new Command(["mkdir", "-p", sshDir], this.commandOptions));
-      server.execute(new Command(["chmod", "700", sshDir], this.commandOptions));
-      server.execute(new Command(["touch", authFile], this.commandOptions));
-      server.execute(new Command(["bash", "-c", `echo "${user.sshKey}" >> ${authFile}`], this.commandOptions));
-      server.execute(new Command(["chmod", "600", authFile], this.commandOptions));
-      server.execute(new Command(["chown", "-R", `${user.username}:${user.username}`, sshDir], this.commandOptions));
+      // Ensure groups exist
+      await this.ensureGroupsExist([...finalGroupsSet]);
+
+      // Call your helper once, as varargs (non-empty tuple cast is safe because smbusers is present)
+      const finalGroups = [...finalGroupsSet] as [string, ...string[]];
+      await server.addUserToGroups(userRes.value, ...finalGroups);
     }
 
+    // SSH keys 
+    for (const u of userGroupCfg.users) {
+      if (!u.sshKey || !/^(ssh-(rsa|ed25519)|ecdsa)-/.test(u.sshKey)) continue;
+      const sshDir = `/home/${u.username}/.ssh`;
+      const authFile = `${sshDir}/authorized_keys`;
+      await server.execute(new Command(["mkdir", "-p", sshDir], this.commandOptions));
+      await server.execute(new Command(["chmod", "700", sshDir], this.commandOptions));
+      await server.execute(new Command(["touch", authFile], this.commandOptions));
+      await server.execute(new Command(["bash", "-c", `echo "${u.sshKey}" >> ${authFile}`], this.commandOptions));
+      await server.execute(new Command(["chmod", "600", authFile], this.commandOptions));
+      await server.execute(new Command(["chown", "-R", `${u.username}:${u.username}`, sshDir], this.commandOptions));
+    }
   }
-
 
 
   private async applyZFSConfig(_config: EasySetupConfig) {
@@ -979,6 +904,55 @@ export class EasySetupConfigurator {
     return tasks;
   }
 
+  private withSmbusersSemantics(share: SambaShareConfig): SambaShareConfig {
+    return {
+      ...share,
+      // typed boolean that maps to "inherit permissions = yes"
+      inheritPermissions: true,
+      // free-form samba options live here:
+      advancedOptions: {
+        ...(share.advancedOptions ?? {}),
+        "valid users": "@smbusers",
+        "inherit acls": "yes",
+        "force group": "smbusers",
+        "create mask": "0660",
+        "directory mask": "2770",
+        // optional hard guarantees:
+        // "force create mode": "0660",
+        // "force directory mode": "2770",
+      }
+
+      /* advancedOptions: {
+        ...(share.advancedOptions ?? {}),
+        // keep files/dirs in smbusers
+        "force group": "smbusers",
+        // typical group-writable defaults
+        "create mask": "0660",
+        "directory mask": "2770",
+        // optional (stronger than masks): uncomment if you want to force bits
+        // "force create mode": "0664",
+        // "force directory mode": "2775",
+        
+        // ensure Samba respects/propagates default ACLs
+        "inherit acls": "yes",
+        // (Optional, if you rely on NT ACLs/xattrs:)
+        // "vfs objects": "acl_xattr",
+        // "map acl inherit": "yes",
+      }, */
+    };
+  }
+
+  private async restartSambaServices() {
+    const distro = await this.getLinuxDistro();
+    const services = distro === "ubuntu" ? ["smbd", "nmbd"] : ["smb", "nmb"];
+
+    for (const svc of services) {
+      // start + enable; ignore failures if nmb isn't used in your environment
+      await unwrap(server.execute(new Command(["systemctl", "start", svc], this.commandOptions)));
+      await unwrap(server.execute(new Command(["systemctl", "restart", svc], this.commandOptions)));
+      await unwrap(server.execute(new Command(["systemctl", "enable", svc], this.commandOptions)));
+    }
+  }
 
   private async applySambaConfig(config: EasySetupConfig) {
     if (!config.smbUser) throw new ValueError("config.smbUser is undefined!");
@@ -1008,25 +982,31 @@ export class EasySetupConfigurator {
     );
 
     // Apply shares
-    const shares = config.sambaConfig.shares;
+    const shares = config.sambaConfig.shares ?? [];
     for (let i = 0; i < shares.length; i++) {
-      let share = shares[i];
-      const sharePath = `/${config.zfsConfigs![0]!.pool.name}/${config.folderName!}`;
-      if (share) {
-        if (config.folderName && i === 0) {
-          share.name = config.folderName;
-          share.path = sharePath;
-        }
-        await unwrap(this.sambaManager.addShare(share));
-        // await this.setShareOwnershipAndPermissions(share.path, config.smbUser);
-        const adminUser = config.usersAndGroups?.users?.[0]?.username || config.smbUser;
-        await this.setShareOwnershipAndPermissions(share.path, adminUser);
+      const raw = shares[i];
+      if (!raw) continue; // narrow: from (SambaShareConfig | undefined) to SambaShareConfig
 
-      }
+      const sharePath = `/${config.zfsConfigs![0]!.pool.name}/${config.folderName!}`;
+
+      // Build a concrete share object first (no undefined), then apply semantics
+      let share: SambaShareConfig = {
+        ...raw,
+        ...(config.folderName && i === 0
+          ? { name: config.folderName, path: sharePath, readOnly: false }
+          : {}),
+      };
+
+      // enforce group semantics via advancedOptions
+      share = this.withSmbusersSemantics(share);
+
+      await unwrap(this.sambaManager.addShare(share));
+
+      // filesystem ownership: group-owned by smbusers (not a specific user)
+      await this.setGroupOwnedTree(share.path, "smbusers");
     }
-    await unwrap(server.execute(new Command(["systemctl", "start", "smb"])));
-    await unwrap(server.execute(new Command(["systemctl", "restart", "smb"])));
-    await unwrap(server.execute(new Command(["systemctl", "enable", "smb"])));
+
+    await this.restartSambaServices();
   }
 
 

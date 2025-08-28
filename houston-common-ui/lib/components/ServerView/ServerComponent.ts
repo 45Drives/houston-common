@@ -35,10 +35,10 @@ export class BoundingBox<
       this.size.y + margin,
       this.size.z + margin
     );
-    console.log("resizeTo");
-    console.log("selection box pos:", this.position);
-    console.log("objectRef pos:", object.position);
-    console.log("box size:", this.size);
+    // console.log("resizeTo");
+    // console.log("selection box pos:", this.position);
+    // console.log("objectRef pos:", object.position);
+    // console.log("box size:", this.size);
   }
 }
 
@@ -234,14 +234,14 @@ export class ServerDriveSlot extends ServerComponentSlot {
         bound.getSize(modelSize);
         bound.getCenter(modelCenter);
 
-        console.log(
-          "set drive model",
-          "slot location:",
-          slotCenter,
-          "model location:",
-          modelCenter
-        );
-        console.log("slot size:", slotSize, "model size:", modelSize);
+        // console.log(
+        //   "set drive model",
+        //   "slot location:",
+        //   slotCenter,
+        //   "model location:",
+        //   modelCenter
+        // );
+        // console.log("slot size:", slotSize, "model size:", modelSize);
 
         const cornerOffset = slotSize.multiplyScalar(0.5).addScaledVector(modelSize, -0.5);
         switch (this.driveOrientation) {
@@ -257,7 +257,7 @@ export class ServerDriveSlot extends ServerComponentSlot {
 
         this.driveModel.position.subVectors(slotCenter, modelCenter).add(cornerOffset);
 
-        console.log("model location after:", this.driveModel.position);
+        // console.log("model location after:", this.driveModel.position);
 
         this.driveModel.updateMatrix();
         this.driveModel.updateMatrixWorld(true);

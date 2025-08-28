@@ -273,7 +273,7 @@ export class Scheduler implements SchedulerType {
             case 'CloudSyncTask':
                 return 'cloudsync-script';
             default:
-                console.error('no script provided');
+                console.log(`${templateName}: no script provided`);
                 return '';
         }
     }

@@ -19,7 +19,8 @@ import {
   StringParameter,
   SnapshotRetentionParameter,
   TaskScheduleInterval,
-  SambaShareConfig
+  SambaShareConfig,
+  LocalUser
 } from "@/index";
 import { storeEasySetupConfig } from './logConfig';
 import { ZFSManager } from "@/index";
@@ -34,6 +35,8 @@ const sambaPorts = [
   { port: 139, protocol: "tcp" },
   { port: 445, protocol: "tcp" },
 ];
+
+const decode = (buf: Uint8Array) => new TextDecoder().decode(buf);
 
 export interface EasySetupProgress {
   message: string;
@@ -148,13 +151,6 @@ export class EasySetupConfigurator {
       );
       console.log("✅ Samba ports opened using firewalld (Rocky).");
     } else if (distro === "ubuntu") {
-      // const allowCmds = [
-      //   "sudo ufw allow 137/udp",
-      //   "sudo ufw allow 138/udp",
-      //   "sudo ufw allow 139/tcp",
-      //   "sudo ufw allow 445/tcp",
-      // ];
-
       const allowCmds = [
         ["ufw", "allow", "137/udp"],
         ["ufw", "allow", "138/udp"],
@@ -241,17 +237,31 @@ export class EasySetupConfigurator {
   }
 
   private async updateHostname(config: EasySetupConfig) {
-    if (config.srvrName) {
-      await unwrap(server.setHostname(config.srvrName));
-      await unwrap(server.writeHostnameFiles(config.srvrName));
-      await unwrap(server.execute(new Command(["systemctl", "restart", "houston-broadcaster.service"], this.commandOptions)))
+    if (!config.srvrName) {
+      // still refresh mDNS if no change; ignore failure quietly
+      await server.execute(new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions), true);
+      return;
     }
-    await unwrap(
-      server.execute(
-        new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions),
-        true
-      )
-    );
+
+    const name = config.srvrName;
+    const distro = await this.getLinuxDistro();
+
+    // 1) Persist first (your helper writes /etc/hostname and /etc/machine-info)
+    await unwrap(server.writeHostnameFiles(name));
+
+    // 2) Best-effort runtime hostname without noisy DBus on Rocky
+    if (distro === "ubuntu") {
+      // your setHostname swallows errors already; no unwrap so it won’t log failures
+      await server.setHostname(name);
+    } else {
+      // on Rocky, avoid hostnamectl (polkit noise); set kernel hostname directly, quietly
+      await server.execute(new Command(["hostname", name], this.commandOptions), true);
+    }
+
+    // 3) Bounce daemons that read hostname (quietly in case a unit is missing)
+    await server.execute(new Command(["systemctl", "restart", "systemd-hostnamed"], this.commandOptions), true);
+    await server.execute(new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions), true);
+    await server.execute(new Command(["systemctl", "restart", "houston-broadcaster.service"], this.commandOptions), true);
   }
 
   private async getAdminGroupName(): Promise<"wheel" | "sudo"> {
@@ -318,66 +328,64 @@ export class EasySetupConfigurator {
     await this.unmountAndRemovePoolIfExists(backupZfsConfig);
   }
 
-  private async poolExists(poolName: string): Promise<boolean> {
-    try {
-      const res = await unwrap(
-        server.execute(new Command(["zpool", "list", "-H", "-o", "name", poolName], this.commandOptions))
-      );
-      const out = new TextDecoder().decode(res.stdout);
-      return out.includes(poolName);
-    } catch {
-      return false; // non-zero exit means the pool doesn't exist
+  private async stopSambaIfRunning() {
+    const distro = await this.getLinuxDistro();
+    const services = (distro === "ubuntu") ? ["smbd", "nmbd"] : ["smb", "nmb"];
+
+    for (const svc of services) {
+      // ignore if not present
+      await server.execute(new Command(["systemctl", "stop", svc], this.commandOptions), true);
     }
   }
 
-  private async isMountPoint(path: string): Promise<boolean> {
-    try {
-      await unwrap(server.execute(new Command(["mountpoint", "-q", path], this.commandOptions)));
-      return true;
-    } catch {
-      return false;
-    }
+  private async poolExists(poolName: string): Promise<boolean> {
+    // Run a command that never fails (even if there are no pools)
+    const cmd = new Command(
+      ["bash", "-lc", "zpool list -H -o name 2>/dev/null || true"],
+      this.commandOptions
+    );
+
+    // Quiet execution to avoid console noise; unwrap to get ExitedProcess
+    const proc = await unwrap(server.execute(cmd, true));
+    const names = decode(proc.stdout)
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (names.some(n => n === poolName)) return true;
+
+    // Tiny retry to smooth over import/export races
+    await new Promise(r => setTimeout(r, 200));
+
+    const proc2 = await unwrap(server.execute(cmd, true));
+    const names2 = decode(proc2.stdout)
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    return names2.some(n => n === poolName);
   }
 
   private async unmountAndRemovePoolIfExists(config: ZFSConfig) {
     const poolName = config.pool.name;
-    const datasetName = config.dataset.name;
+    const poolPath = `/${poolName}`;
 
     if (!(await this.poolExists(poolName))) {
       console.log(`Skipping destruction. Pool '${poolName}' does not exist.`);
       return;
     }
 
-    const datasetPath = `/${poolName}/${datasetName}`;
-    const poolPath = `/${poolName}`;
-
-    if (await this.isMountPoint(datasetPath)) {
-      try {
-        await unwrap(server.execute(new Command(["umount", datasetPath], this.commandOptions)));
-      } catch (e) {
-        console.warn(`Failed to unmount dataset ${datasetPath}:`, e);
-      }
-    }
-
-    if (await this.isMountPoint(poolPath)) {
-      try {
-        await unwrap(server.execute(new Command(["umount", poolPath], this.commandOptions)));
-      } catch (e) {
-        console.warn(`Failed to unmount pool ${poolPath}:`, e);
-      }
-    }
+    console.log(`Unmounting and destroying ${poolName}...`);
+    await this.stopSambaIfRunning();
 
     try {
-      await this.tryDestroyPoolWithRetries(poolName); // ← single path to destroy
+      await this.tryDestroyPoolWithRetries(poolName);
+      console.log(`Pool ${poolName} destroyed.`);
     } catch (e) {
       console.warn(`Error destroying pool ${poolName}:`, e);
     }
 
-    try {
-      await unwrap(server.execute(new Command(["rm", "-rf", poolPath], this.commandOptions)));
-    } catch (e) {
-      console.warn(`Failed to clean up pool dir ${poolPath}:`, e);
-    }
+    await server.execute(new Command(["rm", "-rf", poolPath], this.commandOptions), true);
   }
 
   private async tryDestroyPoolWithRetries(poolName: string, maxRetries = 3, delayMs = 1000) {
@@ -444,17 +452,39 @@ export class EasySetupConfigurator {
     }
   }
 
+  private isNotFoundErr(e: any): boolean {
+    return e?.name === "ValueError" || /User not found/i.test(String(e?.message ?? e));
+  }
+
+  private async retryGetUser(login: string, attempts = 12, delayMs = 250): Promise<LocalUser> {
+    for (let i = 0; i < attempts; i++) {
+      const r = await server.getUserByLogin(login, false);
+      if (r.isOk()) return r.value;
+      await new Promise(res => setTimeout(res, delayMs));
+    }
+    throw new ValueError(`User not visible after creation: ${login}`);
+  }
+
   private async applyUsersAndGroups(config: EasySetupConfig) {
     const userGroupCfg = {
       users: config.usersAndGroups?.users ?? [],
       groups: config.usersAndGroups?.groups ?? []
     };
 
-    // Always have smbusers (group)
     if (!userGroupCfg.groups.some(g => g.name === "smbusers")) {
       userGroupCfg.groups.push({ name: "smbusers", members: [] });
     }
 
+    // ADD SMB USER BEFORE VALIDATION (you still had this after)
+    if (config.smbUser && config.smbPass && !userGroupCfg.users.some(u => u.username === config.smbUser)) {
+      userGroupCfg.users.push({
+        username: config.smbUser,
+        password: config.smbPass,
+        groups: ["smbusers"],
+      });
+    }
+
+    // Validate members exist
     const declaredUsers = new Set(userGroupCfg.users.map(u => u.username));
     for (const g of userGroupCfg.groups) {
       for (const m of g.members ?? []) {
@@ -464,22 +494,12 @@ export class EasySetupConfigurator {
 
     const adminGroup = await this.getAdminGroupName();
 
-    // Normalize group objects (wheel/sudo -> correct admin group)
     userGroupCfg.groups = userGroupCfg.groups.map(g => ({
       ...g,
-      name: this.normalizeAdminGroup(g.name, adminGroup)
+      name: this.normalizeAdminGroup(g.name, adminGroup),
     }));
 
-    // Add the SMB admin user, and put them in the correct admin group (ONLY them)
-    if (config.smbUser && config.smbPass) {
-      userGroupCfg.users.push({
-        username: config.smbUser,
-        password: config.smbPass,
-        groups: [adminGroup, "smbusers"],  // only this user gets admin
-      });
-    }
-
-    // Build map group->members (after normalization)
+    // Map: user -> groups (from group objects)
     const groupsByUser = new Map<string, Set<string>>();
     for (const g of userGroupCfg.groups) {
       for (const m of g.members ?? []) {
@@ -488,44 +508,46 @@ export class EasySetupConfigurator {
       }
     }
 
-    // Create/ensure users, passwords, and final group set
-    for (const u of userGroupCfg.users) {
-      const userRes = await server.getUserByLogin(u.username).orElse(() => server.addUser({ login: u.username }));
-      if (userRes.isErr()) { console.error("Failed to ensure user", u.username, userRes.error); continue; }
-      if (u.password) await server.changePassword(userRes.value, u.password);
+    for (const u0 of userGroupCfg.users) {
+      const username = u0.username.trim();
+      const u = { ...u0, username };
 
-      // Normalize any wheel/sudo in per-user lists too
+      // First, try to get
+      const got = await server.getUserByLogin(u.username, false);
+      let userObj: LocalUser;
+
+      if (got.isOk()) {
+        userObj = got.value;
+      } else if (this.isNotFoundErr(got.error)) {
+        // Then, try to add (but DO NOT unwrap)
+        const added = await server.addUser({ login: u.username });
+
+        if (added.isOk()) {
+          userObj = added.value; // addUser returned the LocalUser directly
+        } else if (this.isNotFoundErr(added.error)) {
+          // addUser likely created the user but its internal getUserByLogin raced; retry fetch
+          userObj = await this.retryGetUser(u.username, 20, 200);
+        } else {
+          throw added.error; // real failure (ProcessError etc.)
+        }
+      } else {
+        throw got.error; // non-ValueError (e.g., transport)
+      }
+
+      if (u.password) {
+        await unwrap(server.changePassword(userObj, u.password));
+      }
+
       const normalizedUserGroups = (u.groups ?? []).map(g => this.normalizeAdminGroup(g, adminGroup));
-
-      // Always include smbusers
       const finalGroupsSet = new Set<string>(["smbusers", ...normalizedUserGroups]);
       for (const g of (groupsByUser.get(u.username) ?? [])) finalGroupsSet.add(g);
 
-      // // Ensure groups exist
-      // await this.ensureGroupsExist([...finalGroupsSet]);
-
-      // // Call your helper once, as varargs (non-empty tuple cast is safe because smbusers is present)
-      // const finalGroups = [...finalGroupsSet] as [string, ...string[]];
-      // await server.addUserToGroups(userRes.value, ...finalGroups);
-      
-      // ensure groups exist
-      await this.ensureGroupsExist([...finalGroupsSet]);
-
-      // varargs tuple guaranteed non-empty because we always add "smbusers"
       const finalGroups = [...finalGroupsSet] as [string, ...string[]];
+      await this.ensureGroupsExist(finalGroups);
+      await unwrap(server.addUserToGroups(userObj, ...finalGroups));
 
-      // BEFORE:
-      // await server.addUserToGroups(userRes.value, ...finalGroups);
-
-      // AFTER (surface errors rather than silently continuing):
-      await unwrap(server.addUserToGroups(userRes.value, ...finalGroups));
-
-      // sanity log to confirm:
-      const idOut = await unwrap(
-        server.execute(new Command(["id", "-nG", u.username], this.commandOptions))
-      );
-      console.log(`${u.username} groups: ${new TextDecoder().decode(idOut.stdout).trim()
-        }`);
+      const idOut = await unwrap(server.execute(new Command(["id", "-nG", u.username], this.commandOptions)));
+      console.log(`${u.username} groups: ${new TextDecoder().decode(idOut.stdout).trim()}`);
     }
 
     // SSH keys 

@@ -69,7 +69,7 @@ class CameraSetpointController {
       this.atFocusPointResolver = resolve;
     })
       .then(() => {
-        console.log("at setpoint", view);
+        // console.log("at setpoint", view);
       })
       .finally(() => {
         this.atFocusPointResolver = undefined;
@@ -274,11 +274,11 @@ class CameraSetpointController {
       }
 
       const projectedBounds = new THREE.Box3().setFromPoints(boundsCorners);
-      console.log("projected bounds:", projectedBounds);
+      // console.log("projected bounds:", projectedBounds);
 
       const projectedSize = this.workingVector;
       projectedBounds.getSize(projectedSize);
-      console.log("projected size:", projectedSize);
+      // console.log("projected size:", projectedSize);
 
       if (camera instanceof THREE.OrthographicCamera) {
         const cameraW = camera.right - camera.left;
@@ -741,10 +741,10 @@ export class ServerView extends THREE.EventDispatcher<
       if (componentSlot instanceof ServerDriveSlot) {
         componentSlot.setDrive(slot.drive);
       } else if (componentSlot !== undefined) {
-        console.log("not a drive slot:", componentSlot);
-        console.log("is component slot:", componentSlot instanceof ServerComponentSlot);
+        // console.log("not a drive slot:", componentSlot);
+        // console.log("is component slot:", componentSlot instanceof ServerComponentSlot);
       } else {
-        console.log(this.componentSlots);
+        // console.log(this.componentSlots);
         // globalThis.reportHoustonError(new Error(`Drive slot not found: ${slot.slotId}`));
         (globalThis as {
           reportHoustonError?: (err: Error | Error[], context?: string) => unknown;

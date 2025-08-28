@@ -235,8 +235,8 @@ export async function createTaskFiles(
 	timerTemplate: string,
 	scheduleFile: string
 ) {
-	console.log("createTaskFiles ", templateName)
-	console.log(" createTaskFiles Script Path: ",scriptPath)
+	// console.log("createTaskFiles ", templateName)
+	// console.log(" createTaskFiles Script Path: ",scriptPath)
   return executePythonScript(task_file_creation_script, [
 	"-tN",
 	templateName,
@@ -254,9 +254,9 @@ export async function createTaskFiles(
 }
 
 export async function createStandaloneTask(templateName: string, scriptPath: string, envFile: string) {
-	console.log(" createStandaloneTask Template Name: ",templateName)
+	// console.log(" createStandaloneTask Template Name: ",templateName)
 
-	console.log(" createStandaloneTask Script Path: ",scriptPath)
+	// console.log(" createStandaloneTask Script Path: ",scriptPath)
 
   return executePythonScript(task_file_creation_script, [
 	"-tN",

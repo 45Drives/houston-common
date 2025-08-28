@@ -413,8 +413,8 @@ export class Server {
     );
   }
 
-  getUserByLogin(login: string): ResultAsync<LocalUser, ProcessError | ValueError> {
-    return this.getLocalUsers()
+  getUserByLogin(login: string, cache?: boolean): ResultAsync<LocalUser, ProcessError | ValueError> {
+    return this.getLocalUsers(cache)
       .map((localUsers) => localUsers.filter((user) => user.login === login))
       .andThen((userMatches) =>
         userMatches.length === 0

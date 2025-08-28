@@ -110,7 +110,7 @@ const toggleCommander = async () => {
         placement: strictPlacement ? resolvedPlacement : (computedPlacement as Placement),
     };
 
-    console.log('Requested:', resolvedPlacement, '→ Final:', computedPlacement);
+    // console.log('Requested:', resolvedPlacement, '→ Final:', computedPlacement);
 };
 
 onMounted(() => {

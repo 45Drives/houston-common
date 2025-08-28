@@ -17,6 +17,7 @@ export interface WizardStep {
   label: string;
   component: any;
   nextStep?: (data: Record<string, any>) => number; // Function for branching logic
+  prevStep?: (data: Record<string, any>, currentIndex: number) => number; // Dynamic previous branching (like nextStep)
   previousStepIndex?: number; // Function for branching logic
 }
 
@@ -61,10 +62,18 @@ export function defineWizardSteps(
 
   const determinePreviousStep = (currentIndex: number) => {
     const step = steps[currentIndex];
-    if (step.previousStepIndex) {
-      return step.previousStepIndex;
+    // if (step.previousStepIndex) {
+    //   return step.previousStepIndex;
+    // }
+    // return Math.max(0, currentIndex - 1);
+    const prevStepIndex = step.prevStep ? step.prevStep(state.data, currentIndex) : currentIndex - 1;
+    const prevStep = steps[prevStepIndex];
+    if (prevStep) {
+
+      prevStep.previousStepIndex = currentIndex;
     }
-    return Math.max(0, currentIndex - 1);
+
+    return prevStepIndex;
   };
 
   const state: WizardState = {

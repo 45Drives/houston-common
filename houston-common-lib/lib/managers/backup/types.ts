@@ -21,6 +21,7 @@ export interface BackUpTask {
   | 'offline_insufficient_permissions';
   share?: string
   host?: string
+  smb_user?: string;
 }
 
 export interface BackUpSetupConfig {

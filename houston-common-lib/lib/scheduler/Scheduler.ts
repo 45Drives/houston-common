@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { legacy, File, server, Directory } from '@/index';
+import { legacy, File, server, Command, unwrap } from '@/index';
 import {
     SchedulerType,
     TaskInstanceType,
@@ -51,15 +51,20 @@ export class Scheduler implements SchedulerType {
         this.taskInstances = taskInstances;
     }
 
-    /** Ensure a directory exists with sudo */
+    /** Ensure a directory exists (idempotent) */
     async ensureDir(path: string) {
-        const dir = path.endsWith('/') ? path.slice(0, -1) : path;
-        await new Directory(server, dir)
-            .create(true, { superuser: 'require' })
-            .match(
-                () => console.log(`✅ ensured dir ${dir}`),
-                err => console.error(`❌ mkdir ${dir} failed:`, err)
+        const dir = path.replace(/\/+$/, "");
+        try {
+            // idempotent: succeeds whether or not the dir already exists
+            await unwrap(
+                server.execute(
+                    new Command(["mkdir", "-p", dir], { superuser: "require" })
+                )
             );
+            console.log(`✅ ensured dir ${dir}`);
+        } catch (err) {
+            console.error(`❌ mkdir -p ${dir} failed:`, err);
+        }
     }
 
     async loadTaskInstances(): Promise<void>  {

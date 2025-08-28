@@ -498,9 +498,16 @@ export class Server {
     user: LocalUser,
     ...groups: [string, ...string[]]
   ): ResultAsync<LocalUser, ProcessError> {
-    return this.execute(new Command(["usermod", "-aG", groups.join(","), user.login])).map(
-      () => user
-    );
+    if (groups.length === 0) {
+      return okAsync(user);
+    }
+    return this.execute(
+      new Command(
+        ["usermod", "-aG", groups.join(","), user.login],
+        { superuser: "try" }
+      ),
+      true
+    ).map(() => user);
   }
 
   toString(): string {

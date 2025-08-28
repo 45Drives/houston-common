@@ -58,7 +58,7 @@ export class EasySetupConfigurator {
   ) {
 
     try {
-      const total = 8;
+      const total = 10;
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
 
       await this.applyServerConfig(config);
@@ -319,23 +319,24 @@ export class EasySetupConfigurator {
   }
 
   private async poolExists(poolName: string): Promise<boolean> {
-    const result = await server.execute(
-      new Command(["zpool", "list", "-H", "-o", "name", `${poolName}`], this.commandOptions)
-    ).unwrapOr(null);
-
-    const output = result?.stdout;
-    if (!output) return false;
-
-    const decoded = new TextDecoder().decode(output); // ← converts Uint8Array to string
-    return decoded.includes(poolName);
+    try {
+      const res = await unwrap(
+        server.execute(new Command(["zpool", "list", "-H", "-o", "name", poolName], this.commandOptions))
+      );
+      const out = new TextDecoder().decode(res.stdout);
+      return out.includes(poolName);
+    } catch {
+      return false; // non-zero exit means the pool doesn't exist
+    }
   }
 
-
   private async isMountPoint(path: string): Promise<boolean> {
-    const result = await server.execute(
-      new Command(["mountpoint", "-q", path], this.commandOptions)
-    );
-    return result.isOk();
+    try {
+      await unwrap(server.execute(new Command(["mountpoint", "-q", path], this.commandOptions)));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async unmountAndRemovePoolIfExists(config: ZFSConfig) {
@@ -367,8 +368,7 @@ export class EasySetupConfigurator {
     }
 
     try {
-      await this.zfsManager.destroyPool(poolName, { force: true });
-      await this.tryDestroyPoolWithRetries(poolName);
+      await this.tryDestroyPoolWithRetries(poolName); // ← single path to destroy
     } catch (e) {
       console.warn(`Error destroying pool ${poolName}:`, e);
     }
@@ -382,23 +382,26 @@ export class EasySetupConfigurator {
 
   private async tryDestroyPoolWithRetries(poolName: string, maxRetries = 3, delayMs = 1000) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      if (!(await this.poolExists(poolName))) {
+        console.log(`Pool ${poolName} already gone (before attempt ${attempt}).`);
+        return;
+      }
       try {
         await this.zfsManager.destroyPool(poolName, { force: true });
-        console.log(`Pool ${poolName} destroyed successfully on attempt ${attempt}`);
+        console.log(`Pool ${poolName} destroyed on attempt ${attempt}`);
         return;
-      } catch (error) {
-        console.error(`Attempt ${attempt} failed to destroy pool:`, error);
-
+      } catch (err) {
+        console.error(`Attempt ${attempt} failed to destroy pool:`, err);
         if (attempt < maxRetries) {
-          console.log(`Retrying in ${delayMs}ms...`);
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          await new Promise((r) => setTimeout(r, delayMs));
         } else {
           console.error(`Failed to destroy pool ${poolName} after ${maxRetries} attempts.`);
-          throw error; // rethrow after final failure if needed
+          throw err;
         }
       }
     }
   }
+
 
   private async applyServerConfig(config: EasySetupConfig) {
     const serverCfg = config.serverConfig;
@@ -498,12 +501,31 @@ export class EasySetupConfigurator {
       const finalGroupsSet = new Set<string>(["smbusers", ...normalizedUserGroups]);
       for (const g of (groupsByUser.get(u.username) ?? [])) finalGroupsSet.add(g);
 
-      // Ensure groups exist
+      // // Ensure groups exist
+      // await this.ensureGroupsExist([...finalGroupsSet]);
+
+      // // Call your helper once, as varargs (non-empty tuple cast is safe because smbusers is present)
+      // const finalGroups = [...finalGroupsSet] as [string, ...string[]];
+      // await server.addUserToGroups(userRes.value, ...finalGroups);
+      
+      // ensure groups exist
       await this.ensureGroupsExist([...finalGroupsSet]);
 
-      // Call your helper once, as varargs (non-empty tuple cast is safe because smbusers is present)
+      // varargs tuple guaranteed non-empty because we always add "smbusers"
       const finalGroups = [...finalGroupsSet] as [string, ...string[]];
-      await server.addUserToGroups(userRes.value, ...finalGroups);
+
+      // BEFORE:
+      // await server.addUserToGroups(userRes.value, ...finalGroups);
+
+      // AFTER (surface errors rather than silently continuing):
+      await unwrap(server.addUserToGroups(userRes.value, ...finalGroups));
+
+      // sanity log to confirm:
+      const idOut = await unwrap(
+        server.execute(new Command(["id", "-nG", u.username], this.commandOptions))
+      );
+      console.log(`${u.username} groups: ${new TextDecoder().decode(idOut.stdout).trim()
+        }`);
     }
 
     // SSH keys 

@@ -87,7 +87,7 @@ export class EasySetupConfigurator {
 
       const version = await this.getNodeVersion();
       if (version?.startsWith("18.")) {
-        console.log(`✅ Node.js v${version} is already in use.`);
+        console.log(` Node.js v${version} is already in use.`);
       } else {
         console.log(`ℹ️ Current Node.js version: ${version ?? "Not installed"}`);
         await this.ensureNode18();
@@ -149,7 +149,7 @@ export class EasySetupConfigurator {
       await unwrap(
         server.execute(new Command(["firewall-cmd", "--reload"], this.commandOptions))
       );
-      console.log("✅ Samba ports opened using firewalld (Rocky).");
+      console.log(" Samba ports opened using firewalld (Rocky).");
     } else if (distro === "ubuntu") {
       const allowCmds = [
         ["ufw", "allow", "137/udp"],
@@ -165,7 +165,7 @@ export class EasySetupConfigurator {
       await unwrap(
         server.execute(new Command(["ufw", "reload"], this.commandOptions))
       );
-      console.log("✅ Samba ports opened using ufw (Ubuntu).");
+      console.log(" Samba ports opened using ufw (Ubuntu).");
     } else {
       console.warn("⚠️ Unsupported Linux distribution. Please configure the firewall manually.");
     }
@@ -198,7 +198,7 @@ export class EasySetupConfigurator {
           new Command(["bash", "-c", "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash"], this.commandOptions)
         )
       );
-      console.log("✅ NVM installed. Reloading shell...");
+      console.log(" NVM installed. Reloading shell...");
     }
   }
 
@@ -219,7 +219,7 @@ export class EasySetupConfigurator {
       await unwrap(
         server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm ls 18`], this.commandOptions))
       );
-      console.log("✅ Node 18 is already installed.");
+      console.log(" Node 18 is already installed.");
     } catch {
       console.log("📥 Installing Node.js v18...");
       // await this.runCommand(`${shellLoadNvm} && nvm install 18`);
@@ -233,7 +233,7 @@ export class EasySetupConfigurator {
     await unwrap(
       server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm alias default 18`], this.commandOptions))
     );
-    console.log("✅ Node.js v18 set as default.");
+    console.log(" Node.js v18 set as default.");
   }
 
   private async updateHostname(config: EasySetupConfig) {
@@ -632,9 +632,9 @@ export class EasySetupConfigurator {
     for (const task of replicationTasks) {
       try {
         await scheduler.unregisterTaskInstance(task);
-        console.log(`✅ Unregistered replication task: ${task.name}`);
+        console.log(` Unregistered replication task: ${task.name}`);
       } catch (error) {
-        console.error(`❌ Failed to unregister task ${task.name}:`, error);
+        console.error(` Failed to unregister task ${task.name}:`, error);
       }
     }
   }
@@ -650,9 +650,9 @@ export class EasySetupConfigurator {
     for (const task of replicationTasks) {
       try {
         await scheduler.unregisterTaskInstance(task);
-        console.log(`✅ Unregistered replication task: ${task.name}`);
+        console.log(` Unregistered replication task: ${task.name}`);
       } catch (error) {
-        console.error(`❌ Failed to unregister task ${task.name}:`, error);
+        console.error(` Failed to unregister task ${task.name}:`, error);
       }
     }
   }
@@ -669,9 +669,9 @@ export class EasySetupConfigurator {
     for (const task of scrubTasks) {
       try {
         await scheduler.unregisterTaskInstance(task);
-        console.log(`✅ Unregistered scrub task: ${task.name}`);
+        console.log(` Unregistered scrub task: ${task.name}`);
       } catch (error) {
-        console.error(`❌ Failed to unregister task ${task.name}:`, error);
+        console.error(` Failed to unregister task ${task.name}:`, error);
       }
     }
   }
@@ -1019,7 +1019,7 @@ export class EasySetupConfigurator {
         )
     );
 
-    // ✅ Ensure 'smbusers' group exists
+    //  Ensure 'smbusers' group exists
     await unwrap(
       server.getGroupByName("smbusers")
         .orElse(() => server.createGroup("smbusers"))

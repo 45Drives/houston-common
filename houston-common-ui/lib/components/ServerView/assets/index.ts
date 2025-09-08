@@ -136,6 +136,10 @@ const chassisModelLUT: {
   },
 ];
 
+export function supportsChassisModel(modelNumber: string): boolean {
+  return chassisModelLUT.some(({ re }) => re.test(modelNumber));
+}
+
 export type ChassisModel = {
   model: Promise<THREE.Object3D>;
   animations: Promise<THREE.AnimationClip[]>;

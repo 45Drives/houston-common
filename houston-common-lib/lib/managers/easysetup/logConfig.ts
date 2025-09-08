@@ -23,7 +23,7 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
       
     const configuredShare = config.sambaConfig?.shares?.find(s => s?.name && typeof s.name === 'string');
     if (!configuredShare || !config.srvrName) {
-        console.error('❌ Cannot log setup: Missing share or server name.', {
+        console.error(' Cannot log setup: Missing share or server name.', {
             shares: config.sambaConfig?.shares,
             srvrName: config.srvrName
         });
@@ -48,7 +48,7 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
         const exists = await logFile.exists();
 
         if (exists.isErr()) {
-            console.error("❌ Could not check if log file exists:", exists.error.message);
+            console.error(" Could not check if log file exists:", exists.error.message);
             return;
         }
 
@@ -56,7 +56,7 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
             // File doesn't exist — create it
             const createRes = await logFile.create(true); // true = recursive
             if (createRes.isErr()) {
-                console.error("❌ Failed to create log file:", createRes.error.message);
+                console.error(" Failed to create log file:", createRes.error.message);
                 return;
             }
         } else {
@@ -80,13 +80,13 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
         });
 
         if (writeResult.isOk()) {
-            console.log(`✅ Backup log saved at ${configSavePath}`);
+            console.log(` Backup log saved at ${configSavePath}`);
         } else {
-            console.error("❌ Failed to write backup log:", writeResult.error.message);
+            console.error(" Failed to write backup log:", writeResult.error.message);
         }
 
     } catch (error) {
-        console.error("❌ Error saving setup config:", error);
+        console.error(" Error saving setup config:", error);
     }
 }
 

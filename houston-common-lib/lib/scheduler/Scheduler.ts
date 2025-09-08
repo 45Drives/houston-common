@@ -61,9 +61,9 @@ export class Scheduler implements SchedulerType {
                     new Command(["mkdir", "-p", dir], { superuser: "require" })
                 )
             );
-            console.log(`✅ ensured dir ${dir}`);
+            console.log(` ensured dir ${dir}`);
         } catch (err) {
-            console.error(`❌ mkdir -p ${dir} failed:`, err);
+            console.error(` mkdir -p ${dir} failed:`, err);
         }
     }
 
@@ -323,13 +323,13 @@ export class Scheduler implements SchedulerType {
         const envFile = new File(server, envFilePath);
         await envFile.create(true, { superuser: 'require' })
             .match(
-                () => console.log(`✅ created ${envFilePath}`),
-                err => console.error(`❌ create file failed:`, err)
+                () => console.log(` created ${envFilePath}`),
+                err => console.error(` create file failed:`, err)
             );
         await envFile.write(envKeyValuesString, { superuser: 'require' })
             .match(
-                () => console.log(`✅ wrote env for ${templateName}`),
-                err => console.error(`❌ write env failed:`, err)
+                () => console.log(` wrote env for ${templateName}`),
+                err => console.error(` write env failed:`, err)
             );
 
         const jsonFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.json`;
@@ -343,13 +343,13 @@ export class Scheduler implements SchedulerType {
         const notesFile = new File(server, notesFilePath);
         await notesFile.create(true, { superuser: 'require' })
             .match(
-                () => console.log(`✅ created ${notesFilePath}`),
-                err => console.error(`❌ create notes failed:`, err)
+                () => console.log(` created ${notesFilePath}`),
+                err => console.error(` create notes failed:`, err)
             );
         await notesFile.write(notes, { superuser: 'require' })
             .match(
-                () => console.log(`✅ wrote notes for ${templateName}`),
-                err => console.error(`❌ write notes failed:`, err)
+                () => console.log(` wrote notes for ${templateName}`),
+                err => console.error(` write notes failed:`, err)
             );
 
         //run script to generate service + timer via template, param env and schedule json
@@ -369,13 +369,13 @@ export class Scheduler implements SchedulerType {
             // await this.ensureDir('/etc/systemd/system');
             await jsonFile.create(true, { superuser: 'require' })
                 .match(
-                    () => console.log(`✅ created ${jsonFilePath}`),
-                    err => console.error(`❌ create json failed:`, err)
+                    () => console.log(` created ${jsonFilePath}`),
+                    err => console.error(` create json failed:`, err)
                 );
             await jsonFile.write(jsonString, { superuser: 'require' })
                 .match(
-                    () => console.log(`✅ wrote schedule JSON`),
-                    err => console.error(`❌ write schedule JSON failed:`, err)
+                    () => console.log(` wrote schedule JSON`),
+                    err => console.error(` write schedule JSON failed:`, err)
                 );
             
             await createTaskFiles(templateName, scriptPath, envFilePath, templateTimerPath, jsonFilePath);
@@ -421,13 +421,13 @@ export class Scheduler implements SchedulerType {
         const envFile = new File(server, envFilePath);
         await envFile.create(true, { superuser: 'require' })
             .match(
-                () => console.log(`✅ recreated ${envFilePath}`),
-                err => console.error(`❌ recreate env failed:`, err)
+                () => console.log(` recreated ${envFilePath}`),
+                err => console.error(` recreate env failed:`, err)
             );
         await envFile.write(envKeyValuesString, { superuser: 'require' })
             .match(
-                () => console.log(`✅ updated env for ${templateName}`),
-                err => console.error(`❌ update env failed:`, err)
+                () => console.log(` updated env for ${templateName}`),
+                err => console.error(` update env failed:`, err)
             );
 
         await createStandaloneTask(templateName, scriptPath, envFilePath);
@@ -450,13 +450,13 @@ export class Scheduler implements SchedulerType {
         const notesFile = new File(server, notesFilePath);
         await notesFile.create(true, { superuser: 'require' })
             .match(
-                () => console.log(`✅ recreated ${notesFilePath}`),
-                err => console.error(`❌ recreate notes failed:`, err)
+                () => console.log(` recreated ${notesFilePath}`),
+                err => console.error(` recreate notes failed:`, err)
             );
         await notesFile.write(taskInstance.notes, { superuser: 'require' })
             .match(
-                () => console.log(`✅ updated notes for ${templateName}`),
-                err => console.error(`❌ update notes failed:`, err)
+                () => console.log(` updated notes for ${templateName}`),
+                err => console.error(` update notes failed:`, err)
             );
 
         // Reload the system daemon
@@ -657,13 +657,13 @@ export class Scheduler implements SchedulerType {
         const jsonFile = new File(server, jsonFilePath);
         await jsonFile.create(true, { superuser: 'require' })
             .match(
-                () => console.log(`✅ recreated ${jsonFilePath}`),
-                err => console.error(`❌ recreate json failed:`, err)
+                () => console.log(` recreated ${jsonFilePath}`),
+                err => console.error(` recreate json failed:`, err)
             );
         await jsonFile.write(jsonString, { superuser: 'require' })
             .match(
-                () => console.log(`✅ updated schedule JSON`),
-                err => console.error(`❌ update JSON failed:`, err)
+                () => console.log(` updated schedule JSON`),
+                err => console.error(` update JSON failed:`, err)
             );
 
         if (taskInstance.schedule.enabled) {

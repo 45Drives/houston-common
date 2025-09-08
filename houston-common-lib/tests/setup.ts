@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 afterAll(() => {
-  console.log("✅ Global cleanup after all tests complete");
+  console.log(" Global cleanup after all tests complete");
 });
 
 // Example: Mocking global objects

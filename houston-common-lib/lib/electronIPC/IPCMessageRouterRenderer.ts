@@ -5,7 +5,13 @@ interface ElectronApi {
     send: (channel: string, data: any) => void;
     on: (channel: string, callback: (...args: any[]) => void) => void;
     invoke: <T = any>(channel: string, ...args: any[]) => Promise<T>; 
-  };
+    removeListener: (channel: string, listener: (...args: any[]) => void) => void;
+    removeAllListeners: (channel: string) =>void;
+  },
+  // selectFolder: () => ipcRenderer.invoke('dialog:openFolder'),
+  // getOS: () => ipcRenderer.invoke('get-os'),
+  // isFirstRunNeeded: (host: string, share: string, smbUser: string) =>
+  //   ipcRenderer.invoke("backup:isFirstRunNeeded", host, share, smbUser),
 }
 
 declare global {

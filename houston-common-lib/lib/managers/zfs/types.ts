@@ -101,6 +101,7 @@ export interface VDevDisk {
   vDevType?: string;
   children?: VDevDisk[];
   replacingTarget?: boolean;
+  replacingTargetLabel?: string;
 }
 
 

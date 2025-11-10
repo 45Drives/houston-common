@@ -261,7 +261,7 @@ export class EasySetupConfigurator {
     // 3) Bounce daemons that read hostname (quietly in case a unit is missing)
     await server.execute(new Command(["systemctl", "restart", "systemd-hostnamed"], this.commandOptions), true);
     await server.execute(new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions), true);
-    await server.execute(new Command(["systemctl", "restart", "houston-broadcaster.service"], this.commandOptions), true);
+    await server.execute(new Command(["systemctl", "restart", "houston-broadcaster-legacy.service"], this.commandOptions), true);
   }
 
   private async getAdminGroupName(): Promise<"wheel" | "sudo"> {

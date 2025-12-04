@@ -89,7 +89,7 @@ export class EasySetupConfigurator {
       if (version?.startsWith("18.")) {
         console.log(` Node.js v${version} is already in use.`);
       } else {
-        console.log(`ℹ️ Current Node.js version: ${version ?? "Not installed"}`);
+        console.log(` Current Node.js version: ${version ?? "Not installed"}`);
         await this.ensureNode18();
       }
       progressCallback({ message: `Ensure Required Node Version (18)`, step: 9, total });
@@ -167,7 +167,7 @@ export class EasySetupConfigurator {
       );
       console.log(" Samba ports opened using ufw (Ubuntu).");
     } else {
-      console.warn("⚠️ Unsupported Linux distribution. Please configure the firewall manually.");
+      console.warn(" Unsupported Linux distribution. Please configure the firewall manually.");
     }
   }
 
@@ -191,7 +191,7 @@ export class EasySetupConfigurator {
       // await this.runCommand("command -v nvm");
       await unwrap(server.execute(new Command(["bash", "-c", "command -v nvm"], this.commandOptions)));
     } catch {
-      console.log("📥 Installing NVM...");
+      console.log(" Installing NVM...");
       // await this.runCommand("curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash");
       await unwrap(
         server.execute(
@@ -221,7 +221,7 @@ export class EasySetupConfigurator {
       );
       console.log(" Node 18 is already installed.");
     } catch {
-      console.log("📥 Installing Node.js v18...");
+      console.log(" Installing Node.js v18...");
       // await this.runCommand(`${shellLoadNvm} && nvm install 18`);
       await unwrap(
         server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm install 18`], this.commandOptions))
@@ -818,7 +818,7 @@ export class EasySetupConfigurator {
       );
     };
 
-    // 🕐 Hourly snapshots retained for 1 day
+    //  Hourly snapshots retained for 1 day
     const hourlySchedule = new TaskSchedule(true, [
       new TaskScheduleInterval({
         minute: { value: '0' },
@@ -854,7 +854,7 @@ export class EasySetupConfigurator {
       'Take snapshots daily and keep them for 1 week.'
     );
 
-    // 📅 Weekly snapshots retained for 1 month (on Fridays at midnight)
+    //  Weekly snapshots retained for 1 month (on Fridays at midnight)
     const weeklySchedule = new TaskSchedule(true, [
       new TaskScheduleInterval({
         minute: { value: '0' },
@@ -898,7 +898,7 @@ export class EasySetupConfigurator {
       );
     };
 
-    // 📅 Weekly snapshots retained for 1 month (on Fridays at midnight)
+    //  Weekly snapshots retained for 1 month (on Fridays at midnight)
     const weeklySchedule = new TaskSchedule(true, [
       new TaskScheduleInterval({
         minute: { value: '0' },

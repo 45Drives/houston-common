@@ -44,37 +44,6 @@ export class ZFSManager implements IZFSManager {
     this.commandOptions = { superuser: "try" };
   }
 
-
-  // private pickDiskPath(disk: VDevDisk, ident?: 'vdev_path' | 'phy_path' | 'sd_path' | 'wwn_path'): string {
-  //   const bad = (s?: string) => !s || s === 'N/A' || s.toLowerCase?.() === 'unknown';
-
-  //   switch (ident) {
-  //     case 'wwn_path':
-  //       if (!bad(disk.wwn_path)) return disk.wwn_path!;
-  //       if (!bad(disk.sd_path)) return disk.sd_path!;
-  //       if (!bad(disk.vdev_path)) return disk.vdev_path!;
-  //       if (!bad(disk.phy_path)) return disk.phy_path!;
-  //       break;
-  //     case 'phy_path':
-  //       if (!bad(disk.phy_path)) return disk.phy_path!;
-  //       if (!bad(disk.sd_path)) return disk.sd_path!;
-  //       if (!bad(disk.vdev_path)) return disk.vdev_path!;
-  //       break;
-  //     case 'sd_path':
-  //       if (!bad(disk.sd_path)) return disk.sd_path!;
-  //       if (!bad(disk.vdev_path)) return disk.vdev_path!;
-  //       if (!bad(disk.phy_path)) return disk.phy_path!;
-  //       break;
-  //     case 'vdev_path':
-  //     default:
-  //       if (disk.type === 'NVMe' && !bad(disk.sd_path)) return disk.sd_path!;
-  //       if (!bad(disk.vdev_path)) return disk.vdev_path!;
-  //       if (!bad(disk.sd_path)) return disk.sd_path!;
-  //       if (!bad(disk.phy_path)) return disk.phy_path!;
-  //   }
-  //   return '';
-  // }
-  
   /**
    * Transform vdev into command args for zpool create or zpool add
    * @param vdev
@@ -105,28 +74,6 @@ export class ZFSManager implements IZFSManager {
 
     return args;
   }
-
-  // private formatVDevArgv(vdev: VDev): string[] {
-  //   const args: string[] = [];
-  //   if (vdev.type !== "disk") args.push(vdev.type);
-  //   if (vdev.isMirror) {
-  //     if (!["log", "special", "dedup"].includes(vdev.type)) {
-  //       throw new ValueError(`${vdev.type} vdev cannot be mirrored!`);
-  //     }
-  //     args.push("mirror");
-  //   }
-
-  //   const ident = (vdev as any).diskIdentifier as ('vdev_path' | 'phy_path' | 'sd_path' | 'wwn_path' | undefined);
-  //   const paths = vdev.disks.map(d => this.pickDiskPath(d, ident)).filter(p => p && p !== 'N/A');
-
-  //   if (paths.length !== vdev.disks.length) {
-  //     throw new ValueError(`VDev ${vdev.type} has disks without a valid path for "${ident ?? 'vdev_path'}"`);
-  //   }
-
-  //   args.push(...paths);
-  //   return args;
-  // }
-
   /**
    * Transform array of vdevs into command args for zpool create or zpool add
    * @param vdevs
@@ -151,7 +98,7 @@ export class ZFSManager implements IZFSManager {
     const argv = ["zpool", "create", pool.name];
 
     console.log('createPool pool:', pool);
-    console.log('createPool poolOptions:', pool);
+    console.log('createPool poolOptions:', options);
     
     // set up pool properties
     const poolProps: string[] = [];

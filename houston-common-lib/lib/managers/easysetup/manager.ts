@@ -251,7 +251,7 @@ export class EasySetupConfigurator {
 
     // 2) Best-effort runtime hostname without noisy DBus on Rocky
     if (distro === "ubuntu") {
-      // your setHostname swallows errors already; no unwrap so it won’t log failures
+      // setHostname swallows errors already; no unwrap so it won’t log failures
       await server.setHostname(name);
     } else {
       // on Rocky, avoid hostnamectl (polkit noise); set kernel hostname directly, quietly
@@ -292,41 +292,93 @@ export class EasySetupConfigurator {
 
   }
 
+  private async listAllPools(): Promise<string[]> {
+    const cmd = new Command(
+      ["bash", "-lc", "zpool list -H -o name 2>/dev/null || true"],
+      this.commandOptions
+    );
+
+    const proc = await unwrap(server.execute(cmd, true));
+    return decode(proc.stdout)
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+
+  private async unmountAndRemovePoolByName(poolName: string) {
+    const poolPath = `/${poolName}`;
+
+    if (!(await this.poolExists(poolName))) {
+      console.log(`Skipping destruction. Pool '${poolName}' does not exist.`);
+      return;
+    }
+
+    console.log(`Unmounting and destroying ${poolName}...`);
+    await this.stopSambaIfRunning();
+
+    await this.tryDestroyPoolWithRetries(poolName);
+
+    // Final sanity check: pool must be gone or we abort
+    if (await this.poolExists(poolName)) {
+      throw new Error(`Pool ${poolName} still exists after destroy attempts; aborting.`);
+    }
+
+    // Best-effort cleanup of the mountpoint
+    await server.execute(new Command(["rm", "-rf", poolPath], this.commandOptions), true);
+  }
+
 
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
     if (!config.zfsConfigs) return;
 
+    // Pools from config (e.g., tank, tank-backup)
     const storageZfsConfig = config.zfsConfigs[0]!;
     const backupZfsConfig = config.zfsConfigs[1]!;
+    const storagePoolName = storageZfsConfig.pool.name;
+    const backupPoolName = backupZfsConfig.pool.name;
 
-    const storagePoolName = storageZfsConfig!.pool.name;
-    const backupPoolName = backupZfsConfig!.pool.name;
+    // 1) Enumerate all existing pools
+    const allPools = await this.listAllPools();
+    console.log("Existing ZFS pools:", allPools);
 
+    // 2) Close/remove any Samba share whose path lives under ANY pool mountpoint
     const allShares = await this.sambaManager.getShares().unwrapOr(undefined);
-    console.log(allShares)
-    if (allShares) {
-      for (let share of allShares) {
-        if (share.path.startsWith(`/${storagePoolName}`)) {
-          try {
-            await unwrap(this.sambaManager.closeSambaShare(share.name));
-          } catch (e) {
-            console.warn(`Close share failed for ${share.name}:`, e);
-          }
-          try {
-            await unwrap(this.sambaManager.removeShare(share));
-          } catch (e) {
-            console.warn(`Remove share failed for ${share.name}:`, e);
-          }
+    console.log("Existing Samba shares:", allShares);
+
+    if (allShares && allShares.length > 0) {
+      for (const share of allShares) {
+        // Match if path starts with /<poolName> for any current pool
+        const owningPool = allPools.find(p => share.path.startsWith(`/${p}`));
+        if (!owningPool) continue;
+
+        try {
+          await unwrap(this.sambaManager.closeSambaShare(share.name));
+        } catch (e) {
+          console.warn(`Close share failed for ${share.name}:`, e);
+        }
+        try {
+          await unwrap(this.sambaManager.removeShare(share));
+        } catch (e) {
+          console.warn(`Remove share failed for ${share.name}:`, e);
         }
       }
     }
 
-    console.log(`Unmounting and destroying ${storagePoolName}...`);
-    await this.unmountAndRemovePoolIfExists(storageZfsConfig);
+    // 3) Destroy all pools we found
+    for (const poolName of allPools) {
 
-    console.log(`Unmounting and destroying ${backupPoolName}...`);
-    await this.unmountAndRemovePoolIfExists(backupZfsConfig);
+      console.log(`Unmounting and destroying pool '${poolName}'...`);
+      await this.unmountAndRemovePoolByName(poolName);
+    }
+
+    if (allPools.includes(storagePoolName)) {
+      console.log(`Verified destruction of storage pool '${storagePoolName}'.`);
+    }
+    if (allPools.includes(backupPoolName)) {
+      console.log(`Verified destruction of backup pool '${backupPoolName}'.`);
+    }
   }
+
 
   private async stopSambaIfRunning() {
     const distro = await this.getLinuxDistro();
@@ -366,26 +418,27 @@ export class EasySetupConfigurator {
     return names2.some(n => n === poolName);
   }
 
-  private async unmountAndRemovePoolIfExists(config: ZFSConfig) {
-    const poolName = config.pool.name;
-    const poolPath = `/${poolName}`;
+  // private async unmountAndRemovePoolIfExists(config: ZFSConfig) {
+  //   return this.unmountAndRemovePoolByName(config.pool.name);
+  // }
 
-    if (!(await this.poolExists(poolName))) {
-      console.log(`Skipping destruction. Pool '${poolName}' does not exist.`);
-      return;
+
+  private async logPoolUsers(poolName: string) {
+    const mountPath = `/${poolName}`;
+
+    // best-effort; ignore failures
+    const cmds = [
+      ["bash", "-lc", `echo '--- mount ---'; mount | grep " ${mountPath}" || true`],
+      ["bash", "-lc", `echo '--- lsof ---'; which lsof && lsof +D ${mountPath} || true`],
+      ["bash", "-lc", `echo '--- fuser ---'; which fuser && fuser -vm ${mountPath} || true`],
+    ];
+
+    for (const argv of cmds) {
+      try {
+        const proc = await unwrap(server.execute(new Command(argv, this.commandOptions), true));
+        console.log(new TextDecoder().decode(proc.stdout));
+      } catch { }
     }
-
-    console.log(`Unmounting and destroying ${poolName}...`);
-    await this.stopSambaIfRunning();
-
-    try {
-      await this.tryDestroyPoolWithRetries(poolName);
-      console.log(`Pool ${poolName} destroyed.`);
-    } catch (e) {
-      console.warn(`Error destroying pool ${poolName}:`, e);
-    }
-
-    await server.execute(new Command(["rm", "-rf", poolPath], this.commandOptions), true);
   }
 
   private async tryDestroyPoolWithRetries(poolName: string, maxRetries = 3, delayMs = 1000) {
@@ -403,6 +456,7 @@ export class EasySetupConfigurator {
         if (attempt < maxRetries) {
           await new Promise((r) => setTimeout(r, delayMs));
         } else {
+          await this.logPoolUsers(poolName);   // <- key addition
           console.error(`Failed to destroy pool ${poolName} after ${maxRetries} attempts.`);
           throw err;
         }

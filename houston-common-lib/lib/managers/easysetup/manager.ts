@@ -137,35 +137,39 @@ export class EasySetupConfigurator {
     console.log(`Detected distro: ${distro}`);
 
     if (distro === "rocky") {
-      for (const { port, protocol } of sambaPorts) {
-        // await this.runCommand(`sudo firewall-cmd --permanent --add-port=${port}/${protocol}`);
+      try {
+        for (const { port, protocol } of sambaPorts) {
+          await unwrap(
+            server.execute(
+              new Command(["firewall-cmd", "--permanent", `--add-port=${port}/${protocol}`], this.commandOptions)
+            )
+          );
+        }
         await unwrap(
-          server.execute(
-            new Command(["firewall-cmd", "--permanent", `--add-port=${port}/${protocol}`], this.commandOptions)
-          )
+          server.execute(new Command(["firewall-cmd", "--reload"], this.commandOptions))
         );
+        console.log(" Samba ports opened using firewalld (Rocky).");
+      } catch (err) {
+        console.warn(" Failed to configure firewalld; continuing:", err);
       }
-      // await this.runCommand("sudo firewall-cmd --reload");
-      await unwrap(
-        server.execute(new Command(["firewall-cmd", "--reload"], this.commandOptions))
-      );
-      console.log(" Samba ports opened using firewalld (Rocky).");
     } else if (distro === "ubuntu") {
-      const allowCmds = [
-        ["ufw", "allow", "137/udp"],
-        ["ufw", "allow", "138/udp"],
-        ["ufw", "allow", "139/tcp"],
-        ["ufw", "allow", "445/tcp"],
-      ];
-      for (const args of allowCmds) {
-        // await this.runCommand(cmd);
-        await unwrap(server.execute(new Command(args, this.commandOptions)));
+      try {
+        const allowCmds = [
+          ["ufw", "allow", "137/udp"],
+          ["ufw", "allow", "138/udp"],
+          ["ufw", "allow", "139/tcp"],
+          ["ufw", "allow", "445/tcp"],
+        ];
+        for (const args of allowCmds) {
+          await unwrap(server.execute(new Command(args, this.commandOptions)));
+        }
+        await unwrap(
+          server.execute(new Command(["ufw", "reload"], this.commandOptions))
+        );
+        console.log(" Samba ports opened using ufw (Ubuntu).");
+      } catch (err) {
+        console.warn(" Failed to configure ufw; continuing:", err);
       }
-      // await this.runCommand("sudo ufw reload");
-      await unwrap(
-        server.execute(new Command(["ufw", "reload"], this.commandOptions))
-      );
-      console.log(" Samba ports opened using ufw (Ubuntu).");
     } else {
       console.warn(" Unsupported Linux distribution. Please configure the firewall manually.");
     }
@@ -174,7 +178,6 @@ export class EasySetupConfigurator {
   // Check current Node.js version
   private async getNodeVersion(): Promise<string | null> {
     try {
-      // const output = await this.runCommand("node -v");
       const result = await unwrap(
         server.execute(new Command(["node", "-v"], this.commandOptions))
       );
@@ -188,11 +191,9 @@ export class EasySetupConfigurator {
   // Ensure NVM is installed
   private async ensureNvmInstalled(): Promise<void> {
     try {
-      // await this.runCommand("command -v nvm");
       await unwrap(server.execute(new Command(["bash", "-c", "command -v nvm"], this.commandOptions)));
     } catch {
       console.log(" Installing NVM...");
-      // await this.runCommand("curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash");
       await unwrap(
         server.execute(
           new Command(["bash", "-c", "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash"], this.commandOptions)
@@ -215,21 +216,18 @@ export class EasySetupConfigurator {
 
     // Install Node 18 if not present
     try {
-      // await this.runCommand(`${shellLoadNvm} && nvm ls 18`);
       await unwrap(
         server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm ls 18`], this.commandOptions))
       );
       console.log(" Node 18 is already installed.");
     } catch {
       console.log(" Installing Node.js v18...");
-      // await this.runCommand(`${shellLoadNvm} && nvm install 18`);
       await unwrap(
         server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm install 18`], this.commandOptions))
       );
     }
 
     // Set Node 18 as default
-    // await this.runCommand(`${shellLoadNvm} && nvm alias default 18`);
     await unwrap(
       server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm alias default 18`], this.commandOptions))
     );
@@ -418,11 +416,6 @@ export class EasySetupConfigurator {
     return names2.some(n => n === poolName);
   }
 
-  // private async unmountAndRemovePoolIfExists(config: ZFSConfig) {
-  //   return this.unmountAndRemovePoolByName(config.pool.name);
-  // }
-
-
   private async logPoolUsers(poolName: string) {
     const mountPath = `/${poolName}`;
 
@@ -529,7 +522,7 @@ export class EasySetupConfigurator {
       userGroupCfg.groups.push({ name: "smbusers", members: [] });
     }
 
-    // ADD SMB USER BEFORE VALIDATION (you still had this after)
+    // ADD SMB USER BEFORE VALIDATION
     if (config.smbUser && config.smbPass && !userGroupCfg.users.some(u => u.username === config.smbUser)) {
       userGroupCfg.users.push({
         username: config.smbUser,
@@ -617,7 +610,6 @@ export class EasySetupConfigurator {
       await server.execute(new Command(["chown", "-R", `${u.username}:${u.username}`, sshDir], this.commandOptions));
     }
   }
-
 
   private async applyZFSConfig(_config: EasySetupConfig) {
     let storageZfsConfig = _config!.zfsConfigs![0];
@@ -872,7 +864,7 @@ export class EasySetupConfigurator {
       );
     };
 
-    //  Hourly snapshots retained for 1 day
+    // Hourly snapshots retained for 1 day
     const hourlySchedule = new TaskSchedule(true, [
       new TaskScheduleInterval({
         minute: { value: '0' },
@@ -890,7 +882,7 @@ export class EasySetupConfigurator {
       'Take snapshots every hour and keep them for 1 day.'
     );
 
-    // 📆 Daily snapshots retained for 1 week
+    // Daily snapshots retained for 1 week
     const dailySchedule = new TaskSchedule(true, [
       new TaskScheduleInterval({
         minute: { value: '0' },
@@ -908,7 +900,7 @@ export class EasySetupConfigurator {
       'Take snapshots daily and keep them for 1 week.'
     );
 
-    //  Weekly snapshots retained for 1 month (on Fridays at midnight)
+    // Weekly snapshots retained for 1 month (on Fridays at midnight)
     const weeklySchedule = new TaskSchedule(true, [
       new TaskScheduleInterval({
         minute: { value: '0' },
@@ -1045,10 +1037,18 @@ export class EasySetupConfigurator {
     const services = distro === "ubuntu" ? ["smbd", "nmbd"] : ["smb", "nmb"];
 
     for (const svc of services) {
-      // start + enable; ignore failures if nmb isn't used in your environment
-      await unwrap(server.execute(new Command(["systemctl", "start", svc], this.commandOptions)));
-      await unwrap(server.execute(new Command(["systemctl", "restart", svc], this.commandOptions)));
-      await unwrap(server.execute(new Command(["systemctl", "enable", svc], this.commandOptions)));
+      try {
+        await unwrap(server.execute(new Command(["systemctl", "start", svc], this.commandOptions)));
+        await unwrap(server.execute(new Command(["systemctl", "restart", svc], this.commandOptions)));
+        await unwrap(server.execute(new Command(["systemctl", "enable", svc], this.commandOptions)));
+      } catch (err) {
+        const msg = String((err as any)?.message ?? err);
+        if (/nmbd?\.service.*not found/i.test(msg) || /Unit nmb.*could not be found/i.test(msg)) {
+          console.warn(` ${svc} missing; continuing without it.`);
+        } else {
+          throw err;
+        }
+      }
     }
   }
 
@@ -1071,12 +1071,6 @@ export class EasySetupConfigurator {
             ? okAsync({})
             : this.sambaManager.patchSambaConfIncludeRegistry("/etc/samba/smb.conf")
         )
-    );
-
-    //  Ensure 'smbusers' group exists
-    await unwrap(
-      server.getGroupByName("smbusers")
-        .orElse(() => server.createGroup("smbusers"))
     );
 
     // Apply shares

@@ -13,4 +13,3 @@ export * from './useAutoFocus';
 export * from './useAutoFocusRef';
 export * from './useEnterToAdvance';
 export * from './hint';
-export * from './useThemeFromAlias';

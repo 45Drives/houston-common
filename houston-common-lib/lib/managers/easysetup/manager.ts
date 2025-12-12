@@ -52,7 +52,23 @@ export class EasySetupConfigurator {
   constructor() {
     this.sambaManager = new SambaManagerNet();
     this.zfsManager = new ZFSManager();
-    this.commandOptions = { superuser: "try" };
+    this.commandOptions = { superuser: "require" };
+  }
+
+  private async isRootSession(): Promise<boolean> {
+    try {
+      const proc = await unwrap(
+        server.execute(
+          new Command(["id", "-u"], { superuser: "try" })
+        )
+      );
+      const uid = decode(proc.stdout).trim();
+      console.log("[EasySetup] effective uid:", uid);
+      return uid === "0";
+    } catch (err) {
+      console.warn("[EasySetup] failed to determine uid:", err);
+      return false;
+    }
   }
 
   async applyConfig(
@@ -63,6 +79,27 @@ export class EasySetupConfigurator {
     try {
       const total = 10;
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
+
+      const isRoot = await this.isRootSession();
+
+      // if (isRoot) {
+      //   await this.applyServerConfig(config);
+      //   progressCallback({ message: "Configured SSH Security and Root Access", step: 2, total });
+      // } else {
+      //   console.warn(
+      //     "[EasySetup] not running as root; skipping server-level security settings"
+      //   );
+      //   progressCallback({ message: "Skipped SSH security / root access configuration (not running with administrative privileges).", step: 2, total });
+      // }
+
+      if (!isRoot) {
+        progressCallback({
+          message: "This setup requires administrative privileges. Please reconnect with a root or sudo-capable account.",
+          step: -1,
+          total: -1,
+        });
+        return;
+      }
 
       await this.applyServerConfig(config);
       progressCallback({ message: "Configured SSH Security and Root Access", step: 2, total });
@@ -179,7 +216,7 @@ export class EasySetupConfigurator {
   private async getNodeVersion(): Promise<string | null> {
     try {
       const result = await unwrap(
-        server.execute(new Command(["node", "-v"], this.commandOptions))
+        server.execute(new Command(["node", "-v"], { superuser: "try" }))
       );
       const output = new TextDecoder().decode(result.stdout);
       return output.replace(/^v/, "");
@@ -293,7 +330,7 @@ export class EasySetupConfigurator {
   private async listAllPools(): Promise<string[]> {
     const cmd = new Command(
       ["bash", "-lc", "zpool list -H -o name 2>/dev/null || true"],
-      this.commandOptions
+      { superuser: "try" }
     );
 
     const proc = await unwrap(server.execute(cmd, true));
@@ -384,7 +421,7 @@ export class EasySetupConfigurator {
 
     for (const svc of services) {
       // ignore if not present
-      await server.execute(new Command(["systemctl", "stop", svc], this.commandOptions), true);
+      await server.execute(new Command(["systemctl", "stop", svc], { superuser: "try" }), true);
     }
   }
 
@@ -392,7 +429,7 @@ export class EasySetupConfigurator {
     // Run a command that never fails (even if there are no pools)
     const cmd = new Command(
       ["bash", "-lc", "zpool list -H -o name 2>/dev/null || true"],
-      this.commandOptions
+      { superuser: "try" }
     );
 
     // Quiet execution to avoid console noise; unwrap to get ExitedProcess
@@ -428,7 +465,7 @@ export class EasySetupConfigurator {
 
     for (const argv of cmds) {
       try {
-        const proc = await unwrap(server.execute(new Command(argv, this.commandOptions), true));
+        const proc = await unwrap(server.execute(new Command(argv, { superuser: "try" }), true));
         console.log(new TextDecoder().decode(proc.stdout));
       } catch { }
     }

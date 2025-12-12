@@ -190,7 +190,7 @@ export default {
 
 <template>
   <Teleport to="body" :disabled="$slots.default !== undefined">
-    <div :class="$slots.default ? 'relative' : 'fixed z-20'">
+    <div :class="$slots.default ? 'relative' : 'fixed z-30'">
       <slot></slot>
       <div
         aria-live="assertive"

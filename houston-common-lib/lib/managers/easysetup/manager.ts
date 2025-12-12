@@ -55,19 +55,22 @@ export class EasySetupConfigurator {
     this.commandOptions = { superuser: "require" };
   }
 
-  private async isRootSession(): Promise<boolean> {
+  private async ensureAdminSession(): Promise<void> {
     try {
       const proc = await unwrap(
         server.execute(
-          new Command(["id", "-u"], { superuser: "try" })
+          new Command(["id", "-u"], { superuser: "require" })
         )
       );
       const uid = decode(proc.stdout).trim();
-      console.log("[EasySetup] effective uid:", uid);
-      return uid === "0";
+      console.log("[EasySetup] elevated uid:", uid);
+
+      if (uid !== "0") {
+        throw new Error(`Expected uid 0, got ${uid}`);
+      }
     } catch (err) {
-      console.warn("[EasySetup] failed to determine uid:", err);
-      return false;
+      console.error("[EasySetup] failed to obtain admin session:", err);
+      throw new Error("Administrative access denied or unavailable");
     }
   }
 
@@ -80,19 +83,9 @@ export class EasySetupConfigurator {
       const total = 10;
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
 
-      const isRoot = await this.isRootSession();
-
-      // if (isRoot) {
-      //   await this.applyServerConfig(config);
-      //   progressCallback({ message: "Configured SSH Security and Root Access", step: 2, total });
-      // } else {
-      //   console.warn(
-      //     "[EasySetup] not running as root; skipping server-level security settings"
-      //   );
-      //   progressCallback({ message: "Skipped SSH security / root access configuration (not running with administrative privileges).", step: 2, total });
-      // }
-
-      if (!isRoot) {
+      try {
+        await this.ensureAdminSession();
+      } catch (err) {
         progressCallback({
           message: "This setup requires administrative privileges. Please reconnect with a root or sudo-capable account.",
           step: -1,

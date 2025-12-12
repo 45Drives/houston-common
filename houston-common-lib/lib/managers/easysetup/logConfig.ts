@@ -2,7 +2,6 @@ import { EasySetupConfig, BackupLogEntry, BackupLog } from "./types";
 import { server, File, Command } from "@/index";
 
 function safeTimestamp() {
-    // 2025-12-12T15-04-33Z
     return new Date().toISOString().replace(/:/g, "-").replace(/\..+/, "");
 }
 
@@ -10,10 +9,10 @@ export function makeEasySetupLogPath(ts = safeTimestamp()) {
     return `/var/log/45drives/easysetup-${ts}.log`;
 }
 
-/**
- * Stores the small JSON map at:
- *   /etc/45drives/simple-setup-log.json
- */
+function makeEasySetupTmpLogPath(ts = safeTimestamp()) {
+    return `/tmp/45drives/easysetup-${ts}.log`;
+}
+
 export async function storeEasySetupConfig(config: EasySetupConfig) {
     const now = new Date().toISOString().replace(/:/g, "-").replace(/\..+/, "");
     const configSavePath = `/etc/45drives/simple-setup-log.json`;
@@ -69,7 +68,6 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
         backupLog[ipAddress] = newEntry;
 
         const writeResult = await logFile.write(JSON.stringify(backupLog, null, 2), {
-            // keep behavior consistent; /etc usually needs privilege, but your environment may already be elevated
             superuser: "try",
         });
 
@@ -83,159 +81,134 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
     }
 }
 
-type PatchConsoleOptions = {
-    logPath?: string;
-    fallbackDir?: string;
-    superuser?: "try" | "require";
-    alsoPatchStdErr?: boolean;
+/* ------------------------------------------------------------------ */
+/* Console -> file logger (supports repointing + flush)                 */
+/* ------------------------------------------------------------------ */
+
+type SuperuserMode = "try" | "require";
+
+type LoggerState = {
+    activePath: string;
+    superuser: SuperuserMode;
+    logFile: File;
+    queue: Promise<void>;
+    original: {
+        log: typeof console.log;
+        info: typeof console.info;
+        warn: typeof console.warn;
+        error: typeof console.error;
+        debug: typeof console.debug;
+    };
+    patched: boolean;
 };
 
-let alreadyPatched = false;
+let state: LoggerState | null = null;
 
-/**
- * Patch global console so every console.* call is ALSO appended to a log on the target host.
- * - Tries /var/log/45drives first (default)
- * - Falls back to /tmp/45drives if it can't write
- * - Serializes appends to avoid interleaving
- */
-export function patchConsoleToFile(options?: PatchConsoleOptions) {
-    if (alreadyPatched) return;
+function safeJson(v: unknown) {
+    try {
+        return JSON.stringify(v, null, 2);
+    } catch (e) {
+        return `[unserializable: ${String(e)}]`;
+    }
+}
 
-    const primaryPath = options?.logPath ?? "/var/log/45drives/simple-setup.log";
-    const fallbackDir = options?.fallbackDir ?? "/tmp/45drives";
-    const superuser = options?.superuser ?? "require";
+async function ensureDirAndFile(path: string, superuser: SuperuserMode) {
+    const dir = path.replace(/\/[^/]+$/, "");
+    // mkdir should be fine for /tmp without privilege; for /var/log it needs privilege.
+    await server.execute(new Command(["mkdir", "-p", dir], { superuser }), true);
 
-    const originalConsole = {
-        log: console.log.bind(console),
-        info: console.info.bind(console),
-        warn: console.warn.bind(console),
-        error: console.error.bind(console),
-        debug: console.debug.bind(console),
-    };
+    const lf = new File(server, path);
+    const ex = await lf.exists();
+    if (ex.isOk() && !ex.value) {
+        await lf.create(true);
+    }
+    return lf;
+}
 
-    let activePath = primaryPath;
-    let logFile = new File(server, activePath);
+function formatLine(level: string, args: unknown[]) {
+    const stamp = new Date().toISOString();
+    const msg = args.map((a) => (typeof a === "string" ? a : safeJson(a))).join(" ");
+    return `[${stamp}] [${level}] ${msg}\n`;
+}
 
-    let queue: Promise<void> = Promise.resolve();
-    let initialized = false;
-    let initFailed = false;
-    let usedFallback = false;
+export function patchConsoleToFile(logPath: string, superuser: SuperuserMode = "try") {
+    if (!state) {
+        const original = {
+            log: console.log.bind(console),
+            info: console.info.bind(console),
+            warn: console.warn.bind(console),
+            error: console.error.bind(console),
+            debug: console.debug.bind(console),
+        };
 
-    async function ensureDirAndFile(path: string) {
-        const dir = path.replace(/\/[^/]+$/, "");
-        try {
-            await server.execute(new Command(["mkdir", "-p", dir], { superuser }));
-            // ensure file exists
-            const lf = new File(server, path);
-            const ex = await lf.exists();
-            if (ex.isOk() && !ex.value) {
-                await lf.create(true);
-            }
-        } catch (e) {
-            throw e;
-        }
+        state = {
+            activePath: logPath,
+            superuser,
+            logFile: new File(server, logPath),
+            queue: Promise.resolve(),
+            original,
+            patched: false,
+        };
+    } else {
+        // Repoint existing logger (important for per-run files)
+        state.activePath = logPath;
+        state.superuser = superuser;
+        state.logFile = new File(server, logPath);
     }
 
-    async function switchToFallback() {
-        if (usedFallback) return;
-        usedFallback = true;
+    if (state.patched) return;
 
-        const fileName = activePath.split("/").pop() || "simple-setup.log";
-        activePath = `${fallbackDir}/${fileName}`;
-        logFile = new File(server, activePath);
-
-        try {
-            await ensureDirAndFile(activePath);
-            originalConsole.warn(`[EasySetup] Logging fallback enabled: ${activePath}`);
-        } catch (e) {
-            initFailed = true;
-            originalConsole.error("[EasySetup] Logging failed (fallback init also failed):", e);
-        }
-    }
-
-    function formatLine(lvl: string, args: unknown[]) {
-        const stamp = new Date().toISOString();
-        const msg = args
-            .map((a) => (typeof a === "string" ? a : safeJson(a)))
-            .join(" ");
-        return `[${stamp}] [${lvl}] ${msg}\n`;
-    }
-
-    function safeJson(v: unknown) {
-        try {
-            return JSON.stringify(v, null, 2);
-        } catch (e) {
-            return `[unserializable: ${String(e)}]`;
-        }
-    }
+    const s = state;
 
     function append(line: string) {
-        queue = queue.then(async () => {
-            if (initFailed) return;
-
+        s.queue = s.queue.then(async () => {
             try {
-                if (!initialized) {
-                    initialized = true;
-                    await ensureDirAndFile(activePath);
-                }
-
-                const res = await logFile.write(line, { append: true, superuser });
+                // Best effort: ensure dir/file, then append
+                s.logFile = await ensureDirAndFile(s.activePath, s.superuser);
+                const res = await s.logFile.write(line, { append: true, superuser: s.superuser });
                 if (res.isErr()) {
-                    // If /var/log fails (permissions), fallback to /tmp
-                    if (!usedFallback) {
-                        await switchToFallback();
-                        // try again once on fallback
-                        const res2 = await logFile.write(line, { append: true, superuser: "try" });
-                        if (res2.isErr()) {
-                            initFailed = true;
-                            originalConsole.error("LOGGER-FS-ERROR:", res2.error.message);
-                        }
-                    } else {
-                        initFailed = true;
-                        originalConsole.error("LOGGER-FS-ERROR:", res.error.message);
-                    }
+                    s.original.error("LOGGER-FS-ERROR:", res.error.message);
                 }
-            } catch (err) {
-                if (!usedFallback) {
-                    await switchToFallback();
-                } else {
-                    initFailed = true;
-                    originalConsole.error("LOGGER-UNEXPECTED:", (err as Error)?.message ?? String(err));
-                }
+            } catch (e) {
+                s.original.error("LOGGER-UNEXPECTED:", (e as any)?.message ?? String(e));
             }
         });
     }
 
     (["log", "info", "warn", "error", "debug"] as const).forEach((lvl) => {
         console[lvl] = (...args: unknown[]) => {
-            (originalConsole as any)[lvl](...args);
+            (s.original as any)[lvl](...args);
             append(formatLine(lvl.toUpperCase(), args));
         };
     });
 
-    if (options?.alsoPatchStdErr) {
-        try {
-            const origWrite = process.stderr.write.bind(process.stderr);
-            process.stderr.write = ((chunk: any, ...rest: any[]) => {
-                try {
-                    append(formatLine("STDERR", [String(chunk)]));
-                } catch { }
-                return (origWrite as any)(chunk, ...rest);
-            }) as any;
-        } catch {
-            // ignore if process is unavailable
-        }
-    }
+    s.patched = true;
+}
 
-    alreadyPatched = true;
+export async function flushConsoleFileLogger() {
+    if (!state) return;
+    await state.queue;
 }
 
 /**
- * Convenience that patches console to a new per-run file and returns the final path used.
- * If /var/log isn't writable, it will fall back to /tmp/45drives/...
+ * Start logging immediately to /tmp (works without admin), return both paths.
+ * Later, after ensureAdminSession succeeds, call promoteEasySetupRunLogging().
  */
 export function startEasySetupRunLogging(ts = safeTimestamp()) {
-    const logPath = makeEasySetupLogPath(ts);
-    patchConsoleToFile({ logPath, superuser: "require" });
-    return logPath;
+    const tmpPath = makeEasySetupTmpLogPath(ts);
+    const varPath = makeEasySetupLogPath(ts);
+
+    // Always start in /tmp with superuser: try
+    patchConsoleToFile(tmpPath, "try");
+    console.log("[EasySetup] Run log (tmp):", tmpPath);
+
+    return { ts, tmpPath, varPath };
+}
+
+/**
+ * Switch logging target to /var/log after you have admin.
+ */
+export function promoteEasySetupRunLogging(varPath: string) {
+    patchConsoleToFile(varPath, "require");
+    console.log("[EasySetup] Run log (var):", varPath);
 }

@@ -22,7 +22,12 @@ import {
   SambaShareConfig,
   LocalUser
 } from "@/index";
-import { storeEasySetupConfig, startEasySetupRunLogging } from './logConfig';
+import {
+  storeEasySetupConfig,
+  startEasySetupRunLogging,
+  promoteEasySetupRunLogging,
+  flushConsoleFileLogger,
+} from "./logConfig";
 import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
@@ -101,18 +106,19 @@ export class EasySetupConfigurator {
     config: EasySetupConfig,
     progressCallback: (progress: EasySetupProgress) => void
   ) {
-    // Start per-run logging immediately so you capture everything
-    const runLogPath = startEasySetupRunLogging();
-    console.log("[EasySetup] Run log:", runLogPath);
+    const total = 10;
+
+    // Start logging to /tmp immediately (works even if admin is denied)
+    const run = startEasySetupRunLogging();
 
     try {
-      const total = 10;
-
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
       await this.debugWhoAmI();
 
       try {
         await this.ensureAdminSession();
+        // Now that admin is available, switch logs to /var/log/45drives/...
+        promoteEasySetupRunLogging(run.varPath);
       } catch (err) {
         progressCallback({
           message: "This setup requires administrative privileges. Please reconnect with a root or sudo-capable account.",
@@ -120,6 +126,8 @@ export class EasySetupConfigurator {
           total: -1,
         });
         console.error("[EasySetup] Admin session unavailable:", err);
+        // Ensure queued log writes make it to disk before returning
+        await flushConsoleFileLogger();
         return;
       }
 
@@ -164,9 +172,10 @@ export class EasySetupConfigurator {
     } catch (error: any) {
       console.error("Error in setupStorage:", error);
       progressCallback({ message: `Error: ${error?.message ?? String(error)}`, step: -1, total: -1 });
+    } finally {
+      await flushConsoleFileLogger();
     }
   }
-  
 
   // Detect the Linux distro
   private async getLinuxDistro(): Promise<"rocky" | "ubuntu" | "unknown"> {

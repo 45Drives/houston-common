@@ -22,7 +22,7 @@ import {
   SambaShareConfig,
   LocalUser
 } from "@/index";
-import { storeEasySetupConfig } from './logConfig';
+import { storeEasySetupConfig, startEasySetupRunLogging } from './logConfig';
 import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
@@ -101,12 +101,16 @@ export class EasySetupConfigurator {
     config: EasySetupConfig,
     progressCallback: (progress: EasySetupProgress) => void
   ) {
+    // Start per-run logging immediately so you capture everything
+    const runLogPath = startEasySetupRunLogging();
+    console.log("[EasySetup] Run log:", runLogPath);
 
     try {
       const total = 10;
+
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
       await this.debugWhoAmI();
-      
+
       try {
         await this.ensureAdminSession();
       } catch (err) {
@@ -115,6 +119,7 @@ export class EasySetupConfigurator {
           step: -1,
           total: -1,
         });
+        console.error("[EasySetup] Admin session unavailable:", err);
         return;
       }
 
@@ -146,22 +151,22 @@ export class EasySetupConfigurator {
         console.log(` Current Node.js version: ${version ?? "Not installed"}`);
         await this.ensureNode18();
       }
-      progressCallback({ message: `Ensure Required Node Version (18)`, step: 9, total });
+      progressCallback({ message: "Ensure Required Node Version (18)", step: 9, total });
 
-      if (config.splitPools) {
-        progressCallback({ message: "Scheduled Active Backup tasks", step: 10, total });
-      } else {
-        progressCallback({ message: "Scheduled Snapshot tasks", step: 10, total });
-      }
+      progressCallback({
+        message: config.splitPools ? "Scheduled Active Backup tasks" : "Scheduled Snapshot tasks",
+        step: 10,
+        total,
+      });
 
       await storeEasySetupConfig(config);
-
+      console.log("[EasySetup] Completed successfully.");
     } catch (error: any) {
       console.error("Error in setupStorage:", error);
-      progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });
+      progressCallback({ message: `Error: ${error?.message ?? String(error)}`, step: -1, total: -1 });
     }
-
   }
+  
 
   // Detect the Linux distro
   private async getLinuxDistro(): Promise<"rocky" | "ubuntu" | "unknown"> {

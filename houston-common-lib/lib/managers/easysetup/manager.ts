@@ -55,6 +55,29 @@ export class EasySetupConfigurator {
     this.commandOptions = { superuser: "require" };
   }
 
+  private async debugWhoAmI() {
+    try {
+      const normal = await unwrap(
+        server.execute(new Command(["id", "-un"], { superuser: "try" }))
+      );
+      const elevated = await unwrap(
+        server.execute(new Command(["id", "-un"], { superuser: "require" }))
+      );
+
+      console.log(
+        "[EasySetup] whoami (normal):",
+        decode(normal.stdout).trim()
+      );
+      console.log(
+        "[EasySetup] whoami (elevated):",
+        decode(elevated.stdout).trim()
+      );
+    } catch (e) {
+      console.error("[EasySetup] debugWhoAmI failed:", e);
+    }
+  }
+
+
   private async ensureAdminSession(): Promise<void> {
     try {
       const proc = await unwrap(
@@ -82,7 +105,8 @@ export class EasySetupConfigurator {
     try {
       const total = 10;
       progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
-
+      await this.debugWhoAmI();
+      
       try {
         await this.ensureAdminSession();
       } catch (err) {

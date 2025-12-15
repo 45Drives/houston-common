@@ -11,7 +11,7 @@ import { File } from "@/path";
 
 import recommendedDefaultsConf from "./recommended-defaults.conf?raw";
 
-import { server as defaultServer, server } from "@/houston";
+import { server as defaultServer } from "@/houston";
 
 export interface ISambaManager {
   /**
@@ -125,13 +125,28 @@ export interface ISambaManager {
   setUserPassword(user: string, passwd: string): ResultAsync<void, ProcessError>;
 
   /**
+   * Remove user's smbpasswd
+   * @param user
+   */
+  removeUserPassword(user: string): ResultAsync<void, ProcessError>;
+
+  /**
+   * Check if user has smbpasswd set
+   * @param user
+   */
+  userHasPassword(user: string): ResultAsync<boolean, ProcessError>;
+
+  /**
    * Kick clients from share
    * @param sharename
    */
   closeSambaShare(sharename: string): ResultAsync<void, ProcessError>;
+
+  getServer(): Server;
 }
 
 export abstract class SambaManagerBase implements ISambaManager {
+  constructor(protected server: Server) {}
   parseShareConfig(shareConfig: string): Result<SambaShareConfig, ParsingError> {
     return IniSyntax()
       .apply(shareConfig)
@@ -192,12 +207,32 @@ export abstract class SambaManagerBase implements ISambaManager {
   abstract importConfig(config: string): ResultAsync<this, ProcessError>;
 
   setUserPassword(user: string, passwd: string): ResultAsync<void, ProcessError> {
-    const proc = server.spawnProcess(
+    const proc = this.server.spawnProcess(
       new Command(["smbpasswd", "-a", "-s", user], { superuser: "try" })
     );
     proc.write(`${passwd}\n${passwd}\n`);
 
     return proc.wait().map(() => {});
+  }
+
+  /**
+   * Remove user's smbpasswd
+   * @param user
+   */
+  removeUserPassword(user: string): ResultAsync<void, ProcessError> {
+    return this.server
+      .execute(new Command(["smbpasswd", "-x", user], { superuser: "try" }))
+      .map(() => {});
+  }
+
+  /**
+   * Check if user has smbpasswd set
+   * @param user
+   */
+  userHasPassword(user: string): ResultAsync<boolean, ProcessError> {
+    return this.server
+      .execute(new Command(["pdbedit", "-L", "-u", user], { superuser: "try" }), false)
+      .map((proc) => !proc.failed());
   }
 
   abstract addShare(
@@ -224,17 +259,21 @@ export abstract class SambaManagerBase implements ISambaManager {
   }
 
   closeSambaShare(sharename: string): ResultAsync<void, ProcessError> {
-    return server
+    return this.server
       .execute(new Command(["smbcontrol", "smbd", "close-share", sharename], { superuser: "try" }))
       .map(() => {});
+  }
+
+  getServer(): Server {
+    return this.server;
   }
 }
 
 export class SambaManagerNet extends SambaManagerBase implements ISambaManager {
   private commandOptions: CommandOptions;
 
-  constructor(protected server: Server = defaultServer) {
-    super();
+  constructor(server: Server = defaultServer) {
+    super(server);
     this.commandOptions = {
       superuser: "try",
     };
@@ -435,7 +474,7 @@ export class SambaManagerConfFile extends SambaManagerBase implements ISambaMana
   private commandOptions: CommandOptions;
 
   constructor(protected confFile: File) {
-    super();
+    super(confFile.server);
     this.commandOptions = {
       superuser: "try",
     };

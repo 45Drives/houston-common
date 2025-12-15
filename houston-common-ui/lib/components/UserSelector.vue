@@ -54,7 +54,13 @@ const loadUsers = wrapAction((invalidateCache?: boolean) =>
     .map((loadedUsers) => (users.value = loadedUsers))
 );
 
-function userToSelectOption(user: AnyUser): SelectMenuOption<AnyUser> {
+function userToSelectOption(user?: AnyUser): SelectMenuOption<AnyUser | undefined> {
+  if (!user) {
+    return {
+      label: "Select a user",
+      value: undefined,
+    }
+  }
   const login = user.login ?? "<unknown user>";
   return {
     label: `${login} (${user.uid})` + (user.domain ? " *" : ""),
@@ -85,8 +91,8 @@ defineExpose({
   refresh: loadUsers,
 });
 
-function optionKey(u: AnyUser) {
-  return u.uid;
+function optionKey(u?: AnyUser) {
+  return u?.uid ?? null;
 }
 </script>
 

@@ -4,6 +4,7 @@ import { type InjectionKey, computed, ref, provide, inject, type Ref, type Compu
 export type WizardState = {
   labels: ComputedRef<string[]>;
   index: WritableComputedRef<number>;
+  currentStep: ComputedRef<WizardStep>;
   currentComponent: ComputedRef<Component>;
   completedSteps: Ref<boolean[]>;
   data: Record<string, any>;
@@ -19,6 +20,7 @@ export interface WizardStep {
   nextStep?: (data: Record<string, any>) => number; // Function for branching logic
   prevStep?: (data: Record<string, any>, currentIndex: number) => number; // Dynamic previous branching (like nextStep)
   previousStepIndex?: number; // Function for branching logic
+  props?: Record<string, any>;
 }
 
 // Function to generate a unique injection key for each wizard
@@ -76,9 +78,12 @@ export function defineWizardSteps(
     return prevStepIndex;
   };
 
+  const currentStep = computed(() => steps[index.value]!);
+
   const state: WizardState = {
     labels: computed(() => steps.map(({ label }) => label)),
     index,
+    currentStep,          // add this
     currentComponent,
     completedSteps: ref(steps.map(() => false)),
     data: {},

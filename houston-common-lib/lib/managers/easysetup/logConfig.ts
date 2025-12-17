@@ -114,15 +114,11 @@ function safeJson(v: unknown) {
 
 async function ensureDirAndFile(path: string, superuser: SuperuserMode) {
     const dir = path.replace(/\/[^/]+$/, "");
-    // mkdir should be fine for /tmp without privilege; for /var/log it needs privilege.
     await server.execute(new Command(["mkdir", "-p", dir], { superuser }), true);
+    await server.execute(new Command(["bash", "-lc", `test -e ${JSON.stringify(path)} || : > ${JSON.stringify(path)}`], { superuser }), true);
+    await server.execute(new Command(["bash", "-lc", `chmod 0755 ${JSON.stringify(dir)} || true`], { superuser }), true);
 
-    const lf = new File(server, path);
-    const ex = await lf.exists();
-    if (ex.isOk() && !ex.value) {
-        await lf.create(true);
-    }
-    return lf;
+    return new File(server, path);
 }
 
 function formatLine(level: string, args: unknown[]) {

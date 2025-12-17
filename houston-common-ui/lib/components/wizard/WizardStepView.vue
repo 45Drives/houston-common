@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { defineProps } from "vue";
 import type { WizardState } from '@/components/wizard';
 
 const props = defineProps<WizardState>();
 
-const {currentComponent, index} = props;
+const {currentComponent, currentStep} = props;
 </script>
 
 <template>
   <Transition mode="out-in">
     <KeepAlive>
-      <component :is="currentComponent" :key="currentComponent.name" />
+      <component :is="currentComponent" :key="currentComponent.name" v-bind="currentStep.props || {}"/>
     </KeepAlive>
   </Transition>
 </template>

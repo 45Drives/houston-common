@@ -23,17 +23,34 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
     if (!config.sambaConfig?.shares?.[0]!.name) console.error("First share has no name");
     if (!config.srvrName) console.error("Missing srvrName");
 
+    async function readHostname(): Promise<string> {
+        try {
+            const proc: any = await server.execute(
+                new Command(["hostname"], { superuser: "try" }),
+                true
+            );
+            return new TextDecoder().decode(proc.stdout).trim();
+        } catch {
+            return "";
+        }
+    }
+
     const configuredShare = config.sambaConfig?.shares?.find((s) => s?.name && typeof s.name === "string");
-    if (!configuredShare || !config.srvrName) {
-        console.error(" Cannot log setup: Missing share or server name.", {
-            shares: config.sambaConfig?.shares,
-            srvrName: config.srvrName,
-        });
+    if (!configuredShare) {
+        console.error("Cannot log setup: Missing share.", { shares: config.sambaConfig?.shares });
+        return;
+    }
+
+    const serverName =
+        (config.srvrName && config.srvrName.trim()) || (await readHostname());
+
+    if (!serverName) {
+        console.error("Cannot log setup: Missing server name (srvrName empty and hostname read failed).");
         return;
     }
 
     const newEntry: BackupLogEntry = {
-        serverName: config.srvrName!,
+        serverName: serverName,
         shareName: configuredShare.name,
         setupTime: now,
     };

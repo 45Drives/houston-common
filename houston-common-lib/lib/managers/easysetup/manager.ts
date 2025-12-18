@@ -79,6 +79,12 @@ export class EasySetupConfigurator {
     }
   }
 
+  private async getCurrentHostname(): Promise<string> {
+    const p = await unwrap(server.execute(new Command(["hostname"], { superuser: "try" }), true));
+    return decode(p.stdout).trim();
+  }
+
+
   async applyConfig(
     config: EasySetupConfig,
     progressCallback: (progress: EasySetupProgress) => void
@@ -117,7 +123,7 @@ export class EasySetupConfigurator {
       report(3, "Clearing any existing ZFS and Samba data...");
       await this.deleteZFSPoolAndSMBShares(config);
 
-      report(4, "Updating Server Name...");
+      report(4, "Updating Server Name (if changed)...");
       await this.updateHostname(config);
 
       report(5, "Creating Users and Groups...");
@@ -318,25 +324,24 @@ export class EasySetupConfigurator {
 
 
   private async updateHostname(config: EasySetupConfig) {
-    if (!config.srvrName) {
-      // still refresh mDNS if no change; ignore failure quietly
-      await server.execute(new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions), true);
-      return;
-    }
+    const desired = (config.srvrName ?? "").trim();
+    if (!desired) return;
 
-    const name = config.srvrName;
+    const current = await this.getCurrentHostname();
+    if (desired === current) return;
+
     const distro = await this.getLinuxDistro();
 
     // 1) Persist first (your helper writes /etc/hostname and /etc/machine-info)
-    await unwrap(server.writeHostnameFiles(name));
+    await unwrap(server.writeHostnameFiles(desired));
 
     // 2) Best-effort runtime hostname without noisy DBus on Rocky
     if (distro === "ubuntu") {
       // setHostname swallows errors already; no unwrap so it won’t log failures
-      await server.setHostname(name);
+      await server.setHostname(desired);
     } else {
       // on Rocky, avoid hostnamectl (polkit noise); set kernel hostname directly, quietly
-      await server.execute(new Command(["hostname", name], this.commandOptions), true);
+      await server.execute(new Command(["hostname", desired], this.commandOptions), true);
     }
 
     // 3) Bounce daemons that read hostname (quietly in case a unit is missing)

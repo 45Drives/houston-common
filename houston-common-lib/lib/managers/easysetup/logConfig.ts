@@ -174,7 +174,10 @@ export function patchConsoleToFile(logPath: string, superuser: SuperuserMode = "
     (["log", "info", "warn", "error", "debug"] as const).forEach((lvl) => {
         console[lvl] = (...args: unknown[]) => {
             (s.original as any)[lvl](...args);
-            append(formatLine(lvl.toUpperCase(), args));
+
+            if (!shouldSkipFileLog(lvl, args)) {
+                append(formatLine(lvl.toUpperCase(), args));
+            }
         };
     });
 
@@ -204,7 +207,25 @@ export function startEasySetupRunLogging(ts = safeTimestamp()) {
 /**
  * Switch logging target to /var/log after you have admin.
  */
-export function promoteEasySetupRunLogging(varPath: string) {
+export async function promoteEasySetupRunLogging(varPath: string, tmpPath?: string) {
     patchConsoleToFile(varPath, "require");
     console.log("[EasySetup] Run log (var):", varPath);
+
+    // Best-effort delete of the tmp log now that /var/log is active
+    if (tmpPath) {
+        await server.execute(
+            new Command(["bash", "-lc", `rm -f ${JSON.stringify(tmpPath)} || true`], { superuser: "try" }),
+            true
+        );
+    }
+}
+
+function shouldSkipFileLog(level: string, args: unknown[]) {
+    // only filtering what gets written to the file
+    const joined = args.map(a => (typeof a === "string" ? a : safeJson(a))).join(" ");
+
+    // Drop the noisy warning(s)
+    if (/sigmaRadians,\s*0\.05, is too large and will clip/i.test(joined)) return true;
+
+    return false;
 }

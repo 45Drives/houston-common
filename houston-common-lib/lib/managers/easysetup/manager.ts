@@ -104,7 +104,7 @@ export class EasySetupConfigurator {
       try {
         await this.ensureAdminSession();
         // Now that admin is available, switch logs to /var/log/45drives/...
-        promoteEasySetupRunLogging(run.varPath);
+        await promoteEasySetupRunLogging(run.varPath, run.tmpPath);
       } catch (err) {
         progressCallback({
           message: "This setup requires administrative privileges. Please reconnect with a root or sudo-capable account.",

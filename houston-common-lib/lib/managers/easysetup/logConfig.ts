@@ -175,7 +175,7 @@ export function patchConsoleToFile(logPath: string, superuser: SuperuserMode = "
         console[lvl] = (...args: unknown[]) => {
             (s.original as any)[lvl](...args);
 
-            if (!shouldSkipFileLog(lvl, args)) {
+            if (!shouldSkipFileLog(args)) {
                 append(formatLine(lvl.toUpperCase(), args));
             }
         };
@@ -220,7 +220,7 @@ export async function promoteEasySetupRunLogging(varPath: string, tmpPath?: stri
     }
 }
 
-function shouldSkipFileLog(level: string, args: unknown[]) {
+function shouldSkipFileLog(args: unknown[]) {
     // only filtering what gets written to the file
     const joined = args.map(a => (typeof a === "string" ? a : safeJson(a))).join(" ");
 

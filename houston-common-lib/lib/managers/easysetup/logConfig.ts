@@ -13,71 +13,45 @@ function makeEasySetupTmpLogPath(ts = safeTimestamp()) {
     return `/tmp/45drives/easysetup-${ts}.log`;
 }
 
-export async function storeEasySetupConfig(config: EasySetupConfig) {
-    const now = new Date().toISOString().replace(/:/g, "-").replace(/\..+/, "");
+export async function storeEasySetupConfig(config: EasySetupConfig, serverName: string) {
     const configSavePath = `/etc/45drives/simple-setup-log.json`;
+    const configDir = `/etc/45drives`;
     const ipAddress = (await server.getIpAddress())._unsafeUnwrap();
-
-    if (!config.sambaConfig) console.error("Missing sambaConfig");
-    if (!config.sambaConfig?.shares?.[0]) console.error("No shares found in sambaConfig");
-    if (!config.sambaConfig?.shares?.[0]!.name) console.error("First share has no name");
-    if (!config.srvrName) console.error("Missing srvrName");
-
-    async function readHostname(): Promise<string> {
-        try {
-            const proc: any = await server.execute(
-                new Command(["hostname"], { superuser: "try" }),
-                true
-            );
-            return new TextDecoder().decode(proc.stdout).trim();
-        } catch {
-            return "";
-        }
-    }
-
-    const configuredShare = config.sambaConfig?.shares?.find((s) => s?.name && typeof s.name === "string");
+    const configuredShare = config.sambaConfig?.shares?.find(
+        (s) => s?.name && typeof s.name === "string"
+    );
     if (!configuredShare) {
         console.error("Cannot log setup: Missing share.", { shares: config.sambaConfig?.shares });
-        return;
-    }
-
-    const serverName =
-        (config.srvrName && config.srvrName.trim()) || (await readHostname());
-
-    if (!serverName) {
-        console.error("Cannot log setup: Missing server name (srvrName empty and hostname read failed).");
-        return;
+        return false;
     }
 
     const newEntry: BackupLogEntry = {
-        serverName: serverName,
+        serverName,
         shareName: configuredShare.name,
-        setupTime: now,
+        setupTime: new Date().toISOString(), // keep valid ISO for server.js Date parsing
     };
 
     try {
+        // Ensure /etc/45drives exists (required for create/write)
+        await server.execute(new Command(["mkdir", "-p", configDir], { superuser: "require" }), true);
+
         const logFile = new File(server, configSavePath);
         let backupLog: BackupLog = {};
 
         const exists = await logFile.exists();
         if (exists.isErr()) {
-            console.error(" Could not check if log file exists:", exists.error.message);
-            return;
+            console.error("Could not check if log file exists:", exists.error.message);
+            return false;
         }
 
-        if (!exists.value) {
-            const createRes = await logFile.create(true);
-            if (createRes.isErr()) {
-                console.error(" Failed to create log file:", createRes.error.message);
-                return;
-            }
-        } else {
-            const readResult = await logFile.read();
-            if (readResult.isOk() && readResult.value.trim() !== "") {
+        if (exists.value) {
+            const readResult = await logFile.read({ superuser: "require" } as any);
+            if ((readResult as any).isOk?.() && (readResult as any).value.trim() !== "") {
                 try {
-                    backupLog = JSON.parse(readResult.value);
+                    backupLog = JSON.parse((readResult as any).value);
                 } catch {
-                    console.warn(" Failed to parse existing log. Starting fresh.");
+                    console.warn("Failed to parse existing log. Starting fresh.");
+                    backupLog = {};
                 }
             }
         }
@@ -85,16 +59,19 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
         backupLog[ipAddress] = newEntry;
 
         const writeResult = await logFile.write(JSON.stringify(backupLog, null, 2), {
-            superuser: "try",
+            superuser: "require",
         });
 
         if (writeResult.isOk()) {
-            console.log(` Backup log saved at ${configSavePath}`);
+            console.log(`Backup log saved at ${configSavePath}`);
+            return true;
         } else {
-            console.error(" Failed to write backup log:", writeResult.error.message);
+            console.error("Failed to write backup log:", writeResult.error.message);
+            return false;
         }
     } catch (error) {
-        console.error(" Error saving setup config:", error);
+        console.error("Error saving setup config:", error);
+        return false;
     }
 }
 

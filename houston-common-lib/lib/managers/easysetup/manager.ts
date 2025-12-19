@@ -68,7 +68,7 @@ export class EasySetupConfigurator {
         )
       );
       const uid = decode(proc.stdout).trim();
-      console.log("[EasySetup] elevated uid:", uid);
+      // console.log("[EasySetup] elevated uid:", uid);
 
       if (uid !== "0") {
         throw new Error(`Expected uid 0, got ${uid}`);
@@ -84,6 +84,11 @@ export class EasySetupConfigurator {
     return decode(p.stdout).trim();
   }
 
+  private resolveServerName(config: EasySetupConfig, currentHostname: string): string {
+    const desired = (config.srvrName ?? "").trim();
+    if (desired) return desired;
+    return (currentHostname ?? "").trim();
+  }
 
   async applyConfig(
     config: EasySetupConfig,
@@ -144,7 +149,14 @@ export class EasySetupConfigurator {
 
       report(10, config.splitPools ? "Scheduling Active Backup tasks..." : "Scheduling Snapshot tasks...");
       await this.scheduleTasks(config);
-      await storeEasySetupConfig(config);
+
+      console.log("[EasySetup] About to write simple-setup-log.json");
+
+      const currentHostname = await this.getCurrentHostname();
+      const serverName = this.resolveServerName(config, currentHostname);
+
+      const ok = await storeEasySetupConfig(config, serverName);
+      console.log(`[EasySetup] simple-setup-log.json write ${ok ? "OK" : "FAILED"}`);
 
     } catch (error: any) {
       console.error("Error in setupStorage:", error);
@@ -180,7 +192,7 @@ export class EasySetupConfigurator {
   // Apply firewall rules
   private async applyOpenSambaPorts() {
     const distro = await this.getLinuxDistro();
-    console.log(`Detected distro: ${distro}`);
+    // console.log(`Detected distro: ${distro}`);
 
     if (distro === "rocky") {
       try {
@@ -737,7 +749,7 @@ export class EasySetupConfigurator {
     for (const task of replicationTasks) {
       try {
         await scheduler.unregisterTaskInstance(task);
-        console.log(` Unregistered replication task: ${task.name}`);
+        // console.log(` Unregistered replication task: ${task.name}`);
       } catch (error) {
         console.error(` Failed to unregister task ${task.name}:`, error);
       }
@@ -755,7 +767,7 @@ export class EasySetupConfigurator {
     for (const task of replicationTasks) {
       try {
         await scheduler.unregisterTaskInstance(task);
-        console.log(` Unregistered replication task: ${task.name}`);
+        // console.log(` Unregistered snapshot task: ${task.name}`);
       } catch (error) {
         console.error(` Failed to unregister task ${task.name}:`, error);
       }
@@ -892,7 +904,7 @@ export class EasySetupConfigurator {
 
     // Push all tasks to the array
     tasks.push(hourlyTask, dailyTask, weeklyTask);
-    console.log('tasks:', tasks);
+    // console.log('tasks:', tasks);
     return tasks;
   }
 
@@ -979,7 +991,7 @@ export class EasySetupConfigurator {
     );
 
     tasks.push(hourlyTask, dailyTask, weeklyTask);
-    console.log('autoSnapshotTasks:', tasks);
+    // console.log('autoSnapshotTasks:', tasks);
     return tasks;
   }
 
@@ -1049,7 +1061,7 @@ export class EasySetupConfigurator {
       tasks.push(weeklyBackupScrub);
     }
 
-    console.log('scrubtasks:', tasks);
+    // console.log('scrubtasks:', tasks);
     return tasks;
   }
 
@@ -1164,7 +1176,7 @@ export class EasySetupConfigurator {
   static async loadConfig(
     easyConfigName: keyof typeof defaultConfigs
   ): Promise<EasySetupConfig | null> {
-    console.log("loading config for:", easyConfigName);
+    // console.log("loading config for:", easyConfigName);
     // console.log("list of defaultconfigs:", defaultConfigs);
     const dc = defaultConfigs[easyConfigName];
     return SambaConfParser()

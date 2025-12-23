@@ -107,7 +107,7 @@ const chassisModelLUT: {
     defaultLabels: 0x000000,
   },
   {
-    re: /^HomeLab-HL15/,
+    re: /^HomeLab-HL15$/,
     modelLoader: HL15Loader,
     driveOrientation: "TopLoader",
     defaultPowdercoat: 0xffffff,

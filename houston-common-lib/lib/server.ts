@@ -299,6 +299,10 @@ export class Server {
     const url = HoustonDriver.downloadCommandOutputURL(this, command, filename);
     Download.url(url, filename);
   }
+  downloadCommandOutputSelfUrl(command: Command, filename: string): void {
+    const url = HoustonDriver.downloadCommandOutputURL(this, command, filename);
+    Download.selfUrl(url, filename);
+  }
 
   getLocalUsers(cache: boolean = true): ResultAsync<LocalUser[], ProcessError> {
     if (this.localUsers === undefined || cache === false) {

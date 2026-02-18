@@ -30,7 +30,7 @@ export async function storeEasySetupConfig(config: EasySetupConfig, serverName: 
         shareName: configuredShare.name,
         setupTime: new Date().toISOString(), // keep valid ISO for server.js Date parsing
     };
-
+    console.log('logConfig log test');
     try {
         // Ensure /etc/45drives exists (required for create/write)
         await server.execute(new Command(["mkdir", "-p", configDir], { superuser: "require" }), true);

@@ -48,7 +48,7 @@ export namespace Download {
       // chromium based
       Download.url(url, f.name);
     } else {
-      window.open(url, "_self")?.focus(); // non-chromium based
+      window.open(url, "_blank")?.focus(); // non-chromium based
     }
   }
 

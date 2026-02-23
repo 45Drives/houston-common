@@ -15,6 +15,22 @@ export namespace Download {
     document.body.removeChild(a);
   }
 
+  export function selfUrl(url: string, filename: string) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.style.display = "none";
+    a.download = filename;
+    a.target = "_self";
+    document.body.appendChild(a);
+    const event = new MouseEvent("click", {
+      view: window,
+      bubbles: false,
+      cancelable: true,
+    });
+    a.dispatchEvent(event);
+    document.body.removeChild(a);
+  }
+
   export function blobParts(
     content: BlobPart[],
     filename: string,

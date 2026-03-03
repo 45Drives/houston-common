@@ -126,6 +126,18 @@ export function factory(): IHoustonDriver {
   const HoustonDriverCockpit: IHoustonDriver = {
     Process: CockpitProcess,
     downloadCommandOutputURL(server, command, filename) {
+      const safeName = filename.replace(/[\r\n"]/g, "_");
+      const encoded = encodeURIComponent(filename);
+    
+      // Check the file extension and set the appropriate content type
+      const lower = filename.toLowerCase();
+      const contentType =
+        lower.endsWith(".tar.gz") || lower.endsWith(".tgz")
+          ? "application/gzip"
+          : lower.endsWith(".xz")
+          ? "application/x-xz"
+          : "application/octet-stream";  // Default content type for other file types
+    
       const query = window.btoa(
         JSON.stringify({
           ...command.options,
@@ -135,16 +147,17 @@ export function factory(): IHoustonDriver {
           binary: "raw",
           spawn: command.argv,
           external: {
-            "content-disposition": 'attachment; filename="' + encodeURIComponent(filename) + '"',
-            "content-type": "application/x-xz, application/octet-stream",
+            "content-disposition": `attachment; filename="${safeName}"; filename*=UTF-8''${encoded}`,
+            "content-type": contentType,  // Set the content type based on file extension
           },
         })
       );
-      const prefix = new URL(cockpit.transport.uri("channel/" + cockpit.transport.csrf_token))
-        .pathname;
-      const url = prefix + "?" + query;
-      return url;
-    },
+    
+      const prefix = new URL(cockpit.transport.uri("channel/" + cockpit.transport.csrf_token)).pathname;
+      return prefix + "?" + query;
+    }
+    
+    ,
     gettext: cockpit.gettext,
     localStorage: cockpit.localStorage,
     sessionStorage: cockpit.sessionStorage,

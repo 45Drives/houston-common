@@ -49,11 +49,13 @@ export type NotificationLevel = "info" | "warning" | "error" | "success" | "deni
 
 export class Notification {
   public readonly title: string;
-  public readonly body: string;
+  public body: string;
   public readonly level: NotificationLevel;
   public readonly timeout: number | "never";
   public readonly actions: NotificationAction[];
   public readonly key: symbol;
+  public readonly group: string | undefined;
+  public groupCount: number;
   public remove: () => void;
   public removerTimeout?: number;
   private removerStartTime?: number;
@@ -63,7 +65,8 @@ export class Notification {
     title: string,
     body: string,
     level: NotificationLevel = "info",
-    timeout: number | "never" = 10_000
+    timeout: number | "never" = 10_000,
+    group?: string
   ) {
     this.title = title;
     this.body = body;
@@ -71,6 +74,8 @@ export class Notification {
     this.timeout = timeout;
     this.actions = [];
     this.key = Symbol();
+    this.group = group;
+    this.groupCount = 1;
     this.remove = () => {};
     this.timeLeftPercent = 0;
   }
@@ -135,6 +140,22 @@ const notificationList = ref<Notification[]>([]);
  * @param notif Notification to show
  */
 export function pushNotification(notif: Notification): Notification {
+  // ── Group coalescing: if there's already a visible notification with the
+  //    same group key, update it in-place instead of stacking a new one.
+  if (notif.group) {
+    const existing = notificationList.value.find(
+      (n) => n.group === notif.group
+    );
+    if (existing) {
+      existing.groupCount++;
+      existing.body = notif.body;
+      // Restart the dismiss timer so the updated notification stays visible
+      existing.stopRemoveTimeout();
+      existing.startRemoveTimeout();
+      return existing;
+    }
+  }
+
   notif = reactive(notif);
   notif.startRemoveTimeout();
   notif.remove = () => {

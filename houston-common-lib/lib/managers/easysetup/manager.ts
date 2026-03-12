@@ -258,17 +258,37 @@ export class EasySetupConfigurator {
 
   // Ensure NVM is installed
   private async ensureNvmInstalled(): Promise<void> {
-    try {
-      await unwrap(server.execute(new Command(["bash", "-c", "command -v nvm"], this.commandOptions)));
-    } catch {
-      console.log(" Installing NVM...");
-      await unwrap(
-        server.execute(
-          new Command(["bash", "-c", "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash"], this.commandOptions)
-        )
-      );
-      console.log(" NVM installed. Reloading shell...");
-    }
+    const check = `export NVM_DIR="$HOME/.nvm"; test -s "$NVM_DIR/nvm.sh"`;
+    const has: any = await server.execute(new Command(["bash", "-lc", check], this.commandOptions), true);
+
+    if (has.exited === 0) return;
+
+    const installGit = `
+if ! command -v git >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1; then
+    if [ "$(id -u)" -ne 0 ]; then sudo apt-get update && sudo apt-get install -y git; else apt-get update && apt-get install -y git; fi
+  elif command -v dnf >/dev/null 2>&1; then
+    if [ "$(id -u)" -ne 0 ]; then sudo dnf install -y git; else dnf install -y git; fi
+  elif command -v yum >/dev/null 2>&1; then
+    if [ "$(id -u)" -ne 0 ]; then sudo yum install -y git; else yum install -y git; fi
+  else
+    echo "git is required to install nvm" >&2
+    exit 1
+  fi
+fi
+`;
+
+    await unwrap(
+      server.execute(
+        new Command(["bash", "-lc", installGit], this.commandOptions)
+      )
+    );
+
+    await unwrap(
+      server.execute(
+        new Command(["bash", "-lc", "rm -rf \"$HOME/.nvm\" && git clone --depth 1 --branch v0.39.7 https://github.com/nvm-sh/nvm.git \"$HOME/.nvm\""], this.commandOptions)
+      )
+    );
   }
 
   // Load NVM into the current shell

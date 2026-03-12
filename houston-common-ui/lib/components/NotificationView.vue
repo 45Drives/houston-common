@@ -243,7 +243,7 @@ export default {
                   <p class="text-sm font-medium">{{ notification.title }}</p>
                   <p
                     class="mt-1 text-sm text-muted whitespace-pre-wrap"
-                    v-html="notification.body"
+                    v-text="notification.body"
                   ></p>
                   <div v-if="notification.actions?.length" class="mt-3 flex space-x-7">
                     <button

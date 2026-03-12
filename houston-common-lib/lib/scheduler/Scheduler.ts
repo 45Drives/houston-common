@@ -61,7 +61,7 @@ export class Scheduler implements SchedulerType {
                     new Command(["mkdir", "-p", dir], { superuser: "require" })
                 )
             );
-            console.log(` ensured dir ${dir}`);
+            // console.log(` ensured dir ${dir}`);
         } catch (err) {
             console.error(` mkdir -p ${dir} failed:`, err);
         }
@@ -116,7 +116,7 @@ export class Scheduler implements SchedulerType {
                 this.taskInstances.push(newTaskInstance);
             });
 
-            console.log('this.taskInstances:', this.taskInstances);
+            // console.log('this.taskInstances:', this.taskInstances);
 
         } catch (err: unknown) {
             console.error(errorString(err));

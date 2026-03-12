@@ -57,31 +57,8 @@ export class EasySetupConfigurator {
   constructor() {
     this.sambaManager = new SambaManagerNet();
     this.zfsManager = new ZFSManager();
-    this.commandOptions = { superuser: "require" };
+    this.commandOptions = { superuser: "try" };
   }
-
-  private async debugWhoAmI() {
-    try {
-      const normal = await unwrap(
-        server.execute(new Command(["id", "-un"], { superuser: "try" }))
-      );
-      const elevated = await unwrap(
-        server.execute(new Command(["id", "-un"], { superuser: "require" }))
-      );
-
-      console.log(
-        "[EasySetup] whoami (normal):",
-        decode(normal.stdout).trim()
-      );
-      console.log(
-        "[EasySetup] whoami (elevated):",
-        decode(elevated.stdout).trim()
-      );
-    } catch (e) {
-      console.error("[EasySetup] debugWhoAmI failed:", e);
-    }
-  }
-
 
   private async ensureAdminSession(): Promise<void> {
     try {
@@ -91,7 +68,7 @@ export class EasySetupConfigurator {
         )
       );
       const uid = decode(proc.stdout).trim();
-      console.log("[EasySetup] elevated uid:", uid);
+      // console.log("[EasySetup] elevated uid:", uid);
 
       if (uid !== "0") {
         throw new Error(`Expected uid 0, got ${uid}`);
@@ -102,23 +79,37 @@ export class EasySetupConfigurator {
     }
   }
 
+  private async getCurrentHostname(): Promise<string> {
+    const p = await unwrap(server.execute(new Command(["hostname"], { superuser: "try" }), true));
+    return decode(p.stdout).trim();
+  }
+
+  private resolveServerName(config: EasySetupConfig, currentHostname: string): string {
+    const desired = (config.srvrName ?? "").trim();
+    if (desired) return desired;
+    return (currentHostname ?? "").trim();
+  }
+
   async applyConfig(
     config: EasySetupConfig,
     progressCallback: (progress: EasySetupProgress) => void
   ) {
     const total = 10;
 
+    const report = (step: number, message: string) =>
+      progressCallback({ step, total, message });
+
+
     // Start logging to /tmp immediately (works even if admin is denied)
     const run = startEasySetupRunLogging();
 
     try {
-      progressCallback({ message: "Initializing Storage Setup... please wait", step: 1, total });
-      await this.debugWhoAmI();
+      report(1, "Initializing Storage Setup...");
 
       try {
         await this.ensureAdminSession();
         // Now that admin is available, switch logs to /var/log/45drives/...
-        promoteEasySetupRunLogging(run.varPath);
+        await promoteEasySetupRunLogging(run.varPath, run.tmpPath);
       } catch (err) {
         progressCallback({
           message: "This setup requires administrative privileges. Please reconnect with a root or sudo-capable account.",
@@ -131,50 +122,49 @@ export class EasySetupConfigurator {
         return;
       }
 
+      report(2, "Configuring SSH Security and Root Access...");
       await this.applyServerConfig(config);
-      progressCallback({ message: "Configured SSH Security and Root Access", step: 2, total });
 
+      report(3, "Clearing any existing ZFS and Samba data...");
       await this.deleteZFSPoolAndSMBShares(config);
-      progressCallback({ message: "Cleared any existing ZFS and Samba data", step: 3, total });
 
+      report(4, "Updating Server Name (if changed)...");
       await this.updateHostname(config);
-      progressCallback({ message: "Updated Server Name", step: 4, total });
 
+      report(5, "Creating Users and Groups...");
       await this.applyUsersAndGroups(config);
-      progressCallback({ message: "Created Users and Groups", step: 5, total });
 
+      report(6, "Configuring ZFS Storage with available drives...");
       await this.applyZFSConfig(config);
-      progressCallback({ message: "Configured ZFS Storage with available drives", step: 6, total });
 
+      report(7, "Configuring Storage Sharing...");
       await this.applySambaConfig(config);
-      progressCallback({ message: "Configured Storage Sharing", step: 7, total });
 
+      report(8, "Opening Samba Port...");
       await this.applyOpenSambaPorts();
-      progressCallback({ message: "Opening Samba Port", step: 8, total });
 
+      report(9, "Ensuring Required Node Version (18)...");
       const version = await this.getNodeVersion();
-      if (version?.startsWith("18.")) {
-        console.log(` Node.js v${version} is already in use.`);
-      } else {
-        console.log(` Current Node.js version: ${version ?? "Not installed"}`);
-        await this.ensureNode18();
-      }
-      progressCallback({ message: "Ensure Required Node Version (18)", step: 9, total });
+      if (!version?.startsWith("18.")) await this.ensureNode18();
 
-      progressCallback({
-        message: config.splitPools ? "Scheduled Active Backup tasks" : "Scheduled Snapshot tasks",
-        step: 10,
-        total,
-      });
+      report(10, config.splitPools ? "Scheduling Active Backup tasks..." : "Scheduling Snapshot tasks...");
+      await this.scheduleTasks(config);
 
-      await storeEasySetupConfig(config);
-      console.log("[EasySetup] Completed successfully.");
+      console.log("[EasySetup] About to write simple-setup-log.json");
+
+      const currentHostname = await this.getCurrentHostname();
+      const serverName = this.resolveServerName(config, currentHostname);
+
+      const ok = await storeEasySetupConfig(config, serverName);
+      console.log(`[EasySetup] simple-setup-log.json write ${ok ? "OK" : "FAILED"}`);
+
     } catch (error: any) {
       console.error("Error in setupStorage:", error);
-      progressCallback({ message: `Error: ${error?.message ?? String(error)}`, step: -1, total: -1 });
+      progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });
     } finally {
       await flushConsoleFileLogger();
     }
+
   }
 
   // Detect the Linux distro
@@ -202,7 +192,7 @@ export class EasySetupConfigurator {
   // Apply firewall rules
   private async applyOpenSambaPorts() {
     const distro = await this.getLinuxDistro();
-    console.log(`Detected distro: ${distro}`);
+    // console.log(`Detected distro: ${distro}`);
 
     if (distro === "rocky") {
       try {
@@ -322,26 +312,66 @@ fi
     console.log(" Node.js v18 set as default.");
   }
 
-  private async updateHostname(config: EasySetupConfig) {
-    if (!config.srvrName) {
-      // still refresh mDNS if no change; ignore failure quietly
-      await server.execute(new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions), true);
-      return;
-    }
+  private async scheduleTasks(config: EasySetupConfig) {
+    const storageZfsConfig = config.zfsConfigs![0]!;
+    const backupZfsConfig = config.zfsConfigs![1]!;
 
-    const name = config.srvrName;
+    const taskTemplates = [
+      new ZFSReplicationTaskTemplate(),
+      new AutomatedSnapshotTaskTemplate(),
+      new ScrubTaskTemplate(),
+    ];
+
+    const taskInstances: TaskInstance[] = [];
+    const myScheduler = new Scheduler(taskTemplates, taskInstances);
+
+    if (config.splitPools) {
+      const repTasks = await this.createReplicationTasks(storageZfsConfig, backupZfsConfig);
+      for (const task of repTasks) {
+        taskInstances.push(task);
+        myScheduler.registerTaskInstance(task);
+      }
+
+      const scrubTasks = await this.createScrubTasks(storageZfsConfig, backupZfsConfig);
+      for (const task of scrubTasks) {
+        taskInstances.push(task);
+        myScheduler.registerTaskInstance(task);
+      }
+    } else {
+      const snapTasks = await this.createAutoSnapshotTasks(storageZfsConfig);
+      for (const task of snapTasks) {
+        taskInstances.push(task);
+        myScheduler.registerTaskInstance(task);
+      }
+
+      const scrubTasks = await this.createScrubTasks(storageZfsConfig);
+      for (const task of scrubTasks) {
+        taskInstances.push(task);
+        myScheduler.registerTaskInstance(task);
+      }
+    }
+  }
+
+
+  private async updateHostname(config: EasySetupConfig) {
+    const desired = (config.srvrName ?? "").trim();
+    if (!desired) return;
+
+    const current = await this.getCurrentHostname();
+    if (desired === current) return;
+
     const distro = await this.getLinuxDistro();
 
     // 1) Persist first (your helper writes /etc/hostname and /etc/machine-info)
-    await unwrap(server.writeHostnameFiles(name));
+    await unwrap(server.writeHostnameFiles(desired));
 
     // 2) Best-effort runtime hostname without noisy DBus on Rocky
     if (distro === "ubuntu") {
       // setHostname swallows errors already; no unwrap so it won’t log failures
-      await server.setHostname(name);
+      await server.setHostname(desired);
     } else {
       // on Rocky, avoid hostnamectl (polkit noise); set kernel hostname directly, quietly
-      await server.execute(new Command(["hostname", name], this.commandOptions), true);
+      await server.execute(new Command(["hostname", desired], this.commandOptions), true);
     }
 
     // 3) Bounce daemons that read hostname (quietly in case a unit is missing)
@@ -699,14 +729,9 @@ fi
     }
   }
 
-  private async applyZFSConfig(_config: EasySetupConfig) {
-    let storageZfsConfig = _config!.zfsConfigs![0];
-    let backupZfsConfig = _config!.zfsConfigs![1];
-
-    const taskTemplates = [new ZFSReplicationTaskTemplate()]
-    const taskInstances: TaskInstance[] = [];
-
-    const myScheduler = new Scheduler(taskTemplates, taskInstances);
+  private async applyZFSConfig(config: EasySetupConfig) {
+    let storageZfsConfig = config!.zfsConfigs![0];
+    let backupZfsConfig = config!.zfsConfigs![1];
 
     await this.zfsManager.createPool(storageZfsConfig!.pool, storageZfsConfig!.poolOptions);
     await this.zfsManager.addDataset(
@@ -715,7 +740,7 @@ fi
       storageZfsConfig!.datasetOptions
     );
 
-    if (_config.splitPools) {
+    if (config.splitPools) {
       await this.zfsManager.createPool(backupZfsConfig!.pool, backupZfsConfig!.poolOptions);
       await this.zfsManager.addDataset(
         backupZfsConfig!.pool.name,
@@ -724,33 +749,9 @@ fi
       );
       await this.clearReplicationTasks();
       await this.clearScrubTasks();
-      const repTasks = await this.createReplicationTasks(storageZfsConfig!, backupZfsConfig!);
-      repTasks.forEach(task => {
-        console.log('new Task created:', task);
-        taskInstances.push(task);
-        myScheduler.registerTaskInstance(task);
-      });
-      const scrubTasks = await this.createScrubTasks(storageZfsConfig!, backupZfsConfig!)
-      scrubTasks.forEach(task => {
-        console.log('new Task created:', task);
-        taskInstances.push(task);
-        myScheduler.registerTaskInstance(task);
-      });
     } else {
       await this.clearSnapshotTasks();
       await this.clearScrubTasks();
-      const snapTasks = await this.createAutoSnapshotTasks(storageZfsConfig!);
-      snapTasks.forEach(task => {
-        console.log('new Task created:', task);
-        taskInstances.push(task);
-        myScheduler.registerTaskInstance(task);
-      });
-      const scrubTasks = await this.createScrubTasks(storageZfsConfig!)
-      scrubTasks.forEach(task => {
-        console.log('new Task created:', task);
-        taskInstances.push(task);
-        myScheduler.registerTaskInstance(task);
-      });
     }
 
   }
@@ -766,7 +767,7 @@ fi
     for (const task of replicationTasks) {
       try {
         await scheduler.unregisterTaskInstance(task);
-        console.log(` Unregistered replication task: ${task.name}`);
+        // console.log(` Unregistered replication task: ${task.name}`);
       } catch (error) {
         console.error(` Failed to unregister task ${task.name}:`, error);
       }
@@ -784,7 +785,7 @@ fi
     for (const task of replicationTasks) {
       try {
         await scheduler.unregisterTaskInstance(task);
-        console.log(` Unregistered replication task: ${task.name}`);
+        // console.log(` Unregistered snapshot task: ${task.name}`);
       } catch (error) {
         console.error(` Failed to unregister task ${task.name}:`, error);
       }
@@ -921,7 +922,7 @@ fi
 
     // Push all tasks to the array
     tasks.push(hourlyTask, dailyTask, weeklyTask);
-    console.log('tasks:', tasks);
+    // console.log('tasks:', tasks);
     return tasks;
   }
 
@@ -1008,7 +1009,7 @@ fi
     );
 
     tasks.push(hourlyTask, dailyTask, weeklyTask);
-    console.log('autoSnapshotTasks:', tasks);
+    // console.log('autoSnapshotTasks:', tasks);
     return tasks;
   }
 
@@ -1078,7 +1079,7 @@ fi
       tasks.push(weeklyBackupScrub);
     }
 
-    console.log('scrubtasks:', tasks);
+    // console.log('scrubtasks:', tasks);
     return tasks;
   }
 
@@ -1193,7 +1194,7 @@ fi
   static async loadConfig(
     easyConfigName: keyof typeof defaultConfigs
   ): Promise<EasySetupConfig | null> {
-    console.log("loading config for:", easyConfigName);
+    // console.log("loading config for:", easyConfigName);
     // console.log("list of defaultconfigs:", defaultConfigs);
     const dc = defaultConfigs[easyConfigName];
     return SambaConfParser()

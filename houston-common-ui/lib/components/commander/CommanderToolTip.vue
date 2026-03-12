@@ -1,25 +1,28 @@
 <template>
     <span ref="triggerRef" class="relative inline-block">
         <InformationCircleIcon class="w-5 h-5 text-muted cursor-pointer hover:text-default" @click="toggleCommander"
-            @mouseenter="() => { toggleCommander(); cancelHideTimeout(); }" @mouseleave="startHideTimeout" />
+            @mouseenter="toggleCommander" />
 
         <teleport to="body">
-            <div v-if="showCommander" ref="popupRef" class="absolute pointer-events-auto"
-                :style="{ top: commanderPosition.top, left: commanderPosition.left }" @mouseenter="cancelHideTimeout"
-                @mouseleave="startHideTimeout">
+            <div v-if="showCommander" ref="popupRef" class="fixed z-50 pointer-events-auto"
+                :style="{ top: commanderPosition.top, left: commanderPosition.left }">
                 <CommanderPopup :message="message" :visible="showCommander" @close="showCommander = false"
-                    :position="commanderPosition" :arrowOffset="commanderPosition.arrowOffset"
-                    :placement="props.placement!" :width="width" :arrowRef="arrowRef" />
+                    :arrowOffset="commanderPosition.arrowOffset" :placement="side(commanderPosition.placement)"
+                    :width="width" />
             </div>
         </teleport>
     </span>
 </template>
+
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onUnmounted, type Ref } from "vue";
 import { InformationCircleIcon } from "@heroicons/vue/20/solid";
 import { computePosition, offset, flip, shift, arrow, type Placement } from '@floating-ui/dom';
 import CommanderPopup from "./CommanderPopup.vue";
+
+const side = (p: Placement): "top" | "bottom" | "left" | "right" =>
+    (p.split("-")[0] as any);
 
 interface CommanderToolTipProps {
     message: string;
@@ -33,11 +36,16 @@ const width = props.width || 500;
 const showCommander = ref(false);
 const triggerRef = ref<HTMLElement | null>(null);
 
-const commanderPosition = ref({
+const commanderPosition = ref<{
+    top: string;
+    left: string;
+    arrowOffset: number;
+    placement: Placement;
+}>({
     top: "0px",
     left: "0px",
     arrowOffset: 0,
-    placement: (props.placement ?? 'top') as Placement,
+    placement: (props.placement ?? "bottom") as Placement,
 });
 
 const arrowRef = ref<HTMLElement | null>(null);
@@ -72,45 +80,48 @@ const cancelHideTimeout = () => {
 };
 
 // Opens the popup and positions it
+
 const toggleCommander = async () => {
     document.dispatchEvent(new CustomEvent("closeAllPopups"));
     showCommander.value = true;
 
     await nextTick();
-    arrowRef.value = popupRef.value?.querySelector('[data-arrow]') as HTMLElement;
-
     if (!triggerRef.value || !popupRef.value) return;
 
-    const resolvedPlacement = (props.placement ?? 'bottom') as Placement;
+    arrowRef.value = popupRef.value.querySelector("[data-arrow]") as HTMLElement;
+
+    const resolvedPlacement = (props.placement ?? "bottom") as Placement;
 
     const { x, y, placement: computedPlacement, middlewareData } = await computePosition(
         triggerRef.value,
         popupRef.value,
         {
-            strategy: 'fixed',
-            // placement: resolvedPlacement,
-            placement: props.placement ?? 'bottom',
+            strategy: "fixed",
+            placement: resolvedPlacement,
             middleware: [
                 offset(10),
-                !strictPlacement ? flip({ fallbackPlacements: ['top', 'bottom', 'left', 'right'], }) : undefined,
+                !strictPlacement
+                    ? flip({
+                        fallbackPlacements: ["left", "top", "bottom", "right"],
+                    })
+                    : undefined,
                 shift({ padding: 10 }),
                 arrow({ element: arrowRef.value! }),
             ].filter(Boolean),
         }
     );
 
-    const arrowOffset = computedPlacement.startsWith('left') || computedPlacement.startsWith('right')
-        ? middlewareData.arrow?.y ?? 0
-        : middlewareData.arrow?.x ?? 0;
+    const arrowOffset =
+        side(computedPlacement) === "left" || side(computedPlacement) === "right"
+            ? middlewareData.arrow?.y ?? 0
+            : middlewareData.arrow?.x ?? 0;
 
     commanderPosition.value = {
         top: `${y}px`,
         left: `${x}px`,
         arrowOffset,
-        placement: strictPlacement ? resolvedPlacement : (computedPlacement as Placement),
+        placement: (strictPlacement ? resolvedPlacement : computedPlacement) as Placement,
     };
-
-    // console.log('Requested:', resolvedPlacement, '→ Final:', computedPlacement);
 };
 
 onMounted(() => {

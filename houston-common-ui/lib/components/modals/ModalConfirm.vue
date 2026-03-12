@@ -113,7 +113,7 @@ defineExpose({
 </script>
 
 <template>
-  <Modal :show="currentConfirmation !== undefined">
+  <Modal :show="currentConfirmation !== undefined" class="z-20">
     <CardContainer class="sm:min-w-96">
       <template #header>
         {{ headerText }}

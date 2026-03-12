@@ -52,7 +52,7 @@ const emit = defineEmits<{
 
 <template>
   <Teleport to="body">
-    <div class="fixed z-10 text-default">
+    <div class="fixed z-10 text-default" v-bind="$attrs">
       <Transition
         mode="out-in"
         enter-active-class="ease-out duration-500"

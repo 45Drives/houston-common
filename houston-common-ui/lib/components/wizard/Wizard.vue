@@ -2,7 +2,7 @@
 import { createWizardInjectionKey, defineWizardSteps, type WizardStep } from "./index";
 import WizardStepView from "./WizardStepView.vue";
 import StepsHeader from "./StepsHeader.vue";
-import { computed, defineProps, ref, watch } from "vue";
+import { computed, watch } from "vue";
 import { ProgressBar } from "@/components";
 
 const props = defineProps<{
@@ -11,6 +11,7 @@ const props = defineProps<{
   onComplete: (data: any) => void;
   hideHeader?: boolean;
   hideProgress?: boolean;
+  progressOverride?: number | null;
 }>();
 
 const emit = defineEmits(["goBack", "onComplete"]);
@@ -35,10 +36,20 @@ watch(
   { deep: true } // Ensure it tracks changes inside the array
 );
 
-const progress = computed(() => {
+const computedProgress = computed(() => {
   const total = props.steps.length;
-  const current = state.index.value;
-  return Math.round((current / total) * 100);
+  const current = state.index.value; // 0..total-1
+  if (total <= 1) return 100;
+  return Math.round((current / (total - 1)) * 100);
+});
+
+
+const progress = computed(() => {
+  const p = props.progressOverride;
+  if (typeof p === "number" && Number.isFinite(p)) {
+    return Math.min(100, Math.max(0, Math.round(p)));
+  }
+  return computedProgress.value;
 });
 </script>
 

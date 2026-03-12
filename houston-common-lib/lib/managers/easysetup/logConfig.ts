@@ -13,54 +13,45 @@ function makeEasySetupTmpLogPath(ts = safeTimestamp()) {
     return `/tmp/45drives/easysetup-${ts}.log`;
 }
 
-export async function storeEasySetupConfig(config: EasySetupConfig) {
-    const now = new Date().toISOString().replace(/:/g, "-").replace(/\..+/, "");
+export async function storeEasySetupConfig(config: EasySetupConfig, serverName: string) {
     const configSavePath = `/etc/45drives/simple-setup-log.json`;
+    const configDir = `/etc/45drives`;
     const ipAddress = (await server.getIpAddress())._unsafeUnwrap();
-
-    if (!config.sambaConfig) console.error("Missing sambaConfig");
-    if (!config.sambaConfig?.shares?.[0]) console.error("No shares found in sambaConfig");
-    if (!config.sambaConfig?.shares?.[0]!.name) console.error("First share has no name");
-    if (!config.srvrName) console.error("Missing srvrName");
-
-    const configuredShare = config.sambaConfig?.shares?.find((s) => s?.name && typeof s.name === "string");
-    if (!configuredShare || !config.srvrName) {
-        console.error(" Cannot log setup: Missing share or server name.", {
-            shares: config.sambaConfig?.shares,
-            srvrName: config.srvrName,
-        });
-        return;
+    const configuredShare = config.sambaConfig?.shares?.find(
+        (s) => s?.name && typeof s.name === "string"
+    );
+    if (!configuredShare) {
+        console.error("Cannot log setup: Missing share.", { shares: config.sambaConfig?.shares });
+        return false;
     }
 
     const newEntry: BackupLogEntry = {
-        serverName: config.srvrName!,
+        serverName,
         shareName: configuredShare.name,
-        setupTime: now,
+        setupTime: new Date().toISOString(), // keep valid ISO for server.js Date parsing
     };
-
+    console.log('logConfig log test');
     try {
+        // Ensure /etc/45drives exists (required for create/write)
+        await server.execute(new Command(["mkdir", "-p", configDir], { superuser: "require" }), true);
+
         const logFile = new File(server, configSavePath);
         let backupLog: BackupLog = {};
 
         const exists = await logFile.exists();
         if (exists.isErr()) {
-            console.error(" Could not check if log file exists:", exists.error.message);
-            return;
+            console.error("Could not check if log file exists:", exists.error.message);
+            return false;
         }
 
-        if (!exists.value) {
-            const createRes = await logFile.create(true);
-            if (createRes.isErr()) {
-                console.error(" Failed to create log file:", createRes.error.message);
-                return;
-            }
-        } else {
-            const readResult = await logFile.read();
-            if (readResult.isOk() && readResult.value.trim() !== "") {
+        if (exists.value) {
+            const readResult = await logFile.read({ superuser: "require" } as any);
+            if ((readResult as any).isOk?.() && (readResult as any).value.trim() !== "") {
                 try {
-                    backupLog = JSON.parse(readResult.value);
+                    backupLog = JSON.parse((readResult as any).value);
                 } catch {
-                    console.warn(" Failed to parse existing log. Starting fresh.");
+                    console.warn("Failed to parse existing log. Starting fresh.");
+                    backupLog = {};
                 }
             }
         }
@@ -68,16 +59,19 @@ export async function storeEasySetupConfig(config: EasySetupConfig) {
         backupLog[ipAddress] = newEntry;
 
         const writeResult = await logFile.write(JSON.stringify(backupLog, null, 2), {
-            superuser: "try",
+            superuser: "require",
         });
 
         if (writeResult.isOk()) {
-            console.log(` Backup log saved at ${configSavePath}`);
+            console.log(`Backup log saved at ${configSavePath}`);
+            return true;
         } else {
-            console.error(" Failed to write backup log:", writeResult.error.message);
+            console.error("Failed to write backup log:", writeResult.error.message);
+            return false;
         }
     } catch (error) {
-        console.error(" Error saving setup config:", error);
+        console.error("Error saving setup config:", error);
+        return false;
     }
 }
 
@@ -114,15 +108,11 @@ function safeJson(v: unknown) {
 
 async function ensureDirAndFile(path: string, superuser: SuperuserMode) {
     const dir = path.replace(/\/[^/]+$/, "");
-    // mkdir should be fine for /tmp without privilege; for /var/log it needs privilege.
     await server.execute(new Command(["mkdir", "-p", dir], { superuser }), true);
+    await server.execute(new Command(["bash", "-lc", `test -e ${JSON.stringify(path)} || : > ${JSON.stringify(path)}`], { superuser }), true);
+    await server.execute(new Command(["bash", "-lc", `chmod 0755 ${JSON.stringify(dir)} || true`], { superuser }), true);
 
-    const lf = new File(server, path);
-    const ex = await lf.exists();
-    if (ex.isOk() && !ex.value) {
-        await lf.create(true);
-    }
-    return lf;
+    return new File(server, path);
 }
 
 function formatLine(level: string, args: unknown[]) {
@@ -178,7 +168,10 @@ export function patchConsoleToFile(logPath: string, superuser: SuperuserMode = "
     (["log", "info", "warn", "error", "debug"] as const).forEach((lvl) => {
         console[lvl] = (...args: unknown[]) => {
             (s.original as any)[lvl](...args);
-            append(formatLine(lvl.toUpperCase(), args));
+
+            if (!shouldSkipFileLog(args)) {
+                append(formatLine(lvl.toUpperCase(), args));
+            }
         };
     });
 
@@ -208,7 +201,25 @@ export function startEasySetupRunLogging(ts = safeTimestamp()) {
 /**
  * Switch logging target to /var/log after you have admin.
  */
-export function promoteEasySetupRunLogging(varPath: string) {
+export async function promoteEasySetupRunLogging(varPath: string, tmpPath?: string) {
     patchConsoleToFile(varPath, "require");
     console.log("[EasySetup] Run log (var):", varPath);
+
+    // Best-effort delete of the tmp log now that /var/log is active
+    if (tmpPath) {
+        await server.execute(
+            new Command(["bash", "-lc", `rm -f ${JSON.stringify(tmpPath)} || true`], { superuser: "try" }),
+            true
+        );
+    }
+}
+
+function shouldSkipFileLog(args: unknown[]) {
+    // only filtering what gets written to the file
+    const joined = args.map(a => (typeof a === "string" ? a : safeJson(a))).join(" ");
+
+    // Drop the noisy warning(s)
+    if (/sigmaRadians,\s*0\.05, is too large and will clip/i.test(joined)) return true;
+
+    return false;
 }

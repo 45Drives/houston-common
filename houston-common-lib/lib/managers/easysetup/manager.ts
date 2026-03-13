@@ -362,7 +362,7 @@ fi
 
     const distro = await this.getLinuxDistro();
 
-    // 1) Persist first (your helper writes /etc/hostname and /etc/machine-info)
+    // 1) Persist first (writes /etc/hostname and /etc/machine-info)
     await unwrap(server.writeHostnameFiles(desired));
 
     // 2) Best-effort runtime hostname without noisy DBus on Rocky
@@ -1108,13 +1108,13 @@ fi
         // typical group-writable defaults
         "create mask": "0660",
         "directory mask": "2770",
-        // optional (stronger than masks): uncomment if you want to force bits
+        // optional (stronger than masks): uncomment to force bits
         // "force create mode": "0664",
         // "force directory mode": "2775",
         
         // ensure Samba respects/propagates default ACLs
         "inherit acls": "yes",
-        // (Optional, if you rely on NT ACLs/xattrs:)
+        // (Optional, for NT ACLs/xattrs:)
         // "vfs objects": "acl_xattr",
         // "map acl inherit": "yes",
       }, */

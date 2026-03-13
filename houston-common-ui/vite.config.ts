@@ -36,8 +36,8 @@ export default defineConfig({
     target: ["chrome87", "edge88", "firefox78", "safari14"],
     sourcemap: true,
     rollupOptions: {
-      // make sure to externalize deps that shouldn't be bundled
-      // into your library
+      // externalize deps that shouldn't be bundled
+      // into the library
       external: ['vue', /^@45drives/],
       output: {
         // Provide global variables to use in the UMD build

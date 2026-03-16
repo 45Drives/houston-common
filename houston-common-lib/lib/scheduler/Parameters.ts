@@ -163,14 +163,14 @@ export class ZfsDatasetParameter extends ParameterNode implements ParameterNodeT
 
     async loadDatasets(pool: string): Promise<void> {
         const hostParam = this.getChild('host') as StringParameter;
-        const portParam = this.getChild('port') as StringParameter;
+        const portParam = this.getChild('port') as IntParameter;
         const userParam = this.getChild('user') as StringParameter;
 
         const datasets = await getDatasetData(
+            pool,
             hostParam.value,
             portParam.value,
-            userParam.value,
-            pool
+            userParam.value
         );
         const dsParam = this.getChild('dataset') as SelectionParameter;
         datasets.forEach((d: string) => dsParam.addOption(new SelectionOption(d, d)));
@@ -192,13 +192,12 @@ export class ZfsDatasetParameter extends ParameterNode implements ParameterNodeT
 
     // Method to convert ZfsDatasetParameter to a location
     toLocation(): Location {
-        // const label = (this.children[0] as StringParameter).value;
-        // const key = (this.children[1] as StringParameter).value;
-        const host = (this.children[3] as StringParameter).value;
-        const port = (this.children[4] as IntParameter).value;
-        const user = (this.children[5] as StringParameter).value;
-        const root = (this.children[6] as SelectionParameter).value;
-        const path = (this.children[7] as SelectionParameter).value;
+        // Children are added in order: host(0), port(1), user(2), pool(3), dataset(4)
+        const host = (this.getChild('host') as StringParameter).value;
+        const port = (this.getChild('port') as IntParameter).value;
+        const user = (this.getChild('user') as StringParameter).value;
+        const root = (this.getChild('pool') as SelectionParameter).value;
+        const path = (this.getChild('dataset') as SelectionParameter).value;
 
         return {host, port, user, root, path };
     }
@@ -236,18 +235,24 @@ export class LocationParameter extends ParameterNode implements ParameterNodeTyp
         return new LocationParameter(label, key, host, port, user, root, path);
     }
 
-    // Method to convert ZfsDatasetParameter to a location
+    // Method to convert LocationParameter to a location
     toLocation(): Location {
-        // const label = (this.children[0] as StringParameter).value;
-        // const key = (this.children[1] as StringParameter).value;
-        // const transferMethod = (this.children[2] as StringParameter).value;
-        const host = (this.children[3] as StringParameter).value;
-        const port = (this.children[4] as IntParameter).value;
-        const user = (this.children[5] as StringParameter).value;
-        const root = (this.children[6] as SelectionParameter).value;
-        const path = (this.children[7] as SelectionParameter).value;
+        // Children are added in order: host(0), port(1), user(2), root(3), path(4)
+        const host = (this.getChild('host') as StringParameter).value;
+        const port = (this.getChild('port') as IntParameter).value;
+        const user = (this.getChild('user') as StringParameter).value;
+        const root = (this.getChild('root') as StringParameter).value;
+        const path = (this.getChild('path') as StringParameter).value;
 
         return {host, port, user, root, path };
+    }
+
+    getChild(key: string): ParameterNode {
+        const child = this.children.find(child => child.key === key);
+        if (!child) {
+            throw new Error(`Child with key ${key} not found`);
+        }
+        return child;
     }
 }
 

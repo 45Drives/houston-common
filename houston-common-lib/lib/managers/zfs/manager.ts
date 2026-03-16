@@ -20,6 +20,32 @@ import {
   Snapshot
 } from "@/index";
 
+/**
+ * Validate a ZFS name (pool, dataset, or snapshot).
+ * ZFS names may contain alphanumerics, underscores, hyphens, periods, colons, and slashes.
+ * Snapshot names additionally allow '@'. Must not be empty or contain '..' path traversal.
+ */
+const ZFS_NAME_RE = /^[a-zA-Z0-9_\-.\/:@]+$/;
+function validateZfsName(name: string, label: string = "name"): void {
+  if (!name || !ZFS_NAME_RE.test(name) || name.includes("..")) {
+    throw new ValueError(`Invalid ZFS ${label}: ${name}`);
+  }
+}
+
+export interface SnapshotCreateOptions {
+  recursive?: boolean;
+}
+
+export interface SnapshotDestroyOptions {
+  recursive?: boolean;
+  recurseDependents?: boolean;
+}
+
+export interface SnapshotRollbackOptions {
+  destroyMoreRecent?: boolean;
+  destroyMoreRecentAndClones?: boolean;
+}
+
 export interface IZFSManager {
   createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<ExitedProcess>;
   destroyPool(name: string): Promise<void>;
@@ -28,13 +54,12 @@ export interface IZFSManager {
   getBaseDisks(): Promise<VDevDisk[]>;
   getFullDisks(): Promise<VDevDisk[]>;
   getDiskCapacity(path: string): Promise<string>;
-  // TODO:
   getPools(): Promise<ZPool[]>;
   getDatasets(): Promise<Dataset[]>;
   getSnapshots(filesystem: string): Promise<Snapshot[]>;
-  createSnapshot(): Promise<void>;
-  destroySnapshot(): Promise<void>;
-  rollbackSnapshot(): Promise<void>;
+  createSnapshot(filesystem: string, snapName: string, options?: SnapshotCreateOptions): Promise<ExitedProcess>;
+  destroySnapshot(snapshotName: string, options?: SnapshotDestroyOptions): Promise<ExitedProcess>;
+  rollbackSnapshot(snapshotName: string, options?: SnapshotRollbackOptions): Promise<ExitedProcess>;
 }
 
 export class ZFSManager implements IZFSManager {
@@ -95,10 +120,8 @@ export class ZFSManager implements IZFSManager {
   }
 
   async createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<ExitedProcess> {
+    validateZfsName(pool.name, "pool name");
     const argv = ["zpool", "create", pool.name];
-
-    console.log('createPool pool:', pool);
-    console.log('createPool poolOptions:', options);
     
     // set up pool properties
     const poolProps: string[] = [];
@@ -147,22 +170,18 @@ export class ZFSManager implements IZFSManager {
     // add in vdevs
     argv.push(...this.formatVDevsArgv(pool.vdevs));
 
-    console.log("****\ncmdstring:\n", ...argv, "\n****");
+    // console.log('createPool pool:', pool);
+    // console.log('createPool poolOptions:', options);
+    console.log('createPool cmdstring:', ...argv);
 
-    // using new process execution method instead of useSpawn
-    // console.log(proc.getStdout());
-    try {
-      const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
-      console.log("Command output:", proc.getStdout());
-      return proc;  // Return the process result
-    } catch (error) {
-      console.error("Error executing command:", error);
-      throw error; // Ensure caller catches the error
-    }
+    const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+    console.log('createPool output:', proc.getStdout());
+    return proc;
   }
 
   async destroyPool(pool: ZPoolBase | string, options: ZPoolDestroyOptions = {}): Promise<void> {
     const poolName = typeof pool === "string" ? pool : pool.name;
+    validateZfsName(poolName, "pool name");
     const argv = ["zpool", "destroy"]
 
     if (options.force) {
@@ -176,20 +195,77 @@ export class ZFSManager implements IZFSManager {
     );
   }
 
+  /**
+   * List all ZFS pools with basic properties.
+   */
   async getPools(): Promise<ZPool[]> {
-    // TODO
-    return [];
+    const argv = [
+      "zpool", "list", "-H", "-o",
+      "name,size,alloc,free,cap,health,guid"
+    ];
+    const proc = await unwrap(
+      this.server.execute(new Command(argv, this.commandOptions))
+    );
+    const stdout = proc.getStdout().trim();
+    if (!stdout) return [];
+    return stdout.split("\n").filter(line => line.length > 0).map(line => {
+      const [name, size, alloc, free, cap, health, guid] = line.split("\t");
+      return {
+        name: name!,
+        vdevs: [],
+        status: health ?? "UNKNOWN",
+        guid: guid ?? "",
+        properties: {
+          rawsize: 0,
+          size: size ?? "0",
+          capacity: parseInt(cap ?? "0", 10),
+          allocated: alloc ?? "0",
+          free: free ?? "0",
+          readOnly: false,
+          sector: "",
+          record: "",
+          compression: false,
+          deduplication: false,
+          autoExpand: false,
+          autoReplace: false,
+          autoTrim: false,
+          available: 0,
+          health: health ?? "UNKNOWN",
+        },
+        statusCode: null,
+        statusDetail: null,
+        errorCount: 0,
+      } as ZPool;
+    });
   }
 
+  /**
+   * List all ZFS datasets.
+   */
   async getDatasets(): Promise<Dataset[]> {
-    // TODO
-    return [];
+    const argv = [
+      "zfs", "list", "-H", "-o", "name", "-t", "filesystem"
+    ];
+    const proc = await unwrap(
+      this.server.execute(new Command(argv, this.commandOptions))
+    );
+    const stdout = proc.getStdout().trim();
+    if (!stdout) return [];
+    return stdout.split("\n").filter(line => line.length > 0).map(line => {
+      const name = line.trim();
+      const slashIdx = name.lastIndexOf("/");
+      return {
+        name,
+        parent: slashIdx >= 0 ? name.substring(0, slashIdx) : "",
+      } as Dataset;
+    });
   }
 
   /**
    * List all snapshots under a filesystem (recursively).
    */
   async getSnapshots(filesystem: string): Promise<Snapshot[]> {
+    validateZfsName(filesystem, "filesystem");
     const argv = [
       "zfs", "list", "-H",
       "-t", "snapshot",
@@ -246,6 +322,10 @@ export class ZFSManager implements IZFSManager {
       raw?: boolean;
     } = {}
   ): Promise<ExitedProcess> {
+    validateZfsName(sendName, "snapshot name");
+    if (options.incrementalFrom) {
+      validateZfsName(options.incrementalFrom, "incremental snapshot name");
+    }
     const argv = ["zfs", "send"];
     if (options.compressed) argv.push("-Lce");
     if (options.raw) argv.push("-w");
@@ -265,6 +345,7 @@ export class ZFSManager implements IZFSManager {
     recvName: string,
     options: { forceOverwrite?: boolean } = {}
   ): Promise<ExitedProcess> {
+    validateZfsName(recvName, "dataset name");
     const argv = ["zfs", "recv"];
     if (options.forceOverwrite) argv.push("-F");
     argv.push(recvName);
@@ -273,17 +354,63 @@ export class ZFSManager implements IZFSManager {
     );
   }
 
-  async createSnapshot(): Promise<void> {
-    // TODO
+  /**
+   * Create a snapshot of a filesystem.
+   * @param filesystem - The dataset to snapshot (e.g. "tank/data")
+   * @param snapName - The snapshot name (appended after '@')
+   * @param options - Optional: recursive snapshot of child datasets
+   */
+  async createSnapshot(
+    filesystem: string,
+    snapName: string,
+    options: SnapshotCreateOptions = {}
+  ): Promise<ExitedProcess> {
+    validateZfsName(filesystem, "filesystem");
+    validateZfsName(snapName, "snapshot name");
+    const argv = ["zfs", "snapshot"];
+    if (options.recursive) argv.push("-r");
+    argv.push(`${filesystem}@${snapName}`);
+    return unwrap(
+      this.server.execute(new Command(argv, this.commandOptions))
+    );
   }
 
-  async destroySnapshot(): Promise<void> {
-    // TODO                                               
+  /**
+   * Destroy a snapshot.
+   * @param snapshotName - Full snapshot name e.g. "tank/data@snap1"
+   * @param options - Optional: recursive, recurse dependents
+   */
+  async destroySnapshot(
+    snapshotName: string,
+    options: SnapshotDestroyOptions = {}
+  ): Promise<ExitedProcess> {
+    validateZfsName(snapshotName, "snapshot name");
+    const argv = ["zfs", "destroy"];
+    if (options.recursive) argv.push("-r");
+    if (options.recurseDependents) argv.push("-R");
+    argv.push(snapshotName);
+    return unwrap(
+      this.server.execute(new Command(argv, this.commandOptions))
+    );
   }
 
-
-  async rollbackSnapshot(): Promise<void> {
-    // TODO
+  /**
+   * Rollback a filesystem to a snapshot.
+   * @param snapshotName - Full snapshot name e.g. "tank/data@snap1"
+   * @param options - Optional: destroy more recent snapshots/clones
+   */
+  async rollbackSnapshot(
+    snapshotName: string,
+    options: SnapshotRollbackOptions = {}
+  ): Promise<ExitedProcess> {
+    validateZfsName(snapshotName, "snapshot name");
+    const argv = ["zfs", "rollback"];
+    if (options.destroyMoreRecent) argv.push("-r");
+    if (options.destroyMoreRecentAndClones) argv.push("-R");
+    argv.push(snapshotName);
+    return unwrap(
+      this.server.execute(new Command(argv, this.commandOptions))
+    );
   }
 
   /**
@@ -355,30 +482,24 @@ export class ZFSManager implements IZFSManager {
   }
 
   async addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<ExitedProcess> {
+    validateZfsName(pool.name, "pool name");
     const argv = ["zpool", "add"];
 
     if (options.force) argv.push("-f");
 
     argv.push(pool.name);
-
-    // add in vdevs
     argv.push(...this.formatVDevsArgv(vdevs));
 
-    console.log("****\ncmdstring:\n", ...argv, "\n****");
+    console.log('addVDevsToPool cmdstring:', ...argv);
 
-    // using new process execution method instead of useSpawn
-
-    try {
-      const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
-      console.log("Command output:", proc.getStdout());
-      return proc;  // Return the process result
-    } catch (error) {
-      console.error("Error executing command:", error);
-      throw error; // Ensure caller catches the error
-    }
+    const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+    console.log('addVDevsToPool output:', proc.getStdout());
+    return proc;
   }
 
   async addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<ExitedProcess> {
+    validateZfsName(parent, "parent dataset");
+    validateZfsName(name, "dataset name");
     const argv = ["zfs", "create"];
     const datasetProps: string[] = [];
 
@@ -397,16 +518,11 @@ export class ZFSManager implements IZFSManager {
     argv.push(...datasetProps.flatMap((prop) => ["-o", prop]));
     argv.push(`${parent}/${name}`);
 
-    console.log("****\ncmdstring:\n", ...argv, "\n****");
+    console.log('addDataset cmdstring:', ...argv);
 
-    try {
-      const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
-      console.log("Command output:", proc.getStdout());
-      return proc;  // Return the process result
-    } catch (error) {
-      console.error("Error executing command:", error);
-      throw error; // Ensure caller catches the error
-    }
+    const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+    console.log('addDataset output:', proc.getStdout());
+    return proc;
   }
 
 

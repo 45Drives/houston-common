@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { legacy, File, server, Command, unwrap } from '@/index';
+import { legacy, File, server, Command, unwrap, ValueError } from '@/index';
 import {
     SchedulerType,
     TaskInstanceType,
@@ -38,6 +38,14 @@ import { TaskExecutionLog } from './TaskLog';
 import get_tasks_script from '@/scripts/get-task-instances.py?raw';
 
 const { errorString, useSpawn } = legacy;
+
+/** Validate task name to prevent path traversal in systemd file paths */
+const SAFE_TASK_NAME_RE = /^[a-zA-Z0-9_\-]+$/;
+function validateTaskName(name: string): void {
+    if (!name || !SAFE_TASK_NAME_RE.test(name)) {
+        throw new ValueError(`Invalid task name: "${name}". Only alphanumerics, hyphens, and underscores are allowed.`);
+    }
+}
 
 export class Scheduler implements SchedulerType {
     taskTemplates: TaskTemplateType[];
@@ -279,6 +287,7 @@ export class Scheduler implements SchedulerType {
     }
 
     async registerTaskInstance(taskInstance: TaskInstance) {
+        validateTaskName(taskInstance.name);
         // generate env file with key/value pairs (Task Parameters)
         const envKeyValues = taskInstance.parameters.asEnvKeyValues();
         // console.log('envKeyVals Before Parse:', envKeyValues);
@@ -383,6 +392,7 @@ export class Scheduler implements SchedulerType {
     }
 
     async updateTaskInstance(taskInstance: TaskInstance) {
+        validateTaskName(taskInstance.name);
         //populate data from env file and then delete + recreate task files
         const envKeyValues = taskInstance.parameters.asEnvKeyValues();
       //  console.log('envKeyVals:', envKeyValues);
@@ -439,6 +449,7 @@ export class Scheduler implements SchedulerType {
     }
 
     async updateTaskNotes(taskInstance: TaskInstance) {
+        validateTaskName(taskInstance.name);
         //populate data from env file and then delete + recreate task files
         const templateName = formatTemplateName(taskInstance.template.name);
 
@@ -466,6 +477,7 @@ export class Scheduler implements SchedulerType {
     }
 
     async unregisterTaskInstance(taskInstance: TaskInstanceType) {
+        validateTaskName(taskInstance.name);
         //delete task + associated files
         const houstonSchedulerPrefix = 'houston_scheduler_';
         const templateName = formatTemplateName(taskInstance.template.name);
@@ -478,6 +490,7 @@ export class Scheduler implements SchedulerType {
     }
     
     async runTaskNow(taskInstance: TaskInstanceType) {
+        validateTaskName(taskInstance.name);
         //execute service file now
         const houstonSchedulerPrefix = 'houston_scheduler_';
         const templateName = formatTemplateName(taskInstance.template.name);

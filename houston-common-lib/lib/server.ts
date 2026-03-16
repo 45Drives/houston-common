@@ -237,9 +237,14 @@ export class Server {
   writeHostnameFiles(hostname: string): ResultAsync<null, ProcessError> {
     console.log(`Writing hostname files for: ${hostname}`);
 
-    return this.execute(
-      new Command(["sh", "-c", `echo '${hostname}' > /etc/hostname`], { superuser: "try" })
-    )
+    // Use tee to safely write content via stdin, avoiding shell injection
+    const hostnameProc = this.spawnProcess(
+      new Command(["tee", "/etc/hostname"], { superuser: "try" })
+    );
+    hostnameProc.write(hostname + "\n", false);
+
+    return hostnameProc
+      .wait(true)
       .map((result) => {
         console.log("Successfully wrote to /etc/hostname");
         return result;
@@ -250,11 +255,12 @@ export class Server {
       })
       .andThen(() => {
         console.log("Writing pretty hostname to /etc/machine-info");
-        return this.execute(
-          new Command(["sh", "-c", `echo 'PRETTY_HOSTNAME=\"${hostname}\"' > /etc/machine-info`], {
-            superuser: "try",
-          })
-        )
+        const machineInfoProc = this.spawnProcess(
+          new Command(["tee", "/etc/machine-info"], { superuser: "try" })
+        );
+        machineInfoProc.write(`PRETTY_HOSTNAME="${hostname}"\n`, false);
+        return machineInfoProc
+          .wait(true)
           .map((result) => {
             console.log("Successfully wrote to /etc/machine-info");
             return result;

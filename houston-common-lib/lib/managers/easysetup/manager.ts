@@ -748,8 +748,10 @@ fi
         backupZfsConfig!.datasetOptions
       );
       await this.clearReplicationTasks();
+      await this.clearSnapshotTasks();
       await this.clearScrubTasks();
     } else {
+      await this.clearReplicationTasks();
       await this.clearSnapshotTasks();
       await this.clearScrubTasks();
     }

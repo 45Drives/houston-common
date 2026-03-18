@@ -100,7 +100,7 @@ let state: LoggerState | null = null;
 
 function safeJson(v: unknown) {
     try {
-        return JSON.stringify(v, null, 2);
+        return JSON.stringify(v);
     } catch (e) {
         return `[unserializable: ${String(e)}]`;
     }
@@ -118,7 +118,7 @@ async function ensureDirAndFile(path: string, superuser: SuperuserMode) {
 function formatLine(level: string, args: unknown[]) {
     const stamp = new Date().toISOString();
     const msg = args.map((a) => (typeof a === "string" ? a : safeJson(a))).join(" ");
-    return `[${stamp}] [${level}] ${msg}\n`;
+    return JSON.stringify({ timestamp: stamp, level: level.toLowerCase(), message: msg }) + "\n";
 }
 
 export function patchConsoleToFile(logPath: string, superuser: SuperuserMode = "try") {

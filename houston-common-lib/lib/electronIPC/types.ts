@@ -31,6 +31,13 @@ export type IPCMessageTypes = {
     error?: string;
   };
 
+  /** Progress update during a local backup runNow operation */
+  backupProgress: {
+    taskUuid: string;
+    percent: number | null;   // 0-100 or null if indeterminate
+    message?: string;
+  };
+
   /** Notification pushed to renderer (toast / status bar) */
   notification: string;
 };

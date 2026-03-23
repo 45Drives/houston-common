@@ -307,7 +307,7 @@ export class Server {
   }
   downloadCommandOutputSelfUrl(command: Command, filename: string): void {
     const url = HoustonDriver.downloadCommandOutputURL(this, command, filename);
-    Download.selfUrl(url, filename);
+    Download.url(url, filename, "_self");
   }
 
   getLocalUsers(cache: boolean = true): ResultAsync<LocalUser[], ProcessError> {

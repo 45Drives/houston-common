@@ -74,7 +74,14 @@ export function SambaShareParser(name: string): Transformer<SambaShareConfig, Ke
       ]);
       if (
         !Object.entries(unparsed)
-          .map(grabbers)
+          .map(([key, value]) => {
+            value = value.trim();
+            // strip quotes
+            if (/".*"|'.*'/.test(value)) {
+              value = value.slice(1, -1);
+            }
+            return grabbers([key, value]);
+          })
           .every((grabbed) => grabbed)
       ) {
         return err(new ParsingError("KeyValue pair of Samba share INI data not grabbed!"));

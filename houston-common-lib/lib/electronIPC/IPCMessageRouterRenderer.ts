@@ -4,14 +4,21 @@ interface ElectronApi {
   ipcRenderer: {
     send: (channel: string, data: any) => void;
     on: (channel: string, callback: (...args: any[]) => void) => void;
-    invoke: <T = any>(channel: string, ...args: any[]) => Promise<T>; 
+    once: (channel: string, callback: (...args: any[]) => void) => void;
+    invoke: <T = any>(channel: string, ...args: any[]) => Promise<T>;
     removeListener: (channel: string, listener: (...args: any[]) => void) => void;
-    removeAllListeners: (channel: string) =>void;
-  },
-  // selectFolder: () => ipcRenderer.invoke('dialog:openFolder'),
-  // getOS: () => ipcRenderer.invoke('get-os'),
-  // isFirstRunNeeded: (host: string, share: string, smbUser: string) =>
-  //   ipcRenderer.invoke("backup:isFirstRunNeeded", host, share, smbUser),
+    removeAllListeners: (channel: string) => void;
+  };
+  selectFolder: () => Promise<string | null>;
+  getOS: () => Promise<string>;
+  isFirstRunNeeded: (host: string, share: string, smbUser: string) => Promise<boolean>;
+  log: {
+    debug: (...args: any[]) => void;
+    info: (...args: any[]) => void;
+    warn: (...args: any[]) => void;
+    error: (...args: any[]) => void;
+    log: (...args: any[]) => void;
+  };
 }
 
 declare global {
@@ -45,6 +52,8 @@ export class IPCMessageRouterRenderer<
 
   setCockpitWebView(webviewElement: any) {
     this.webviewElement = webviewElement;
+    // Legacy fallback: if the cockpit webview sends IPC messages via
+    // console.log (old approach), pick them up here so nothing is lost.
     this.webviewElement.addEventListener("console-message", (event: any) => {
       let message = event.message;
       try {
@@ -77,8 +86,9 @@ export class IPCMessageRouterRenderer<
     T extends keyof MessageTypes,
     TMessage extends IPCMessage<MessageTypes, T>,
   >(message: TMessage): void {
-    this.webviewElement.value.executeJavaScript(`
-        console.log(${JSON.stringify(message)});
-        `);
+    // Send through Electron IPC — the main process will forward to the
+    // webview's webcontents, which delivers via webview-preload's
+    // "IPCMessage" channel.  This replaces the old executeJavaScript hack.
+    window.electron.ipcRenderer.send("IPCMessage", message);
   }
 }

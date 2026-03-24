@@ -1,26 +1,10 @@
 export namespace Download {
-  export function url(url: string, filename: string) {
+  export function url(url: string, filename: string, target: "_blank" | "_self" = "_blank") {
     const a = document.createElement("a");
     a.href = url;
     a.style.display = "none";
     a.download = filename;
-    a.target = "_blank";
-    document.body.appendChild(a);
-    const event = new MouseEvent("click", {
-      view: window,
-      bubbles: false,
-      cancelable: true,
-    });
-    a.dispatchEvent(event);
-    document.body.removeChild(a);
-  }
-
-  export function selfUrl(url: string, filename: string) {
-    const a = document.createElement("a");
-    a.href = url;
-    a.style.display = "none";
-    a.download = filename;
-    a.target = "_self";
+    a.target = target;
     document.body.appendChild(a);
     const event = new MouseEvent("click", {
       view: window,

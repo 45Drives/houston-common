@@ -47,6 +47,23 @@
 		@apply bg-neutral-100 dark:bg-[#333333];
 	}
 
+	/* Surface hierarchy — layered depth system */
+	.bg-surface-0 {
+		@apply bg-neutral-100 dark:bg-neutral-900;
+	}
+
+	.bg-surface-1 {
+		@apply bg-white dark:bg-neutral-800;
+	}
+
+	.bg-surface-2 {
+		@apply bg-neutral-50 dark:bg-neutral-850;
+	}
+
+	.bg-surface-3 {
+		@apply bg-neutral-100 dark:bg-neutral-700;
+	}
+
 	.bg-primary {
 		@apply bg-slate-600 dark:bg-slate-700;
 		button&, a&, .btn&, &.interactive {
@@ -89,6 +106,27 @@
 
 	.border-default {
 		@apply border-neutral-200 dark:border-neutral-700;
+	}
+
+	/* Selection, hover, disabled semantic states */
+	.bg-selected {
+		@apply bg-slate-600/10 dark:bg-slate-400/10;
+	}
+
+	.border-selected {
+		@apply border-slate-600 dark:border-slate-400;
+	}
+
+	.bg-hover {
+		@apply bg-neutral-100 dark:bg-neutral-700/50;
+	}
+
+	.bg-disabled {
+		@apply bg-neutral-100 dark:bg-neutral-800;
+	}
+
+	.text-disabled {
+		@apply text-neutral-400 dark:text-neutral-600;
 	}
 
 	/* Text and icons */
@@ -314,12 +352,37 @@
 		@apply box-border py-2 px-4 font-medium rounded-lg shadow-md focus:outline-none focus:ring-0;
 	}
 
+	.btn-sm {
+		@apply py-1.5 px-3 text-sm shadow-sm;
+	}
+
 	.btn-primary {
 		@apply text-gray-50 bg-primary;
 	}
 
 	.btn-secondary {
 		@apply text-gray-50 bg-secondary;
+	}
+
+	.btn-outline {
+		@apply border border-neutral-300 dark:border-neutral-600 text-slate-600 dark:text-slate-300 bg-transparent shadow-none;
+		button&, a&, .btn&, &.interactive {
+			@apply hover:bg-neutral-100 dark:hover:bg-neutral-700;
+		}
+	}
+
+	.btn-ghost {
+		@apply text-slate-600 dark:text-slate-300 bg-transparent border-0 shadow-none;
+		button&, a&, .btn&, &.interactive {
+			@apply hover:bg-neutral-100/60 dark:hover:bg-neutral-700/50;
+		}
+	}
+
+	.btn-icon {
+		@apply w-8 h-8 p-0 rounded-md text-gray-500 dark:text-gray-400 bg-transparent shadow-none inline-flex items-center justify-center;
+		button&, a&, .btn&, &.interactive {
+			@apply hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-gray-700 dark:hover:text-gray-200;
+		}
 	}
 
 	.btn-danger {
@@ -331,7 +394,7 @@
 	}
 
 	.btn:disabled {
-		@apply bg-neutral-400 hover:bg-neutral-400 dark:bg-neutral-700 dark:hover:bg-neutral-700 text-neutral-300 dark:text-neutral-500 cursor-not-allowed;
+		@apply bg-neutral-400 hover:bg-neutral-400 dark:bg-neutral-700 dark:hover:bg-neutral-700 text-neutral-300 dark:text-neutral-500 cursor-not-allowed shadow-none;
 	}
 
 	/* Input styling
@@ -351,6 +414,10 @@
 	 */
 	.card {
 		@apply bg-default md:shadow-lg shadow-md divide-y divide-default;
+	}
+
+	.card-refined {
+		@apply bg-default shadow-sm border border-neutral-200 dark:border-neutral-700 divide-y divide-default;
 	}
 
 	.card-header {
@@ -411,5 +478,65 @@
 
 	.feedback-group {
 		@apply mt-2 flex flex-row justify-start items-center space-x-1;
+	}
+
+	/* Status indicators */
+	.status-dot {
+		@apply w-2 h-2 rounded-full inline-block;
+	}
+
+	.status-dot-ok {
+		@apply bg-green-500;
+	}
+
+	.status-dot-warn {
+		@apply bg-amber-500;
+	}
+
+	.status-dot-error {
+		@apply bg-red-500;
+	}
+
+	.status-dot-idle {
+		@apply bg-neutral-400;
+	}
+
+	.status-dot-active {
+		@apply bg-blue-500;
+	}
+
+	/* Disabled / coming-soon cards */
+	.card-disabled {
+		@apply opacity-40 grayscale pointer-events-none relative select-none;
+	}
+
+	.badge-coming-soon {
+		@apply absolute top-3 right-3 text-xs font-medium uppercase tracking-wide px-2 py-0.5 rounded-full bg-neutral-200 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400;
+	}
+
+	/* Segmented control */
+	.segmented-control {
+		@apply inline-flex rounded-lg border border-neutral-300 dark:border-neutral-600 overflow-hidden text-sm;
+	}
+
+	.segmented-control-item {
+		@apply px-4 py-1.5 font-medium transition-colors;
+	}
+
+	.segmented-control-item-active {
+		@apply bg-slate-600 dark:bg-slate-700 text-white;
+	}
+
+	.segmented-control-item-inactive {
+		@apply bg-transparent text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-700;
+	}
+
+	/* Table refinements */
+	.table-header-cell {
+		@apply text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400;
+	}
+
+	.table-summary-footer {
+		@apply text-xs text-gray-500 dark:text-gray-400 py-2 px-4 border-t border-neutral-200 dark:border-neutral-700;
 	}
 }

@@ -16,25 +16,33 @@ If not, see <https://www.gnu.org/licenses/>.
 -->
 
 <script setup lang="ts">
-import { defineProps, withDefaults } from "vue";
-
 withDefaults(
   defineProps<{
     emptyText?: string;
     stickyHeaders?: boolean;
     noScroll?: boolean;
+    refined?: boolean;
   }>(),
   {
     emptyText: "Nothing to show.",
     stickyHeaders: false,
     noScroll: false,
+    refined: false,
   }
 );
 </script>
 
 <template>
-  <div class="bg-accent" :class="[noScroll ? '' : 'overflow-hidden']">
-    <div v-if="$slots.header" class="py-3 px-4 lg:px-6 text-sm font-semibold flex flex-row">
+  <div :class="[
+    refined
+      ? 'bg-accent rounded-lg border border-neutral-200 dark:border-neutral-700'
+      : 'bg-accent',
+    noScroll ? '' : 'overflow-hidden'
+  ]">
+    <div v-if="$slots.header" :class="[
+      'text-sm font-semibold flex flex-row',
+      refined ? 'py-2.5 px-4 lg:px-5' : 'py-3 px-4 lg:px-6'
+    ]">
       <div class="grow">
         <slot name="header"></slot>
       </div>
@@ -48,7 +56,7 @@ withDefaults(
       :class="{ 'overflow-y-scroll overflow-x-auto': !noScroll }"
       :style="{ 'scrollbar-gutter': noScroll ? 'auto' : 'stable' }"
     >
-      <table class="w-full divide-y divide-default houston-table">
+      <table :class="['w-full divide-y divide-default', refined ? 'houston-table houston-table-refined' : 'houston-table']">
         <thead :class="{ 'use-sticky': stickyHeaders }">
           <slot name="thead" />
         </thead>
@@ -63,6 +71,9 @@ withDefaults(
         </tbody>
       </table>
     </div>
+    <div v-if="$slots.footer" :class="refined ? 'table-summary-footer' : 'py-2 px-4 text-sm'">
+      <slot name="footer"></slot>
+    </div>
   </div>
 </template>
 
@@ -73,6 +84,7 @@ table.houston-table thead.use-sticky tr th {
   @apply sticky z-10 top-0;
 }
 
+/* Default (classic) table styles */
 table.houston-table th,
 table.houston-table td {
   @apply py-2 px-4 lg:px-6 whitespace-nowrap text-sm;
@@ -89,5 +101,23 @@ table.houston-table th {
 
 table.houston-table tr {
   @apply even:bg-accent;
+}
+
+/* Refined variant — tighter, lighter, with hover */
+table.houston-table-refined th,
+table.houston-table-refined td {
+  @apply py-1.5 px-3 lg:px-4;
+}
+
+table.houston-table-refined th {
+  @apply bg-neutral-50 dark:bg-neutral-850 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 border-b border-neutral-200 dark:border-neutral-700;
+}
+
+table.houston-table-refined tr {
+  @apply even:bg-neutral-50/50 dark:even:bg-neutral-800/50;
+}
+
+table.houston-table-refined tbody tr {
+  @apply hover:bg-slate-600/5 dark:hover:bg-slate-400/5 transition-colors;
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineProps, computed } from "vue";
+import { computed } from "vue";
 import HoustonHeader from "@/components/HoustonHeader.vue";
 import {
   defineHoustonAppTabState,
@@ -26,6 +26,10 @@ const props = defineProps<{
   tabs?: HoustonAppTabEntry[];
   noScroll?: boolean;
   notificationComponent?: any;
+  /**
+   * When true, renders a compact header with reduced padding, smaller logo/title, and subtle border instead of shadow.
+   */
+  compact?: boolean;
 }>();
 
 const {
@@ -39,7 +43,7 @@ const globalProcessingState = useGlobalProcessingState();
 
 <template>
   <div class="text-default flex flex-col h-full" :class="{ '!cursor-wait': globalProcessingState !== 0 }">
-    <HoustonHeader :moduleName="moduleName">
+    <HoustonHeader :moduleName="moduleName" :compact="compact ?? false">
       <template v-slot:header-left v-if="tabs">
         <TabSelector :labels="tabLabels" v-model:index="tabIndex" />
       </template>

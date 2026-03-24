@@ -68,6 +68,13 @@
 		}
 	}
 
+	.bg-warning {
+		@apply bg-orange-500 dark:bg-orange-700;
+		button&, a&, .btn&, &.interactive {
+			@apply hover:bg-orange-600 dark:hover:bg-orange-800;
+		}
+	}
+
 	.bg-success {
 		@apply bg-green-600 dark:bg-green-500;
 		button&, a&, .btn&, &.interactive {
@@ -317,6 +324,10 @@
 
 	.btn-danger {
 		@apply text-gray-50 bg-danger;
+	}
+
+	.btn-warning {
+		@apply text-gray-50 bg-warning;
 	}
 
 	.btn:disabled {

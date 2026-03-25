@@ -1,6 +1,7 @@
 <template>
     <!-- <img :src="logo" :alt="`${division} logo`" :class="['w-auto', height ? `max-h-${height}` : 'max-h-12']" v-if="logo" /> -->
     <img :src="logo" :alt="`${division} logo`" class="w-auto" :class="{
+        'max-h-8': height === 8,
         'max-h-12': !height || height === 12,
         'max-h-16': height === 16,
         'max-h-20': height === 20,

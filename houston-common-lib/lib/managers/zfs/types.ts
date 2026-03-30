@@ -167,6 +167,14 @@ export interface DatasetCreateOptions {
   readonly?: string;
 }
 
+export interface ZvolCreateOptions {
+  volsize: string;
+  volblocksize?: string;
+  compression?: string;
+  dedup?: string;
+  readonly?: string;
+}
+
 export interface Dataset extends DatasetBase {
   parent: string;
   children?: Dataset[];

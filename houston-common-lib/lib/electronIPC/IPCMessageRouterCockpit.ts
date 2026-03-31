@@ -42,7 +42,9 @@ export class IPCMessageRouterCockpit<
     TMessage extends IPCMessage<MessageTypes, T>,
   >(message: TMessage): void {
     if (!this.hasElectronBridge) {
-      console.warn("[IPCRouterCockpit] No electron bridge — cannot forward to backend");
+      // Fallback: relay via console.log so the Electron renderer's
+      // console-message listener on the <webview> element can pick it up.
+      console.log(JSON.stringify(message));
       return;
     }
     (window as any).electron.ipcRenderer.send("IPCMessage", message);
@@ -56,7 +58,9 @@ export class IPCMessageRouterCockpit<
     // Route through the same IPC channel — the Electron main process will
     // forward it to the renderer's webcontents.
     if (!this.hasElectronBridge) {
-      console.warn("[IPCRouterCockpit] No electron bridge — cannot forward to renderer");
+      // Fallback: relay via console.log so the Electron renderer's
+      // console-message listener on the <webview> element can pick it up.
+      console.log(JSON.stringify(message));
       return;
     }
     (window as any).electron.ipcRenderer.send("IPCMessage", message);

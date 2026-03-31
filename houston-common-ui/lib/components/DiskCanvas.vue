@@ -40,6 +40,8 @@ const props = withDefaults(
     enableRotate: boolean;
     enablePan: boolean;
     enableZoom: boolean;
+    driveViewZoomMargin?: number;
+    initialViewZoomMargin?: number;
   }>(),
   {
     server: () => new Server(),
@@ -47,6 +49,8 @@ const props = withDefaults(
     enableRotate: false,
     enablePan: false,
     enableZoom: false,
+    driveViewZoomMargin: 1,
+    initialViewZoomMargin: 0.75,
   }
 );
 
@@ -62,91 +66,11 @@ const selectedDriveSlots = defineModel<DriveSlot[]>("selectedDriveSlots", { defa
 
 const driveSlots = defineModel<DriveSlot[]>("driveSlots", { default: [] });
 
+const modelSupported = defineModel<boolean>("modelSupported", { default: false });
+
+const detectedServerModel = defineModel<string>("serverModel", { default: "" });
+
 const darkMode = useDarkModeState();
-/* 
-const serverView = Promise.all([import("./ServerView"), props.server.getServerModel()]).then(
-  async ([{ ServerView, ServerDriveSlot }, serverModel]) => {
-    const watchHandles: WatchHandle[] = [];
-
-    const serverView = new ServerView(await unwrap(serverModel));
-
-    let hideLoadingTimeout: ReturnType<typeof setTimeout> | undefined = undefined;
-
-    serverView.onLoadingStart = (status, loaded, total) => {
-      clearTimeout(hideLoadingTimeout);
-      showLoading.value = true;
-      loadingText.value = `${status} (${loaded}/${total})`;
-      loadingPercent.value = Math.round((loaded / total) * 100);
-    };
-    serverView.onLoadingProgress = (status, loaded, total) => {
-      clearTimeout(hideLoadingTimeout);
-      showLoading.value = true;
-      loadingText.value = `${status} (${loaded}/${total})`;
-      loadingPercent.value = Math.round((loaded / total) * 100);
-    };
-    serverView.onLoadingEnd = (status) => {
-      clearTimeout(hideLoadingTimeout);
-      hideLoadingTimeout = setTimeout(() => {
-        showLoading.value = false;
-      }, 1000);
-      loadingText.value = status;
-      loadingPercent.value = 100;
-    };
-
-    serverView.addEventListener("selectionchange", (e) => {
-      selectedDriveSlots.value = e.components
-        .filter((c): c is InstanceType<typeof ServerDriveSlot> => c instanceof ServerDriveSlot)
-        .map((driveSlot) => driveSlot.driveSlot);
-    });
-
-    const liveDriveSlotsHandle = props.server.setupLiveDriveSlotInfo((slots) => {
-      driveSlots.value = slots;
-      serverView.setDriveSlotInfo(slots);
-    });
-
-    watchHandles.push(
-      watchEffect(() => {
-        if (!canvasParent.value) {
-          return;
-        }
-        serverView.start(canvasParent.value);
-        serverView
-          .setView("InitialView")
-          .then(() => new Promise((resolve) => setTimeout(resolve, 1000)))
-          .then(() => {
-            serverView.revealDrives();
-            serverView.setView("DriveView");
-          });
-      })
-    );
-
-    watchHandles.push(
-      watchEffect(() => {
-        serverView.enableSelection = props.enableSelection;
-        serverView.enableRotate = props.enableRotate;
-        serverView.enablePan = props.enablePan;
-        serverView.enableZoom = props.enableZoom;
-      })
-    );
-
-    watchHandles.push(
-      watchEffect(() => {
-        serverView.setBackground(darkMode.value ? 0x262626 : 0xffffff);
-      })
-    );
-
-    unmountCallback = () => {
-      liveDriveSlotsHandle.stop();
-      serverView.stop();
-      for (const wh of watchHandles) {
-        wh.stop();
-      }
-    };
-
-    return serverView;
-  } 
-);*/
-// DiskCanvas.vue (inside <script setup>)
 
 type AnyServerView = {
   start(parent: HTMLElement): void;
@@ -157,6 +81,7 @@ type AnyServerView = {
   setBackground(bg: number): void;
   setDriveSlotInfo(slots: DriveSlot[]): Promise<void> | void;
   setSlotHighlights(flag: any, ids: string[], value?: boolean): Promise<void> | void;
+  setZoomMargins?(opts: { driveView?: number; initialView?: number }): void;
   addEventListener(type: "selectionchange", cb: (e: any) => void): void;
   enableSelection: boolean;
   enableRotate: boolean;
@@ -175,6 +100,7 @@ const serverView = Promise.all([
 ]).then(async ([svMod, assetsMod, serverModelPromise]) => {
   const [{ ServerView }, { supportsChassisModel }] = [svMod, assetsMod];
   const modelNumber = await unwrap(serverModelPromise);
+  detectedServerModel.value = modelNumber;
 
   const watchHandles: WatchHandle[] = [];
   let view: AnyServerView;
@@ -206,6 +132,7 @@ const serverView = Promise.all([
   try {
     if (supportsChassisModel?.(modelNumber)) {
       view = new ServerView(modelNumber) as unknown as AnyServerView;
+      modelSupported.value = true;
     } else {
       const { FallbackServerView } = await import("./ServerView/FallbackServerView");
       const fb = new FallbackServerView();
@@ -267,6 +194,15 @@ const serverView = Promise.all([
   watchHandles.push(
     watchEffect(() => {
       view.setBackground(darkMode.value ? 0x262626 : 0xffffff);
+    })
+  );
+
+  watchHandles.push(
+    watchEffect(() => {
+      view.setZoomMargins?.({
+        driveView: props.driveViewZoomMargin,
+        initialView: props.initialViewZoomMargin,
+      });
     })
   );
 

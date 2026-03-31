@@ -9,7 +9,6 @@
             'border-t-[12px] border-t-slate-800/95 -bottom-[12px] border-x-transparent border-l-[12px] border-r-[12px]': props.placement === 'top'
         }" :style="{
         [props.placement === 'top' || props.placement === 'bottom' ? 'left' : 'top']: `${props.arrowOffset}px`,
-        transform: 'translate' + (props.placement === 'top' || props.placement === 'bottom' ? 'X' : 'Y') + '(-50%)'
     }" />
 
         <img :src="houstonPortrait" alt="Houston Portrait"

@@ -723,7 +723,7 @@ fi
       await server.execute(new Command(["mkdir", "-p", sshDir], this.commandOptions));
       await server.execute(new Command(["chmod", "700", sshDir], this.commandOptions));
       await server.execute(new Command(["touch", authFile], this.commandOptions));
-      await server.execute(new Command(["bash", "-c", `echo "${u.sshKey}" >> ${authFile}`], this.commandOptions));
+      await server.execute(new Command(["bash", "-c", `printf '%s\n' '${u.sshKey.replace(/'/g, "'\\''")}' >> '${authFile}'`], this.commandOptions));
       await server.execute(new Command(["chmod", "600", authFile], this.commandOptions));
       await server.execute(new Command(["chown", "-R", `${u.username}:${u.username}`, sshDir], this.commandOptions));
     }
@@ -1170,14 +1170,18 @@ fi
       const raw = shares[i];
       if (!raw) continue; // narrow: from (SambaShareConfig | undefined) to SambaShareConfig
 
-      const sharePath = `/${config.zfsConfigs![0]!.pool.name}/${config.folderName!}`;
+      const primaryPath = `/${config.zfsConfigs![0]!.pool.name}/${config.folderName!}`;
 
-      // Build a concrete share object first (no undefined), then apply semantics
+      // Build a concrete share object: primary share uses folderName/pool path;
+      // additional shares must have their own path pre-set or get a derived default.
       let share: SambaShareConfig = {
         ...raw,
-        ...(config.folderName && i === 0
-          ? { name: config.folderName, path: sharePath, readOnly: false }
-          : {}),
+        ...(i === 0 && config.folderName
+          ? { name: config.folderName, path: primaryPath, readOnly: false }
+          : {
+              name: raw.name || `share${i}`,
+              path: raw.path || `/${config.zfsConfigs![0]!.pool.name}/${raw.name || `share${i}`}`,
+            }),
       };
 
       // enforce group semantics via advancedOptions

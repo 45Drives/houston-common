@@ -3,6 +3,7 @@ export interface ZFSConfig {
   poolOptions: ZpoolCreateOptions;
   dataset: DatasetBase;
   datasetOptions: DatasetCreateOptions;
+  additionalDatasets?: { dataset: DatasetBase; datasetOptions: DatasetCreateOptions }[];
 }
 
 export interface ZPoolBase {

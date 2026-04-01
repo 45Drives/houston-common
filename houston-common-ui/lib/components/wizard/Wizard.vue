@@ -55,8 +55,8 @@ const progress = computed(() => {
 
 <template>
   <div class="flex flex-col">
-    <StepsHeader v-if="!hideHeader" v-bind="state" />
-    <ProgressBar v-if="hideHeader && !hideProgress" class="w-full" :percent="progress" />
-    <WizardStepView v-bind="state" class="grow" @goBack="emit('goBack')" />
+    <StepsHeader v-if="!hideHeader" v-bind="state" class="shrink-0" />
+    <ProgressBar v-if="hideHeader && !hideProgress" class="w-full shrink-0" :percent="progress" />
+    <WizardStepView v-bind="state" class="grow min-h-0" @goBack="emit('goBack')" />
   </div>
 </template>

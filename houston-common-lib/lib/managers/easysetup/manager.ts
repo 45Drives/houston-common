@@ -739,6 +739,16 @@ fi
       storageZfsConfig!.dataset.name,
       storageZfsConfig!.datasetOptions
     );
+    // Create additional datasets on the storage pool
+    if (storageZfsConfig!.additionalDatasets) {
+      for (const extra of storageZfsConfig!.additionalDatasets) {
+        await this.zfsManager.addDataset(
+          storageZfsConfig!.pool.name,
+          extra.dataset.name,
+          extra.datasetOptions
+        );
+      }
+    }
 
     if (config.splitPools) {
       await this.zfsManager.createPool(backupZfsConfig!.pool, backupZfsConfig!.poolOptions);
@@ -747,6 +757,16 @@ fi
         backupZfsConfig!.dataset.name,
         backupZfsConfig!.datasetOptions
       );
+      // Create additional datasets on the backup pool
+      if (backupZfsConfig!.additionalDatasets) {
+        for (const extra of backupZfsConfig!.additionalDatasets) {
+          await this.zfsManager.addDataset(
+            backupZfsConfig!.pool.name,
+            extra.dataset.name,
+            extra.datasetOptions
+          );
+        }
+      }
       await this.clearReplicationTasks();
       await this.clearSnapshotTasks();
       await this.clearScrubTasks();

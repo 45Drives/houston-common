@@ -10,6 +10,7 @@ import {
   CommandOptions,
   ZPoolAddVDevOptions,
   DatasetCreateOptions,
+  ZvolCreateOptions,
   Disks,
   VDevDisk,
   ZPoolDestroyOptions,
@@ -51,6 +52,7 @@ export interface IZFSManager {
   destroyPool(name: string): Promise<void>;
   addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<ExitedProcess>;
   addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<ExitedProcess>;
+  addZvol(parent: string, name: string, options: ZvolCreateOptions): Promise<ExitedProcess>;
   getBaseDisks(): Promise<VDevDisk[]>;
   getFullDisks(): Promise<VDevDisk[]>;
   getDiskCapacity(path: string): Promise<string>;
@@ -525,6 +527,31 @@ export class ZFSManager implements IZFSManager {
     return proc;
   }
 
+
+  async addZvol(parent: string, name: string, options: ZvolCreateOptions): Promise<ExitedProcess> {
+    const argv = ["zfs", "create"];
+    const zvolProps: string[] = [];
+
+    if (options.volblocksize !== undefined) zvolProps.push(`volblocksize=${options.volblocksize}`);
+    if (options.compression !== undefined) zvolProps.push(`compression=${options.compression}`);
+    if (options.dedup !== undefined) zvolProps.push(`dedup=${options.dedup}`);
+    if (options.readonly !== undefined) zvolProps.push(`readonly=${options.readonly}`);
+
+    argv.push(...zvolProps.flatMap((prop) => ["-o", prop]));
+    argv.push("-V", options.volsize);
+    argv.push(`${parent}/${name}`);
+
+    console.log("****\ncmdstring:\n", ...argv, "\n****");
+
+    try {
+      const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
+      console.log("Command output:", proc.getStdout());
+      return proc;
+    } catch (error) {
+      console.error("Error executing command:", error);
+      throw error;
+    }
+  }
 
   allDisksHaveSameCapacity(disks: VDevDisk[]): boolean {
     if (disks.length === 0) return false;

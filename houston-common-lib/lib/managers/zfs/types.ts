@@ -226,6 +226,7 @@ export interface ZFSFileSystemInfo {
     };
     used?: number;
     usedBySnapshots?: string;
+    volsize?: number;
   };
   parentFS?: string;
   children?: ZFSFileSystemInfo[];

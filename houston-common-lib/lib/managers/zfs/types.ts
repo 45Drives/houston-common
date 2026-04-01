@@ -168,6 +168,14 @@ export interface DatasetCreateOptions {
   readonly?: string;
 }
 
+export interface ZvolCreateOptions {
+  volsize: string;
+  volblocksize?: string;
+  compression?: string;
+  dedup?: string;
+  readonly?: string;
+}
+
 export interface Dataset extends DatasetBase {
   parent: string;
   children?: Dataset[];
@@ -219,6 +227,7 @@ export interface ZFSFileSystemInfo {
     };
     used?: number;
     usedBySnapshots?: string;
+    volsize?: number;
   };
   parentFS?: string;
   children?: ZFSFileSystemInfo[];

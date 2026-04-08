@@ -150,6 +150,9 @@ export class EasySetupConfigurator {
       report(10, config.splitPools ? "Scheduling Active Backup tasks..." : "Scheduling Snapshot tasks...");
       await this.scheduleTasks(config);
 
+      // Post-setup verification: confirm critical services are active and pools are imported
+      await this.verifyPostSetup(config);
+
       console.log("[EasySetup] About to write simple-setup-log.json");
 
       const currentHostname = await this.getCurrentHostname();
@@ -208,7 +211,8 @@ export class EasySetupConfigurator {
         );
         console.log(" Samba ports opened using firewalld (Rocky).");
       } catch (err) {
-        console.warn(" Failed to configure firewalld; continuing:", err);
+        console.error(" Failed to configure firewalld:", err);
+        throw new Error(`Firewall configuration failed (firewalld): ${(err as any)?.message ?? err}`);
       }
     } else if (distro === "ubuntu") {
       try {
@@ -226,7 +230,8 @@ export class EasySetupConfigurator {
         );
         console.log(" Samba ports opened using ufw (Ubuntu).");
       } catch (err) {
-        console.warn(" Failed to configure ufw; continuing:", err);
+        console.error(" Failed to configure ufw:", err);
+        throw new Error(`Firewall configuration failed (ufw): ${(err as any)?.message ?? err}`);
       }
     } else {
       console.warn(" Unsupported Linux distribution. Please configure the firewall manually.");
@@ -353,9 +358,16 @@ fi
   }
 
 
+  private static readonly HOSTNAME_RE = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
+
   private async updateHostname(config: EasySetupConfig) {
     const desired = (config.srvrName ?? "").trim();
     if (!desired) return;
+
+    // Validate hostname to prevent shell injection and invalid system hostnames
+    if (!EasySetupConfigurator.HOSTNAME_RE.test(desired)) {
+      throw new ValueError(`Invalid hostname '${desired}': must contain only letters, numbers, and hyphens, and cannot start or end with a hyphen.`);
+    }
 
     const current = await this.getCurrentHostname();
     if (desired === current) return;
@@ -364,6 +376,30 @@ fi
 
     // 1) Persist first (writes /etc/hostname and /etc/machine-info)
     await unwrap(server.writeHostnameFiles(desired));
+
+    // 1b) Update /etc/hosts so services (samba, avahi) can resolve the new hostname
+    await server.execute(
+      new Command(
+        [
+          "sed", "-i",
+          `s/127\\.0\\.1\\.1\\s.*/127.0.1.1\t${desired}/`,
+          "/etc/hosts",
+        ],
+        this.commandOptions
+      ),
+      true
+    );
+    // If no 127.0.1.1 line existed, append one
+    await server.execute(
+      new Command(
+        [
+          "bash", "-c",
+          `grep -q '^127\\.0\\.1\\.1' /etc/hosts || echo -e '127.0.1.1\\t${desired}' >> /etc/hosts`,
+        ],
+        this.commandOptions
+      ),
+      true
+    );
 
     // 2) Best-effort runtime hostname without noisy DBus on Rocky
     if (distro === "ubuntu") {
@@ -580,9 +616,17 @@ fi
     const serverCfg = config.serverConfig;
 
     if (serverCfg?.disableRootSSH !== false) {
+      // Replace existing line (commented or uncommented)
       await unwrap(server.execute(
         new Command([
           "sed", "-i", "s/^#*PermitRootLogin.*/PermitRootLogin no/", "/etc/ssh/sshd_config"
+        ], this.commandOptions)
+      ));
+      // If no PermitRootLogin line existed at all, append one
+      await unwrap(server.execute(
+        new Command([
+          "bash", "-c",
+          "grep -q '^PermitRootLogin' /etc/ssh/sshd_config || echo 'PermitRootLogin no' >> /etc/ssh/sshd_config"
         ], this.commandOptions)
       ));
       await unwrap(server.execute(new Command(["systemctl", "reload", "sshd"], this.commandOptions)));
@@ -597,15 +641,11 @@ fi
     }
 
     if (serverCfg?.newRootPass) {
-      await unwrap(
-        server.execute(
-          new Command(
-            ["bash", "-c", `echo 'root:${serverCfg.newRootPass}' | chpasswd`],
-            this.commandOptions
-          ),
-          true
-        )
+      const chpasswdProc = server.spawnProcess(
+        new Command(["chpasswd"], this.commandOptions)
       );
+      chpasswdProc.write(`root:${serverCfg.newRootPass}\n`, false);
+      await unwrap(chpasswdProc.wait(true));
     }
 
   }
@@ -1143,15 +1183,54 @@ fi
     };
   }
 
+  private async verifyPostSetup(config: EasySetupConfig) {
+    const distro = await this.getLinuxDistro();
+    const sambaServices = distro === "ubuntu" ? ["smbd"] : ["smb"];
+
+    // Verify samba services are active
+    for (const svc of sambaServices) {
+      try {
+        const result = await unwrap(
+          server.execute(new Command(["systemctl", "is-active", svc], this.commandOptions), true)
+        );
+        const status = new TextDecoder().decode(result.stdout).trim();
+        if (status !== "active") {
+          console.error(`[EasySetup] Service ${svc} is not active (status: ${status}), attempting restart...`);
+          await unwrap(server.execute(new Command(["systemctl", "restart", svc], this.commandOptions)));
+        }
+      } catch (err) {
+        console.error(`[EasySetup] Service ${svc} verification failed:`, err);
+        // Attempt recovery
+        try {
+          await unwrap(server.execute(new Command(["systemctl", "restart", svc], this.commandOptions)));
+          console.log(`[EasySetup] Service ${svc} recovered after restart.`);
+        } catch (restartErr) {
+          console.error(`[EasySetup] Service ${svc} could not be recovered:`, restartErr);
+        }
+      }
+    }
+
+    // Verify ZFS pools are imported and share paths exist
+    const zfsConfigs = config.zfsConfigs ?? [];
+    for (const zfsCfg of zfsConfigs) {
+      const poolName = zfsCfg.pool.name;
+      if (!await this.poolExists(poolName)) {
+        console.error(`[EasySetup] ZFS pool '${poolName}' is not imported after setup!`);
+        throw new Error(`ZFS pool '${poolName}' failed to import after creation.`);
+      }
+    }
+
+    console.log("[EasySetup] Post-setup verification passed.");
+  }
+
   private async restartSambaServices() {
     const distro = await this.getLinuxDistro();
     const services = distro === "ubuntu" ? ["smbd", "nmbd"] : ["smb", "nmb"];
 
     for (const svc of services) {
       try {
-        await unwrap(server.execute(new Command(["systemctl", "start", svc], this.commandOptions)));
+        await unwrap(server.execute(new Command(["systemctl", "enable", "--now", svc], this.commandOptions)));
         await unwrap(server.execute(new Command(["systemctl", "restart", svc], this.commandOptions)));
-        await unwrap(server.execute(new Command(["systemctl", "enable", svc], this.commandOptions)));
       } catch (err) {
         const msg = String((err as any)?.message ?? err);
         if (/nmbd?\.service.*not found/i.test(msg) || /Unit nmb.*could not be found/i.test(msg)) {

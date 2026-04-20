@@ -1,138 +1,319 @@
-import { ref } from 'vue';
-import { legacy, File, server, Command, unwrap, ValueError } from '@/index';
-import {
-    SchedulerType,
-    TaskInstanceType,
-    TaskTemplateType
-} from './types';
-import {
-    TaskInstance,
-    TaskSchedule,
-    TaskScheduleInterval,
-    ZFSReplicationTaskTemplate,
-    AutomatedSnapshotTaskTemplate,
-    RsyncTaskTemplate,
-    ScrubTaskTemplate,
-    SmartTestTemplate,
-    CloudSyncTaskTemplate,
-    CustomTaskTemplate
-} from './Tasks';
-import {
-    ParameterNode,
-    StringParameter,
-    SelectionParameter,
-    IntParameter,
-    BoolParameter
-} from './Parameters';
-import {
-    createStandaloneTask,
-    createTaskFiles,
-    createScheduleForTask,
-    removeTask,
-    runTask,
-    formatTemplateName
-} from './utils/helpers';
+import { legacy, File, server, unwrap } from '@/index';
+import { SchedulerType, TaskInstanceType } from './types';
+import { TaskInstance, TaskTemplate, TaskSchedule, ZFSReplicationTaskTemplate, AutomatedSnapshotTaskTemplate, TaskScheduleInterval, RsyncTaskTemplate, ScrubTaskTemplate, SmartTestTemplate, CloudSyncTaskTemplate, CustomTaskTemplate } from './Tasks';
+import { ParameterNode, StringParameter, SelectionParameter, IntParameter, BoolParameter } from './Parameters';
+import { createStandaloneTask, createTaskFiles, createScheduleForTask, removeTask, runTask, stopTask } from './utils/helpers';
 import { TaskExecutionLog } from './TaskLog';
-
 // @ts-ignore
 import get_tasks_script from '@/scripts/get-task-instances.py?raw';
 
-const { errorString, useSpawn } = legacy;
+const { useSpawn, errorString } = legacy;
 
-/** Validate task name to prevent path traversal in systemd file paths */
-const SAFE_TASK_NAME_RE = /^[a-zA-Z0-9_\-]+$/;
-function validateTaskName(name: string): void {
-    if (!name || !SAFE_TASK_NAME_RE.test(name)) {
-        throw new ValueError(`Invalid task name: "${name}". Only alphanumerics, hyphens, and underscores are allowed.`);
+async function runCommand(
+    argv: string[],
+    opts: { superuser?: 'try' | 'require' } = { superuser: 'try' }
+): Promise<{ stdout: string; stderr: string; exitStatus: number }> {
+    try {
+        const state = useSpawn(argv, opts);
+        const result = await state.promise();
+        return {
+            stdout: result.stdout ?? '',
+            stderr: result.stderr ?? '',
+            exitStatus: 0,
+        };
+    } catch (e: any) {
+        return {
+            stdout: e?.stdout ?? '',
+            stderr: e?.stderr ?? errorString(e),
+            exitStatus: e?.exitStatus ?? 1,
+        };
     }
 }
 
 export class Scheduler implements SchedulerType {
-    taskTemplates: TaskTemplateType[];
-    taskInstances: TaskInstanceType[];
+    taskTemplates: TaskTemplate[];
+    taskInstances: TaskInstance[];
 
-    constructor(
-        taskTemplates: TaskTemplateType[],
-        taskInstances: TaskInstanceType[]
-    ) {
+    constructor(taskTemplates: TaskTemplate[], taskInstances: TaskInstance[]) {
         this.taskTemplates = taskTemplates;
         this.taskInstances = taskInstances;
     }
 
-    /** Ensure a directory exists (idempotent) */
+    private normalizeTemplateKey(x: any): string {
+        const s = String(x ?? '').trim();
+        if (!s) return s;
+        const known = new Set([
+            'ZfsReplicationTask',
+            'AutomatedSnapshotTask',
+            'RsyncTask',
+            'ScrubTask',
+            'SmartTest',
+            'CloudSyncTask',
+            'CustomTask',
+        ]);
+        if (known.has(s)) return s;
+
+        const key = s.replace(/[\s_-]+/g, '').toLowerCase();
+        const map: Record<string, string> = {
+            zfsreplicationtask: 'ZfsReplicationTask',
+            automatedsnapshottask: 'AutomatedSnapshotTask',
+            rsynctask: 'RsyncTask',
+            scrubtask: 'ScrubTask',
+            smarttest: 'SmartTest',
+            cloudsynctask: 'CloudSyncTask',
+            customtask: 'CustomTask',
+        };
+        return map[key] ?? s;
+    }
+
+    private resolveTemplate(templateName: string) {
+        switch (templateName) {
+            case 'ZfsReplicationTask': return new ZFSReplicationTaskTemplate();
+            case 'AutomatedSnapshotTask': return new AutomatedSnapshotTaskTemplate();
+            case 'RsyncTask': return new RsyncTaskTemplate();
+            case 'ScrubTask': return new ScrubTaskTemplate();
+            case 'SmartTest': return new SmartTestTemplate();
+            case 'CloudSyncTask': return new CloudSyncTaskTemplate();
+            case 'CustomTask': return new CustomTaskTemplate();
+            default: throw new Error(`Unknown template: ${templateName}`);
+        }
+    }
+
+    private toPlain<T>(x: T): T {
+        return JSON.parse(JSON.stringify(x));
+    }
+
+    private templateKey(ti: TaskInstanceType, hint?: string): string {
+        return (ti as any)._templateKey
+            || (hint ? this.normalizeTemplateKey(hint) : '')
+            || this.normalizeTemplateKey(ti.template.name);
+    }
+
+    private async unitNameFor(ti: TaskInstanceType): Promise<string> {
+        const key = this.templateKey(ti);
+        return `houston_scheduler_${key}_${ti.name}`;
+    }
+
+    private usToMs(us: number): number | 0 {
+        return us && Number.isFinite(us) ? Math.floor(us / 1000) : 0;
+    }
+
+    private safeBuildParamNode(schema: ParameterNode, params: Record<string, any>): ParameterNode {
+        try {
+            return this.createParameterNodeFromSchema(schema, params);
+        } catch (e) {
+            console.warn('Parameter schema hydration failed, falling back to loose node:', e);
+            return this.createLooseNodeFromFlatParams(params);
+        }
+    }
+
+    private createLooseNodeFromFlatParams(params: Record<string, any>): ParameterNode {
+        const root = new ParameterNode('Parameters', 'root');
+        const boolRe = /^(true|false)$/i;
+        for (const [k, v] of Object.entries(params)) {
+            const s = String(v ?? '');
+            if (boolRe.test(s)) {
+                const p = new BoolParameter(k, k);
+                p.value = /^true$/i.test(s);
+                root.addChild(p);
+            } else if (/^-?\d+$/.test(s)) {
+                const p = new IntParameter(k, k);
+                p.value = parseInt(s, 10);
+                root.addChild(p);
+            } else {
+                const p = new StringParameter(k, k);
+                p.value = s;
+                root.addChild(p);
+            }
+        }
+        return root;
+    }
+
     async ensureDir(path: string) {
-        const dir = path.replace(/\/+$/, "");
-        try {
-            // idempotent: succeeds whether or not the dir already exists
-            await unwrap(
-                server.execute(
-                    new Command(["mkdir", "-p", dir], { superuser: "require" })
-                )
-            );
-            // console.log(` ensured dir ${dir}`);
-        } catch (err) {
-            console.error(` mkdir -p ${dir} failed:`, err);
-        }
+        await runCommand(['mkdir', '-p', path], { superuser: 'try' });
     }
 
-    async loadTaskInstances(): Promise<void>  {
-        this.taskInstances.splice(0, this.taskInstances.length);
+    /*
+     * Unified, view-friendly status + timestamps
+     */
+    async getDisplayMeta(ti: TaskInstanceType): Promise<{
+        unit: string;
+        statusText: string;
+        lastRunMs: number;
+        nextRunMs?: number;
+    }> {
+        const log = new TaskExecutionLog([]);
+        const unit = await this.unitNameFor(ti);
+
+        const readPersistedLastRunMs = async (): Promise<number> => {
+            try {
+                const lastrunPath = `/etc/systemd/system/${unit}.lastrun`;
+                const { stdout, exitStatus } = await runCommand(["cat", lastrunPath], { superuser: "try" });
+                if (exitStatus !== 0) return 0;
+                const epoch = parseInt(stdout.trim(), 10);
+                return Number.isFinite(epoch) && epoch > 0 ? epoch * 1000 : 0;
+            } catch {
+                return 0;
+            }
+        };
+
+        let timerOut = '', serviceOut = '';
+        const preferTimer = !!ti?.schedule?.enabled;
+
+        const pickStatusSource = (_t: ReturnType<Scheduler['parseShow']>, s: ReturnType<Scheduler['parseShow']>) => {
+            if (s.active === 'active' && s.sub === 'running') return serviceOut;
+            if (s.active === 'failed' || s.sub === 'failed') return serviceOut;
+            return preferTimer ? timerOut : serviceOut;
+        };
+
         try {
-            const state = useSpawn(['/usr/bin/env', 'python3', '-c', get_tasks_script], { superuser: 'try' });
-            const tasksOutput = (await state.promise()).stdout!;
-            // console.log('Raw tasksOutput:', tasksOutput);
-            const tasksData = JSON.parse(tasksOutput) as Array<{
-                template: string;
-                parameters: any;
-                notes: string;
-                schedule: { intervals: any[]; enabled: boolean };
-                name: string;
-            }>;
-            tasksData.forEach((task) => {
-                const newTaskTemplate = ref();
-                if (task.template == 'ZfsReplicationTask') {
-                    newTaskTemplate.value = new ZFSReplicationTaskTemplate;
-                } else if (task.template == 'AutomatedSnapshotTask') {
-                    newTaskTemplate.value = new AutomatedSnapshotTaskTemplate;
-                } else if (task.template == 'RsyncTask') {
-                    newTaskTemplate.value = new RsyncTaskTemplate;
-                } else if (task.template == 'ScrubTask') {
-                    newTaskTemplate.value = new ScrubTaskTemplate;
-                } else if (task.template == 'SmartTest') {
-                    newTaskTemplate.value = new SmartTestTemplate;
-                } else if (task.template == 'CloudSyncTask') {
-                    newTaskTemplate.value = new CloudSyncTaskTemplate;
-                } else if (task.template == 'CustomTask') {
-                    newTaskTemplate.value = new CustomTaskTemplate;
+            try {
+                const { stdout, stderr, exitStatus } = await runCommand(
+                    [
+                        'systemctl', 'show', `${unit}.timer`, '--no-pager',
+                        '--property', 'LoadState,ActiveState,SubState,Result,LastTriggerUSec,NextElapseUSecRealtime,MergedUnit',
+                    ],
+                    { superuser: 'try' }
+                );
+
+                if (exitStatus === 0) {
+                    timerOut = stdout;
+                } else if (!/not found/i.test(stdout) && !/not found/i.test(stderr)) {
+                    console.warn(`getDisplayMeta(timer ${unit}):`, stderr || stdout);
                 }
+            } catch (e) {
+                console.warn(`getDisplayMeta(timer ${unit}) error:`, errorString(e));
+            }
 
-                const parameters = task.parameters;
-                // console.log("SCHEDULER - Parameters before parsing:", parameters);
+            const { stdout, stderr, exitStatus } = await runCommand(
+                [
+                    'systemctl', 'show', `${unit}.service`, '--no-pager',
+                    '--property', 'LoadState,ActiveState,SubState,Result,ActiveEnterTimestampUSec,ActiveEnterTimestamp,ExecMainStartTimestampUSec,ExecMainStartTimestamp,ExecMainExitTimestampUSec,ExecMainExitTimestamp,InactiveEnterTimestampUSec,InactiveEnterTimestamp,MergedUnit',
+                ],
+                { superuser: 'try' }
+            );
 
-                const parameterNodeStructure = this.createParameterNodeFromSchema(newTaskTemplate.value.parameterSchema, parameters);
-                const taskIntervals: TaskScheduleInterval[] = [];
-                const notes = task.notes;
+            if (exitStatus !== 0) {
+                throw new Error(stderr || stdout || `systemctl show ${unit}.service failed with ${exitStatus}`);
+            }
 
-                task.schedule.intervals.forEach(interval => {
-                    const thisInterval = new TaskScheduleInterval(interval);
-                    taskIntervals.push(thisInterval);
-                });
-                const newSchedule = new TaskSchedule(task.schedule.enabled, taskIntervals);
-                const newTaskInstance = new TaskInstance(task.name, newTaskTemplate.value, parameterNodeStructure, newSchedule,notes); 
-                // console.log("SCHEDULER - TaskInstance:", newTaskInstance);
+            serviceOut = stdout;
 
-                this.taskInstances.push(newTaskInstance);
-            });
+            const t = this.parseShow(timerOut);
+            const s = this.parseShow(serviceOut);
 
-            // console.log('this.taskInstances:', this.taskInstances);
+            const source = pickStatusSource(t, s);
+            const statusText = await this.parseTaskStatus(source, unit, log, ti);
 
-        } catch (err: unknown) {
-            console.error(errorString(err));
-            return;
+            const lastRunUs = t.lastTriggerUSec || s.serviceExitUSec || s.serviceStartUSec || 0;
+            const nextRunUs = t.nextElapseUSec || 0;
+            let lastRunMs = this.usToMs(Number(lastRunUs));
+
+            if (!lastRunMs) {
+                lastRunMs = await readPersistedLastRunMs();
+            }
+
+            return {
+                unit,
+                statusText: String(statusText || '—'),
+                lastRunMs,
+                nextRunMs: this.usToMs(nextRunUs),
+            };
+        } catch (e) {
+            console.warn(`getDisplayMeta(service ${unit}) failed:`, errorString(e));
+            const fallbackMs = await readPersistedLastRunMs();
+            return { unit, statusText: '—', lastRunMs: fallbackMs };
         }
     }
 
-    // Main function to create a ParameterNode from JSON parameters based on a schema
+    formatLocal(ms?: number): string {
+        if (!ms) return '—';
+        const d = new Date(ms);
+
+        const weekday = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(d);
+
+        const tzShort = (() => {
+            const parts = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(d);
+            let v = parts.find(p => p.type === 'timeZoneName')?.value ?? '';
+
+            if (/^GMT[+-]/i.test(v) || v === '') {
+                const m = d.toString().match(/\(([^)]+)\)$/);
+                if (m && m[1]) {
+                    const abbr = m[1].split(/\s+/).map(w => w[0]).join('');
+                    if (abbr && abbr.length <= 5) v = abbr;
+                }
+            }
+            return v;
+        })();
+
+        const y = d.getFullYear();
+        const mo = String(d.getMonth() + 1).padStart(2, '0');
+        const da = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+
+        return `${weekday} ${y}-${mo}-${da} ${hh}:${mm}:${ss}${tzShort ? ' ' + tzShort : ''}`;
+    }
+
+    async loadTaskInstances() {
+        this.taskInstances.splice(0, this.taskInstances.length);
+
+        const coerceTemplateName = (tpl: any): string => {
+            if (typeof tpl === 'string') return tpl;
+            if (tpl && typeof tpl === 'object') return String(tpl.name || tpl.type || '');
+            return String(tpl ?? '');
+        };
+
+        const safeParseItems = (raw: any): any[] => {
+            if (Array.isArray(raw)) return raw;
+            try { return JSON.parse(String(raw || '[]')); } catch { return []; }
+        };
+
+        try {
+            const { stdout } = await runCommand(
+                ['/usr/bin/env', 'python3', '-c', get_tasks_script],
+                { superuser: 'try' }
+            );
+            const systemTasksData = safeParseItems(stdout);
+
+            for (const task of systemTasksData) {
+                try {
+                    if (!task?.name || !task?.template) continue;
+
+                    const templateKey = this.normalizeTemplateKey(coerceTemplateName(task.template));
+                    const tpl = this.resolveTemplate(templateKey);
+
+                    const paramNode = this.createParameterNodeFromSchema(tpl.parameterSchema, task.parameters || {});
+                    const intervals = (task.schedule?.intervals || []).map((i: any) => new TaskScheduleInterval(i));
+                    const schedule = new TaskSchedule(!!task.schedule?.enabled, intervals, !!task.schedule?.runOnBoot);
+
+                    let needsResave = false;
+                    if (templateKey === 'ZfsReplicationTask' || templateKey === 'AutomatedSnapshotTask') {
+                        needsResave = this.migrateEnvRetentionToIntervals(templateKey, task.parameters || {}, schedule);
+                    }
+
+                    const inst = new TaskInstance(task.name, tpl, paramNode, schedule, task.notes || '');
+                    (inst as any)._templateKey = templateKey;
+                    this.taskInstances.push(inst);
+
+                    if (needsResave) {
+                        try {
+                            console.log(`[migration] Re-saving task "${task.name}" to remove old retention env keys`);
+                            await this.updateTaskInstance(inst);
+                        } catch (e) {
+                            console.warn(`[migration] Failed to re-save task "${task.name}":`, e);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('skip bad legacy task record:', e);
+                }
+            }
+        } catch (e) {
+            console.error(errorString(e));
+        }
+    }
+
     createParameterNodeFromSchema(schema: ParameterNode, parameters: any): ParameterNode {
         function cloneSchema(node: ParameterNode): ParameterNode {
             let newNode: ParameterNode;
@@ -161,10 +342,8 @@ export class Scheduler implements SchedulerType {
         function assignValues(node: ParameterNode, prefix = ''): void {
             const currentPrefix = prefix ? prefix + '_' : '';
             const fullKey = currentPrefix + node.key;
-            // console.log(`Assigning value for key: ${fullKey}`);  
             if (parameters.hasOwnProperty(fullKey)) {
                 let value = parameters[fullKey];
-                // console.log(`Found value: ${value} for key: ${fullKey}`);  // Debug log to confirm values
                 if (node instanceof StringParameter || node instanceof SelectionParameter) {
                     node.value = value;
                 } else if (node instanceof IntParameter) {
@@ -180,56 +359,40 @@ export class Scheduler implements SchedulerType {
         return parameterRoot;
     }
 
-    /**
-    * Turn an array of "KEY=VAL" strings into a lookup map
-    * and then apply any template-specific tweaks.
-    */
-    parseEnvKeyValues(
-        envKeyValues: string[],
-        templateName: string
-    ): Record<string, string> {
-        // 1) Annotate the accumulator as Record<string,string>
-        // 2) Destructure [key, value = ''] so `value` is never undefined
-        const envObject = envKeyValues.reduce<Record<string, string>>(
-            (acc, curr) => {
-                // split into at most two pieces
-                const parts = curr.split('=');
-                const key = parts[0] || '';           // always a string
-                const value = parts[1] ?? '';         // default to empty string
+    parseEnvKeyValues(envKeyValues: string[], templateName: string) {
+        let envObject = envKeyValues.reduce((acc, curr) => {
+            const [key, ...rest] = curr.split('=');
+            if (key === undefined) return acc;
+            const value = rest.join('=');
+            acc[key] = value;
+            return acc;
+        }, {} as Record<string, string|number>);
 
-                if (key) {
-                    acc[key] = value;
-                }
-                return acc;
-            },
-            {}
-        );
-
-        // now indexing envObject[...] is always legal
-        const formatEnvOption = (
-            obj: Record<string, string>,
-            key: string,
-            emptyValue = '',
-            excludeValues: (string | number)[] = [0, '0', "''"],
-            resetKeys: string[] = []
-        ) => {
-            if (obj[key] && !excludeValues.includes(obj[key]!)) {
-                /* leave it */
+        function formatEnvOption(envObject: Record<string, string|number>, key: string, emptyValue = '', excludeValues: (string|number)[] = [0, '0', "''"], resetKeys: string[] = []) {
+            if (envObject[key] && !excludeValues.includes(envObject[key])) {
+                envObject[key] = `${envObject[key]}`;
             } else {
-                obj[key] = emptyValue;
-                resetKeys.forEach(k => (obj[k] = emptyValue));
+                envObject[key] = emptyValue;
+                resetKeys.forEach(resetKey => envObject[resetKey] = emptyValue);
             }
-        };
+        }
 
         switch (templateName) {
             case 'ZfsReplicationTask':
                 if (envObject['zfsRepConfig_sendOptions_raw_flag'] === 'true') {
                     envObject['zfsRepConfig_sendOptions_compressed_flag'] = '';
-                } else if (
-                    envObject['zfsRepConfig_sendOptions_compressed_flag'] === 'true'
-                ) {
+                } else if (envObject['zfsRepConfig_sendOptions_compressed_flag'] === 'true') {
                     envObject['zfsRepConfig_sendOptions_raw_flag'] = '';
                 }
+                delete envObject['zfsRepConfig_snapshotRetention_source_retentionTime'];
+                delete envObject['zfsRepConfig_snapshotRetention_source_retentionUnit'];
+                delete envObject['zfsRepConfig_snapshotRetention_destination_retentionTime'];
+                delete envObject['zfsRepConfig_snapshotRetention_destination_retentionUnit'];
+                break;
+
+            case 'AutomatedSnapshotTask':
+                delete envObject['autoSnapConfig_snapshotRetention_retentionTime'];
+                delete envObject['autoSnapConfig_snapshotRetention_retentionUnit'];
                 break;
 
             case 'RsyncTask':
@@ -238,6 +401,7 @@ export class Scheduler implements SchedulerType {
                     envObject['rsyncConfig_target_info_port'] = '';
                     envObject['rsyncConfig_target_info_user'] = '';
                 }
+                formatEnvOption(envObject, 'rsyncConfig_rsyncOptions_log_file_path');
                 formatEnvOption(envObject, 'rsyncConfig_rsyncOptions_bandwidth_limit_kbps');
                 formatEnvOption(envObject, 'rsyncConfig_rsyncOptions_include_pattern');
                 formatEnvOption(envObject, 'rsyncConfig_rsyncOptions_exclude_pattern');
@@ -245,6 +409,7 @@ export class Scheduler implements SchedulerType {
                 break;
 
             case 'CloudSyncTask':
+                formatEnvOption(envObject, 'cloudSyncConfig_rcloneOptions_log_file_path');
                 formatEnvOption(envObject, 'cloudSyncConfig_rcloneOptions_bandwidth_limit_kbps');
                 formatEnvOption(envObject, 'cloudSyncConfig_rcloneOptions_include_pattern');
                 formatEnvOption(envObject, 'cloudSyncConfig_rcloneOptions_exclude_pattern');
@@ -262,13 +427,10 @@ export class Scheduler implements SchedulerType {
             default:
                 break;
         }
-
-        // console.log('envObject After:', envObject);
         return envObject;
     }
 
-
-    getScriptFromTemplateName(templateName: string): string {
+    getScriptFromTemplateName(templateName: string) {
         switch (templateName) {
             case 'ZfsReplicationTask':
                 return 'replication-script';
@@ -278,180 +440,294 @@ export class Scheduler implements SchedulerType {
                 return 'rsync-script';
             case 'SmartTest':
                 return 'smart-test-script';
+            case 'ScrubTask':
+                return 'scrub-script';
             case 'CloudSyncTask':
                 return 'cloudsync-script';
             default:
-                console.log(`${templateName}: no script provided`);
-                return '';
+                console.error('no script provided');
+                return 'undefined';
         }
+    }
+
+    /**
+     * Export all task configurations as a JSON blob for backup.
+     */
+    async exportTasks(): Promise<string> {
+        const exported: any[] = [];
+
+        for (const ti of this.taskInstances) {
+            const templateName = this.normalizeTemplateKey(ti.template.name);
+            const envKeyValues = ti.parameters.asEnvKeyValues();
+            const envObject = this.parseEnvKeyValues(envKeyValues, templateName);
+
+            let userScriptBody = '';
+            if (templateName === 'CustomTask') {
+                const filePath = envObject['customTaskConfig_filePath'];
+                if (typeof filePath === 'string' && filePath.includes('/user_scripts/')) {
+                    try {
+                        const { stdout } = await runCommand(['cat', filePath], { superuser: 'try' });
+                        userScriptBody = stdout;
+                    } catch { /* ignore */ }
+                }
+            }
+
+            exported.push({
+                name: ti.name,
+                template: templateName,
+                parameters: envObject,
+                schedule: this.toPlain(ti.schedule),
+                notes: ti.notes || '',
+                userScriptBody,
+            });
+        }
+
+        return JSON.stringify({ version: 1, exportDate: new Date().toISOString(), tasks: exported }, null, 2);
+    }
+
+    private importedConfigMatchesExisting(existing: TaskInstance, imported: any): boolean {
+        try {
+            const existingTemplate = this.normalizeTemplateKey(existing.template.name);
+            const importedTemplate = this.normalizeTemplateKey(imported.template);
+            if (existingTemplate !== importedTemplate) return false;
+
+            const existingEnv = this.parseEnvKeyValues(existing.parameters.asEnvKeyValues(), existingTemplate);
+            const importedParams = imported.parameters || {};
+
+            const allKeys = new Set([...Object.keys(existingEnv), ...Object.keys(importedParams)]);
+            allKeys.delete('taskName');
+            for (const key of allKeys) {
+                if (String(existingEnv[key] ?? '') !== String(importedParams[key] ?? '')) return false;
+            }
+
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    private generateUniqueName(baseName: string, existingNames: Set<string>): string {
+        let candidate = `${baseName}_imported`;
+        if (!existingNames.has(candidate)) return candidate;
+        let counter = 2;
+        while (existingNames.has(`${baseName}_imported_${counter}`)) {
+            counter++;
+        }
+        return `${baseName}_imported_${counter}`;
+    }
+
+    async importTasks(jsonString: string): Promise<{ imported: string[]; skipped: string[]; renamed: string[]; errors: string[] }> {
+        const result = { imported: [] as string[], skipped: [] as string[], renamed: [] as string[], errors: [] as string[] };
+
+        let data: any;
+        try {
+            data = JSON.parse(jsonString);
+        } catch {
+            result.errors.push('Invalid JSON file.');
+            return result;
+        }
+
+        const tasks = data?.tasks;
+        if (!Array.isArray(tasks)) {
+            result.errors.push('No tasks array found in backup file.');
+            return result;
+        }
+
+        const existingNames = new Set(this.taskInstances.map(t => t.name));
+
+        for (const t of tasks) {
+            try {
+                if (!t?.name || !t?.template) {
+                    result.errors.push(`Skipped invalid entry (missing name or template).`);
+                    continue;
+                }
+
+                let finalName = t.name;
+
+                if (existingNames.has(t.name)) {
+                    const existingTask = this.taskInstances.find(ti => ti.name === t.name);
+                    if (existingTask && this.importedConfigMatchesExisting(existingTask, t)) {
+                        result.skipped.push(t.name);
+                        continue;
+                    }
+                    finalName = this.generateUniqueName(t.name, existingNames);
+                    result.renamed.push(`${t.name} → ${finalName}`);
+                }
+
+                const templateKey = this.normalizeTemplateKey(t.template);
+                const tpl = this.resolveTemplate(templateKey);
+                const paramNode = this.safeBuildParamNode(tpl.parameterSchema, t.parameters || {});
+
+                const intervals = (t.schedule?.intervals || []).map((i: any) => new TaskScheduleInterval(i));
+                const schedule = new TaskSchedule(!!t.schedule?.enabled, intervals, !!t.schedule?.runOnBoot);
+
+                const inst = new TaskInstance(finalName, tpl, paramNode, schedule, t.notes || '');
+
+                if (templateKey === 'CustomTask' && t.userScriptBody) {
+                    const scriptDir = '/opt/45drives/houston/scheduler/user_scripts';
+                    const scriptFilePath = `${scriptDir}/${finalName}.sh`;
+                    await runCommand(['mkdir', '-p', scriptDir], { superuser: 'try' });
+                    const scriptFile = new File(server, scriptFilePath);
+                    await unwrap(scriptFile.write(t.userScriptBody, { superuser: 'try' }));
+                    await runCommand(['chmod', '+x', scriptFilePath], { superuser: 'try' });
+                }
+
+                await this.registerTaskInstance(inst);
+                result.imported.push(finalName);
+                existingNames.add(finalName);
+            } catch (e) {
+                result.errors.push(`${t.name}: ${errorString(e)}`);
+            }
+        }
+
+        return result;
     }
 
     async registerTaskInstance(taskInstance: TaskInstance) {
-        validateTaskName(taskInstance.name);
-        // generate env file with key/value pairs (Task Parameters)
         const envKeyValues = taskInstance.parameters.asEnvKeyValues();
-        // console.log('envKeyVals Before Parse:', envKeyValues);
-        const templateName = formatTemplateName(taskInstance.template.name);
-        let scriptPath: string;
+        const templateName = this.normalizeTemplateKey(taskInstance.template.name);
+        let scriptPath = '';
         const envObject = this.parseEnvKeyValues(envKeyValues, templateName);
         envObject['taskName'] = taskInstance.name;
 
-        // console.log('registering task data:', taskInstance);
-        
         if (templateName === 'CustomTask') {
-            const pathParam = taskInstance.parameters.children.find(
-                c => c.key === 'path'
-            );
-            scriptPath =
-                (pathParam as any).value ||
-                '/opt/45drives/houston/scheduler/scripts/undefined.py';
+            const children = taskInstance.parameters?.children;
+            const pathParam = children?.find((child: any) => child.key === 'filePath');
+            const commandParam = children?.find((child: any) => child.key === 'command');
+            const commandValue = commandParam?.value || '';
+
+            if (commandValue && commandValue.includes('\n')) {
+                const scriptDir = '/opt/45drives/houston/scheduler/user_scripts';
+                const scriptFilePath = `${scriptDir}/${taskInstance.name}.sh`;
+
+                await runCommand(['mkdir', '-p', scriptDir], { superuser: 'try' });
+
+                let scriptContent = commandValue;
+                if (!scriptContent.startsWith('#!')) {
+                    scriptContent = '#!/bin/bash\n' + scriptContent;
+                }
+
+                const scriptFile = new File(server, scriptFilePath);
+                await unwrap(scriptFile.write(scriptContent, { superuser: 'try' }));
+                await runCommand(['chmod', '+x', scriptFilePath], { superuser: 'try' });
+
+                envObject['customTaskConfig_filePath'] = scriptFilePath;
+                envObject['customTaskConfig_filePath_flag'] = 'true';
+                envObject['customTaskConfig_command_flag'] = 'false';
+                scriptPath = scriptFilePath;
+            } else {
+                scriptPath = pathParam?.value || '/opt/45drives/houston/scheduler/scripts/undefined.py';
+            }
         } else {
             const scriptFileName = this.getScriptFromTemplateName(templateName);
             scriptPath = `/opt/45drives/houston/scheduler/scripts/${scriptFileName}.py`;
         }
 
-        // Remove empty values from envObject
-        const filteredEnvObject: Record<string, string> = Object.fromEntries(
-            Object.entries(envObject)
-                .filter(([, v]) => v !== '' && v !== '0')
+        if (templateName === 'CloudSyncTask') {
+            envObject['RCLONE_CONFIG'] = '/root/.config/rclone/rclone.conf';
+            envObject['cloudSyncConfig_rclone_config_path'] = '/root/.config/rclone/rclone.conf';
+        }
+
+        const filteredEnvObject = Object.fromEntries(
+            Object.entries(envObject).filter(([_, value]) => value !== '' && value !== 0)
         );
-        // console.log('Filtered envObject:', filteredEnvObject);
 
-        // Convert the parsed envObject back to envKeyValuesString
-        const envKeyValuesString = Object.entries(filteredEnvObject).map(([key, value]) => `${key}=${value}`).join('\n');
+        const envKeyValuesString = Object.entries(filteredEnvObject)
+            .map(([key, value]) => `${key}=${value}`)
+            .join('\n');
+
         const templateTimerPath = `/opt/45drives/houston/scheduler/templates/Schedule.timer`;
-
         const houstonSchedulerPrefix = 'houston_scheduler_';
-        const envFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.env`;
-
-        // console.log('envFilePath:', envFilePath);
-        // console.log('envKeyValuesString:', envKeyValuesString);
-
-        await this.ensureDir('/etc/systemd/system');
+        const baseName = `${houstonSchedulerPrefix}${templateName}_${taskInstance.name}`;
+        const envFilePath = `/etc/systemd/system/${baseName}.env`;
+        const jsonFilePath = `/etc/systemd/system/${baseName}.json`;
+        const notesFilePath = `/etc/systemd/system/${baseName}.txt`;
 
         const envFile = new File(server, envFilePath);
-        await envFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` created ${envFilePath}`),
-                err => console.error(` create file failed:`, err)
-            );
-        await envFile.write(envKeyValuesString, { superuser: 'require' })
-            .match(
-                () => console.log(` wrote env for ${templateName}`),
-                err => console.error(` write env failed:`, err)
-            );
+        await unwrap(envFile.write(envKeyValuesString, { superuser: 'try' }));
+        console.log('env file created and content written successfully');
 
-        const jsonFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.json`;
-        // console.log('jsonFilePath:', jsonFilePath);
+        if (taskInstance.notes !== '') {
+            const notesFile = new File(server, notesFilePath);
+            await unwrap(notesFile.write(taskInstance.notes ?? '', { superuser: 'try' }));
+            console.log('notes file created and content written successfully');
+        }
 
-        //run script to generate notes file
-        // console.log("genrating notes file");
-        const notesFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.txt`;
-        const notes = taskInstance.notes;
-
-        const notesFile = new File(server, notesFilePath);
-        await notesFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` created ${notesFilePath}`),
-                err => console.error(` create notes failed:`, err)
-            );
-        await notesFile.write(notes, { superuser: 'require' })
-            .match(
-                () => console.log(` wrote notes for ${templateName}`),
-                err => console.error(` write notes failed:`, err)
-            );
-
-        //run script to generate service + timer via template, param env and schedule json
         if (taskInstance.schedule.intervals.length < 1) {
-            //ignore schedule for now
             console.log('No schedules found, parameter file generated.');
-
             await createStandaloneTask(templateName, scriptPath, envFilePath);
-
         } else {
-            //generate json file with enabled boolean + intervals (Schedule Intervals)
-            // requires schedule data object
-            console.log('schedule:', taskInstance.schedule);
-
-            const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
             const jsonFile = new File(server, jsonFilePath);
-            // await this.ensureDir('/etc/systemd/system');
-            await jsonFile.create(true, { superuser: 'require' })
-                .match(
-                    () => console.log(` created ${jsonFilePath}`),
-                    err => console.error(` create json failed:`, err)
-                );
-            await jsonFile.write(jsonString, { superuser: 'require' })
-                .match(
-                    () => console.log(` wrote schedule JSON`),
-                    err => console.error(` write schedule JSON failed:`, err)
-                );
-            
+            const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
+            await unwrap(jsonFile.write(jsonString, { superuser: 'try' }));
+            console.log('json file created and content written successfully');
+
+            const envFileForUpdate = new File(server, envFilePath);
+            const envWithSchedulePath = envKeyValuesString + `\nscheduleJsonPath=${jsonFilePath}`;
+            await unwrap(envFileForUpdate.replace(envWithSchedulePath, { superuser: 'try' }));
+
             await createTaskFiles(templateName, scriptPath, envFilePath, templateTimerPath, jsonFilePath);
+
+            if (taskInstance.schedule.enabled) {
+                await runCommand(['systemctl', 'enable', `${baseName}.timer`], { superuser: 'try' });
+                await runCommand(['systemctl', 'start', `${baseName}.timer`], { superuser: 'try' });
+
+                if (taskInstance.schedule.runOnBoot) {
+                    const timerPath = `/etc/systemd/system/${baseName}.timer`;
+                    const timerFile = new File(server, timerPath);
+                    const currentContent = await unwrap(timerFile.read());
+                    const updatedContent = String(currentContent).replace('Persistent=false', 'Persistent=true');
+                    await unwrap(timerFile.replace(updatedContent, { superuser: 'try' }));
+                    await runCommand(['systemctl', 'daemon-reload'], { superuser: 'try' });
+                }
+            }
         }
     }
 
-    async updateTaskInstance(taskInstance: TaskInstance) {
-        validateTaskName(taskInstance.name);
-        //populate data from env file and then delete + recreate task files
+    async updateTaskInstance(taskInstance: TaskInstance, _opts?:{oldName?: string}) {
         const envKeyValues = taskInstance.parameters.asEnvKeyValues();
-      //  console.log('envKeyVals:', envKeyValues);
-        const templateName = formatTemplateName(taskInstance.template.name);
-        let scriptPath: string;
+        const templateName = this.normalizeTemplateKey(taskInstance.template.name);
+
         const envObject = this.parseEnvKeyValues(envKeyValues, templateName);
         envObject['taskName'] = taskInstance.name;
 
+        let scriptPath: string;
         if (templateName === 'CustomTask') {
-            const pathParam = taskInstance.parameters.children.find(
-                c => c.key === 'path'
-            );
-            scriptPath =
-                (pathParam as any).value ||
-                '/opt/45drives/houston/scheduler/scripts/undefined.py';
+            const pathParam = taskInstance.parameters?.children?.find((c: any) => c.key === 'path');
+            scriptPath = pathParam?.value || '/opt/45drives/houston/scheduler/scripts/undefined.py';
         } else {
             const scriptFileName = this.getScriptFromTemplateName(templateName);
             scriptPath = `/opt/45drives/houston/scheduler/scripts/${scriptFileName}.py`;
         }
 
-        // Remove empty values from envObject
-        const filteredEnvObject: Record<string, string> = Object.fromEntries(
-            Object.entries(envObject)
-                .filter(([, v]) => v !== '' && v !== '0')
-        );
-      //  console.log('Filtered envObject:', filteredEnvObject);
+        if (templateName === 'CloudSyncTask') {
+            envObject['RCLONE_CONFIG'] = '/root/.config/rclone/rclone.conf';
+            envObject['cloudSyncConfig_rclone_config_path'] = '/root/.config/rclone/rclone.conf';
+        }
 
-        // Convert the parsed envObject back to envKeyValuesString
-        const envKeyValuesString = Object.entries(filteredEnvObject).map(([key, value]) => `${key}=${value}`).join('\n');
+        const filteredEnvObject = Object.fromEntries(
+            Object.entries(envObject).filter(([_, value]) => value !== '' && value !== 0)
+        );
+
+        const envKeyValuesString = Object.entries(filteredEnvObject)
+            .map(([key, value]) => `${key}=${value}`)
+            .join('\n');
 
         const houstonSchedulerPrefix = 'houston_scheduler_';
-        const envFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.env`;
-
-      //  console.log('envFilePath:', envFilePath);
+        const baseName = `${houstonSchedulerPrefix}${templateName}_${taskInstance.name}`;
+        const envFilePath = `/etc/systemd/system/${baseName}.env`;
 
         const envFile = new File(server, envFilePath);
-        await envFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` recreated ${envFilePath}`),
-                err => console.error(` recreate env failed:`, err)
-            );
-        await envFile.write(envKeyValuesString, { superuser: 'require' })
-            .match(
-                () => console.log(` updated env for ${templateName}`),
-                err => console.error(` update env failed:`, err)
-            );
+        await unwrap(envFile.replace(envKeyValuesString, { superuser: 'try' }));
+        console.log('env file updated successfully');
 
         await createStandaloneTask(templateName, scriptPath, envFilePath);
 
-        // Reload the system daemon
-        let command = ['sudo', 'systemctl', 'daemon-reload'];
-        let state = useSpawn(command, { superuser: 'try' });
-        await state.promise();
+        await runCommand(['systemctl', 'daemon-reload'], { superuser: 'try' });
     }
 
     async updateTaskNotes(taskInstance: TaskInstance) {
-        validateTaskName(taskInstance.name);
-        //populate data from env file and then delete + recreate task files
-        const templateName = formatTemplateName(taskInstance.template.name);
+        const templateName = this.normalizeTemplateKey(taskInstance.template.name);
 
         const houstonSchedulerPrefix = 'houston_scheduler_';
         const notesFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.txt`;
@@ -459,241 +735,422 @@ export class Scheduler implements SchedulerType {
         console.log('notesFilePath:', notesFilePath);
 
         const notesFile = new File(server, notesFilePath);
-        await notesFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` recreated ${notesFilePath}`),
-                err => console.error(` recreate notes failed:`, err)
-            );
-        await notesFile.write(taskInstance.notes, { superuser: 'require' })
-            .match(
-                () => console.log(` updated notes for ${templateName}`),
-                err => console.error(` update notes failed:`, err)
-            );
-
-        // Reload the system daemon
-        let command = ['sudo', 'systemctl', 'daemon-reload'];
-        let state = useSpawn(command, { superuser: 'try' });
-        await state.promise();
+        await unwrap(notesFile.replace(taskInstance.notes ?? '', { superuser: 'try' }));
+        console.log('notes file updated successfully');
     }
 
     async unregisterTaskInstance(taskInstance: TaskInstanceType) {
-        validateTaskName(taskInstance.name);
-        //delete task + associated files
         const houstonSchedulerPrefix = 'houston_scheduler_';
-        const templateName = formatTemplateName(taskInstance.template.name);
+        const templateName = this.normalizeTemplateKey(taskInstance.template.name);
+
         const fullTaskName = `${houstonSchedulerPrefix}${templateName}_${taskInstance.name}`;
         if (taskInstance.schedule.enabled) {
             await this.disableSchedule(taskInstance);
         }
         await removeTask(fullTaskName);
+
+        if (templateName === 'CustomTask') {
+            const userScriptPath = `/opt/45drives/houston/scheduler/user_scripts/${taskInstance.name}.sh`;
+            await runCommand(['rm', '-f', userScriptPath], { superuser: 'try' }).catch(() => {});
+        }
+
         console.log(`${fullTaskName} removed`);
     }
-    
-    async runTaskNow(taskInstance: TaskInstanceType) {
-        validateTaskName(taskInstance.name);
-        //execute service file now
+
+    async runTaskNow(taskInstance: TaskInstanceType): Promise<void> {
         const houstonSchedulerPrefix = 'houston_scheduler_';
-        const templateName = formatTemplateName(taskInstance.template.name);
+        const templateName = this.normalizeTemplateKey(taskInstance.template.name);
+
+        const waitForFinalStatus = async (): Promise<string> => {
+            let finalStatus = 'Unknown';
+
+            while (true) {
+                const status = await this.getServiceStatus(taskInstance);
+                if (status) {
+                    finalStatus = status;
+                }
+
+                if (
+                    status === 'Completed' ||
+                    status === 'Inactive (Disabled)' ||
+                    status === 'Failed'
+                ) {
+                    break;
+                }
+
+                await new Promise(r => setTimeout(r, 1000));
+            }
+
+            return finalStatus;
+        };
+
         const fullTaskName = `${houstonSchedulerPrefix}${templateName}_${taskInstance.name}`;
 
         console.log(`Running ${fullTaskName}...`);
+        try {
+            await runCommand(['systemctl', 'reset-failed', `${fullTaskName}.service`], { superuser: 'try' });
+        } catch {
+            // best-effort
+        }
         await runTask(fullTaskName);
-        console.log(`Task ${fullTaskName} completed.`);
-        // return TaskExecutionResult;
+
+        const finalStatus = await waitForFinalStatus();
+        console.log(`Task ${fullTaskName} completed with status: ${finalStatus}`);
     }
 
-    async getTimerStatus(taskInstance: TaskInstanceType) {
-        const taskLog = new TaskExecutionLog([]);
+    async stopTaskNow(taskInstance: TaskInstanceType) {
+        const templateName = this.normalizeTemplateKey(taskInstance.template.name);
         const houstonSchedulerPrefix = 'houston_scheduler_';
-        const templateName = formatTemplateName(taskInstance.template.name);
-        const fullTaskName = houstonSchedulerPrefix + templateName + '_' + taskInstance.name;
+        const fullTaskName = `${houstonSchedulerPrefix}${templateName}_${taskInstance.name}`;
 
-        try {
-            const command = ['systemctl', 'status', `${fullTaskName}.timer`, '--no-pager', '--output=cat'];
-            const state = useSpawn(command, { superuser: 'try' });
-            const result = await state.promise();
-            const output = result.stdout!;
-
-            return this.parseTaskStatus(output, fullTaskName, taskLog, taskInstance);
-        } catch (error) {
-            console.error(`Error checking timer status:`, error);
-            return 'Error checking timer status';
-        }
+        console.log(`Stopping ${fullTaskName}...`);
+        await stopTask(fullTaskName);
+        console.log(`Task ${fullTaskName} stopped.`);
     }
 
-
-    async getServiceStatus(taskInstance: TaskInstanceType) {
-        const taskLog = new TaskExecutionLog([]);
-        const houstonSchedulerPrefix = 'houston_scheduler_';
-        const templateName = formatTemplateName(taskInstance.template.name);
-        const fullTaskName = houstonSchedulerPrefix + templateName + '_' + taskInstance.name;
-
+    async getTimerStatus(ti: TaskInstanceType): Promise<string | false> {
+        const log = new TaskExecutionLog([]);
+        const unit = await this.unitNameFor(ti);
         try {
-            const command = ['systemctl', 'status', `${fullTaskName}.service`, '--no-pager', '--output=cat'];
-            const state = useSpawn(command, { superuser: 'try' });
-            const result = await state.promise();
-            const output = result.stdout!;
+            const { stdout, stderr, exitStatus } = await runCommand(
+                [
+                    'systemctl', 'show', `${unit}.timer`, '--no-pager',
+                    '--property',
+                    'LoadState,ActiveState,SubState,Result,LastTriggerUSec,LastTrigger,NextElapseUSecRealtime,MergedUnit',
+                ],
+                { superuser: 'try' }
+            );
 
-            // Return the parsed status based on stdout
-            return this.parseTaskStatus(output, fullTaskName, taskLog, taskInstance);
-        } catch (error: any) {
-            // Only log real errors, not status-related cases
-            // console.error(`Error checking service status:`, error);
-            return this.parseTaskStatus(error.stdout || '', fullTaskName, taskLog, taskInstance); // Use error.stdout if available
-        }
-    }
-
-
-
-    async parseTaskStatus(output: string, fullTaskName: string, taskLog: TaskExecutionLog, taskInstance: TaskInstanceType) {
-        try {
-            let status = '';
-            const activeStatusRegex = /^\s*Active:\s*(\w+\s*\([^)]*\))/m;
-            const activeStatusMatch = output.match(activeStatusRegex);
-            const succeededRegex = new RegExp(`${fullTaskName}.service: Succeeded`, 'm');
-
-            if (activeStatusMatch) {
-                const systemdState = activeStatusMatch[1]!.trim();
-
-                // Match the systemctl state to internal task states
-                switch (systemdState) {
-                    case 'activating (start)':
-                        status = 'Starting...';
-                        break;
-                    case 'active (waiting)':
-                        status = 'Active (Pending)';
-                        break;
-                    case 'active (running)':
-                        status = 'Active (Running)';
-                        break;
-                    case 'inactive (dead)':
-                        // Check if the task has succeeded
-                        if (succeededRegex.test(output)) {
-                            status = 'Completed';
-                        } else {
-                            const recentlyCompleted = await taskLog.wasTaskRecentlyCompleted(taskInstance);
-                            status = recentlyCompleted ? 'Completed' : 'Inactive (Disabled)';
-                        }
-                        break;
-                    case 'failed (result)':
-                        status = 'Failed';
-                        break;
-                    default:
-                        status = systemdState;  // Fallback to systemctl state if nothing matches
+            if (exitStatus !== 0) {
+                if (/not found/i.test(stdout) || /not found/i.test(stderr)) {
+                    return this.parseTaskStatus('', unit, log, ti);
                 }
-            } else {
-                // No valid status found
-                status = "Unit inactive or not found.";
+                console.warn(`getTimerStatus(${unit}):`, stderr || stdout);
+                return false;
             }
 
-
-            // console.log(`Status for ${fullTaskName}`, status);
-            return status;
-        } catch (error) {
-            console.error(`Error parsing status for ${fullTaskName}:`, error);
+            return this.parseTaskStatus(stdout || '', unit, log, ti);
+        } catch (e: any) {
+            console.warn(`getTimerStatus(${unit}) error:`, errorString(e));
             return false;
         }
     }
 
+    async getServiceStatus(ti: TaskInstanceType): Promise<string | false> {
+        const log = new TaskExecutionLog([]);
+        const unit = await this.unitNameFor(ti);
+        try {
+            const { stdout, stderr, exitStatus } = await runCommand(
+                [
+                    'systemctl', 'show', `${unit}.service`, '--no-pager',
+                    '--property',
+                    'LoadState,ActiveState,SubState,Result,ActiveEnterTimestampUSec,ActiveEnterTimestamp,ExecMainStartTimestampUSec,ExecMainStartTimestamp,MergedUnit',
+                ],
+                { superuser: 'try' }
+            );
 
-    async enableSchedule(taskInstance: TaskInstance) {
+            if (exitStatus !== 0) {
+                if (/not found/i.test(stdout) || /LoadState=not-found/.test(stdout)) {
+                    return this.parseTaskStatus('', unit, log, ti);
+                }
+                console.warn(`getServiceStatus(${unit}):`, stderr || stdout);
+                return false;
+            }
+
+            return this.parseTaskStatus(stdout || '', unit, log, ti);
+        } catch (e: any) {
+            console.warn(`getServiceStatus(${unit}) error:`, errorString(e));
+            return false;
+        }
+    }
+
+    private parseShow(output: string) {
+        const m = new Map<string, string>();
+        for (const line of (output || '').split(/\r?\n/)) {
+            const i = line.indexOf('=');
+            if (i > 0) m.set(line.slice(0, i), line.slice(i + 1));
+        }
+
+        const num = (k: string) => {
+            const v = m.get(k);
+            const n = v ? Number(v) : NaN;
+            return Number.isFinite(n) && n > 0 ? n : 0;
+        };
+
+        const ts = (numKey: string, strKey: string) => {
+            const u = num(numKey);
+            if (u) return u;
+            const s = m.get(strKey);
+            if (s) {
+                const ms = Date.parse(s);
+                if (Number.isFinite(ms)) return ms * 1000;
+            }
+            return 0;
+        };
+
+        return {
+            load: m.get('LoadState') || '',
+            active: m.get('ActiveState') || '',
+            sub: m.get('SubState') || '',
+            result: m.get('Result') || '',
+            lastTriggerUSec: ts('LastTriggerUSec', 'LastTrigger'),
+            nextElapseUSec: num('NextElapseUSecRealtime'),
+            serviceStartUSec:
+                ts('ExecMainStartTimestampUSec', 'ExecMainStartTimestamp') ||
+                ts('ActiveEnterTimestampUSec', 'ActiveEnterTimestamp'),
+            serviceExitUSec:
+                ts('ExecMainExitTimestampUSec', 'ExecMainExitTimestamp') ||
+                ts('InactiveEnterTimestampUSec', 'InactiveEnterTimestamp'),
+        };
+    }
+
+    private async parseTaskStatus(
+        output: string,
+        unit: string,
+        log: TaskExecutionLog,
+        ti: TaskInstanceType
+    ): Promise<string | false> {
+        try {
+            if (output.includes('ActiveState=')) {
+                const s = this.parseShow(output);
+
+                if (s.active === 'active' && s.sub === 'waiting') return 'Active (Pending)';
+                if (s.active === 'active' && s.sub === 'running') return 'Active (Running)';
+
+                if (s.active === 'inactive' && s.sub === 'dead') {
+                    const hasRun = !!s.serviceStartUSec;
+
+                    if (!hasRun) {
+                        return 'Inactive (Disabled)';
+                    }
+
+                    if (s.result === 'success') {
+                        return 'Completed';
+                    }
+
+                    let recentlyCompleted = false;
+                    try {
+                        recentlyCompleted = await log.wasTaskRecentlyCompleted(ti);
+                    } catch (_) {
+                        // swallow
+                    }
+                    return recentlyCompleted ? 'Completed' : 'Inactive (Disabled)';
+                }
+
+                if (s.active === 'failed' || s.sub === 'failed') return 'Failed';
+                const base = s.active || 'unknown';
+                return s.sub ? `${base} (${s.sub})` : base;
+            }
+
+            const m = output.match(/^\s*Active:\s*([a-z]+)\s*\(([^)]*)\)/im);
+            if (!m) return 'Unit inactive or not found.';
+
+            const stateText = `${m[1]} (${m[2]})`;
+            switch (stateText) {
+                case 'activating (start)': return 'Starting...';
+                case 'active (waiting)': return 'Active (Pending)';
+                case 'active (running)': return 'Active (Running)';
+                case 'inactive (dead)': {
+                    const unitEsc = unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const succeededRegex = new RegExp(`${unitEsc}\\.service: Succeeded`, 'm');
+                    const noJournal = /No journal files were opened|You are currently not seeing messages/.test(output);
+                    if (succeededRegex.test(output)) return 'Completed';
+
+                    let recentlyCompleted = false;
+                    try {
+                        if (!noJournal) {
+                            recentlyCompleted = await log.wasTaskRecentlyCompleted(ti);
+                        }
+                    } catch (_) {
+                        /* swallow */
+                    }
+                    return recentlyCompleted ? 'Completed' : 'Inactive (Disabled)';
+                }
+                default:
+                    return stateText;
+            }
+        } catch (e) {
+            console.error(`Error parsing status for ${unit}:`, e);
+            return false;
+        }
+    }
+
+    async getTaskProgress(taskInstance: TaskInstanceType): Promise<number | null> {
+        const templateName = this.normalizeTemplateKey(taskInstance.template.name);
         const houstonSchedulerPrefix = 'houston_scheduler_';
-        const templateName = formatTemplateName(taskInstance.template.name);
         const fullTaskName = `${houstonSchedulerPrefix}${templateName}_${taskInstance.name}`;
 
-        const timerName = `${fullTaskName}.timer`;
         try {
-            // Reload the system daemon
-            let command = ['sudo', 'systemctl', 'daemon-reload'];
-            let state = useSpawn(command, { superuser: 'try' });
-            await state.promise();
+            const { stdout } = await runCommand(
+                ['systemctl', 'show', `${fullTaskName}.service`, '--property=StatusText', '--value'],
+                { superuser: 'try' }
+            );
+            const txt = (stdout || '').trim();
+            const match = txt.match(/(\d+)%/);
+            return match && match[1] ? parseInt(match[1], 10) : null;
+        } catch {
+            return null;
+        }
+    }
 
-            // Start and Enable the timer
-            command = ['sudo', 'systemctl', 'enable', timerName];
-            state = useSpawn(command, { superuser: 'try' });
-            await state.promise();
+    async enableSchedule(taskInstance: TaskInstanceType): Promise<void> {
+        const houstonSchedulerPrefix = 'houston_scheduler_';
+        const templateName = this.normalizeTemplateKey(taskInstance.template.name);
+        const fullTaskName = `${houstonSchedulerPrefix}${templateName}_${taskInstance.name}`;
+
+        try {
+            const timerName = `${fullTaskName}.timer`;
+
+            await runCommand(['systemctl', 'enable', timerName], { superuser: 'try' });
 
             console.log(`${timerName} has been enabled and started`);
             taskInstance.schedule.enabled = true;
-          //  console.log('taskInstance after enable:', taskInstance);
+
             await this.updateSchedule(taskInstance);
         } catch (error) {
             console.error(errorString(error));
         }
     }
 
-    async disableSchedule(taskInstance: TaskInstance) {
+    async disableSchedule(taskInstance: TaskInstanceType): Promise<void> {
         const houstonSchedulerPrefix = 'houston_scheduler_';
-        const templateName = formatTemplateName(taskInstance.template.name);
+        const templateName = this.normalizeTemplateKey(taskInstance.template.name);
         const fullTaskName = `${houstonSchedulerPrefix}${templateName}_${taskInstance.name}`;
 
-        const timerName = `${fullTaskName}.timer`;
         try {
-            // Reload systemd daemon
-            let reloadCommand = ['sudo', 'systemctl', 'daemon-reload'];
-            let reloadState = useSpawn(reloadCommand, { superuser: 'try' });
-            await reloadState.promise();
+            const timerName = `${fullTaskName}.timer`;
 
-            // Stop and Disable the timer
-            let stopCommand = ['sudo', 'systemctl', 'stop', timerName];
-            let stopState = useSpawn(stopCommand, { superuser: 'try' });
-            await stopState.promise();
+            await runCommand(['systemctl', 'stop', timerName], { superuser: 'try' });
+            await runCommand(['systemctl', 'disable', timerName], { superuser: 'try' });
 
-
-            let disableCommand = ['sudo', 'systemctl', 'disable', timerName];
-            let disableState = useSpawn(disableCommand, { superuser: 'try' });
-            await disableState.promise();
-    
             console.log(`${timerName} has been stopped and disabled`);
             taskInstance.schedule.enabled = false;
-          //  console.log('taskInstance after disable:', taskInstance);
-
 
             await this.updateSchedule(taskInstance);
-
         } catch (error) {
             console.error(errorString(error));
         }
     }
 
-    async updateSchedule(taskInstance: TaskInstance) {
-        const templateName = formatTemplateName(taskInstance.template.name);
+    async updateSchedule(taskInstance: TaskInstanceType) {
+        const templateName = this.normalizeTemplateKey(taskInstance.template.name);
 
         const templateTimerPath = `/opt/45drives/houston/scheduler/templates/Schedule.timer`;
+
         const houstonSchedulerPrefix = 'houston_scheduler_';
         const fullTaskName = `${houstonSchedulerPrefix}${templateName}_${taskInstance.name}`;
         const jsonFilePath = `/etc/systemd/system/${fullTaskName}.json`;
-      //  console.log('jsonFilePath:', jsonFilePath);
-
-        const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
 
         const jsonFile = new File(server, jsonFilePath);
-        await jsonFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` recreated ${jsonFilePath}`),
-                err => console.error(` recreate json failed:`, err)
-            );
-        await jsonFile.write(jsonString, { superuser: 'require' })
-            .match(
-                () => console.log(` updated schedule JSON`),
-                err => console.error(` update JSON failed:`, err)
-            );
+        const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
+        await unwrap(jsonFile.replace(jsonString, { superuser: 'try' }));
+        console.log('json file created and content written successfully');
 
         if (taskInstance.schedule.enabled) {
             await createScheduleForTask(fullTaskName, templateTimerPath, jsonFilePath);
 
-            // Reload the system daemon
-            let command = ['sudo', 'systemctl', 'daemon-reload'];
-            let state = useSpawn(command, { superuser: 'try' });
-            await state.promise();
+            await runCommand(['systemctl', 'daemon-reload'], { superuser: 'try' });
+            await runCommand(['systemctl', 'restart', `${fullTaskName}.timer`], { superuser: 'try' });
 
-            command = ['sudo', 'systemctl', 'restart', fullTaskName + '.timer'];
-            state = useSpawn(command, { superuser: 'try' });
-            await state.promise();
+            if (taskInstance.schedule.runOnBoot) {
+                const timerPath = `/etc/systemd/system/${fullTaskName}.timer`;
+                const timerFile = new File(server, timerPath);
+                const currentContent = await unwrap(timerFile.read());
+                const updatedContent = String(currentContent).replace('Persistent=false', 'Persistent=true');
+                await unwrap(timerFile.replace(updatedContent, { superuser: 'try' }));
+                await runCommand(['systemctl', 'daemon-reload'], { superuser: 'try' });
+            }
         }
     }
 
-    parseIntervalIntoString(interval: TaskScheduleInterval) {
+    async deleteSchedule(taskInstance: TaskInstanceType) {
+        const houstonSchedulerPrefix = 'houston_scheduler_';
+        const templateName = this.normalizeTemplateKey(taskInstance.template.name);
+        const fullTaskName = `${houstonSchedulerPrefix}${templateName}_${taskInstance.name}`;
+
+        const timerUnit = `${fullTaskName}.timer`;
+        const jsonPath = `/etc/systemd/system/${fullTaskName}.json`;
+        const timerPath = `/etc/systemd/system/${timerUnit}`;
+
+        try {
+            await runCommand(['systemctl', 'stop', timerUnit], { superuser: 'try' }).catch(() => { });
+            await runCommand(['systemctl', 'disable', timerUnit], { superuser: 'try' }).catch(() => { });
+
+            await runCommand(['rm', '-f', timerPath], { superuser: 'try' });
+            await runCommand(['rm', '-f', jsonPath], { superuser: 'try' });
+
+            await runCommand(['systemctl', 'reset-failed'], { superuser: 'try' }).catch(() => { });
+            await runCommand(['systemctl', 'daemon-reload'], { superuser: 'try' });
+
+            taskInstance.schedule.enabled = false;
+            taskInstance.schedule.intervals = [];
+
+            console.log(`Schedule removed for ${fullTaskName}`);
+            return true;
+        } catch (e) {
+            console.error(errorString(e));
+            return false;
+        }
+    }
+
+    private migrateEnvRetentionToIntervals(
+        templateKey: string,
+        params: Record<string, any>,
+        schedule: TaskSchedule
+    ): boolean {
+        if (!schedule.intervals.length) return false;
+
+        const anyHasRetention = schedule.intervals.some((iv: any) => iv.retention);
+
+        let hasOldKeys = false;
+        if (templateKey === 'ZfsReplicationTask') {
+            hasOldKeys = (
+                'zfsRepConfig_snapshotRetention_source_retentionTime' in params ||
+                'zfsRepConfig_snapshotRetention_source_retentionUnit' in params ||
+                'zfsRepConfig_snapshotRetention_destination_retentionTime' in params ||
+                'zfsRepConfig_snapshotRetention_destination_retentionUnit' in params
+            );
+        } else if (templateKey === 'AutomatedSnapshotTask') {
+            hasOldKeys = (
+                'autoSnapConfig_snapshotRetention_retentionTime' in params ||
+                'autoSnapConfig_snapshotRetention_retentionUnit' in params
+            );
+        }
+
+        if (!hasOldKeys) return false;
+
+        let srcTime = 0, srcUnit = '', dstTime = 0, dstUnit = '';
+
+        if (templateKey === 'ZfsReplicationTask') {
+            srcTime = parseInt(params['zfsRepConfig_snapshotRetention_source_retentionTime'] || '0', 10);
+            srcUnit = params['zfsRepConfig_snapshotRetention_source_retentionUnit'] || '';
+            dstTime = parseInt(params['zfsRepConfig_snapshotRetention_destination_retentionTime'] || '0', 10);
+            dstUnit = params['zfsRepConfig_snapshotRetention_destination_retentionUnit'] || '';
+        } else if (templateKey === 'AutomatedSnapshotTask') {
+            srcTime = parseInt(params['autoSnapConfig_snapshotRetention_retentionTime'] || '0', 10);
+            srcUnit = params['autoSnapConfig_snapshotRetention_retentionUnit'] || '';
+        }
+
+        if (!anyHasRetention && (srcTime > 0 || dstTime > 0)) {
+            console.log(`[migration] Migrating env retention to per-interval for ${templateKey}`);
+
+            for (const interval of schedule.intervals) {
+                const retention: any = {};
+                if (srcTime > 0) {
+                    retention.source = { retentionTime: srcTime, retentionUnit: srcUnit };
+                }
+                if (dstTime > 0) {
+                    retention.destination = { retentionTime: dstTime, retentionUnit: dstUnit };
+                }
+                (interval as any).retention = retention;
+            }
+        }
+
+        console.log(`[migration] Old retention env keys detected for ${templateKey} — will re-save to remove them`);
+        return true;
+    }
+
+    parseIntervalIntoString(interval: any) {
         const elements: string[] = [];
 
         function getMonthName(number: number) {
@@ -712,7 +1169,7 @@ export class Scheduler implements SchedulerType {
             }
         }
 
-        function formatUnit(value: any, type: any) {
+        function formatUnit(value: string, type: string) {
             if (value === '*') {
                 return type === 'minute' ? 'every minute' :
                     type === 'hour' ? 'every hour' : `every ${type}`;
@@ -740,7 +1197,6 @@ export class Scheduler implements SchedulerType {
         const formattedMinute = interval.minute ? formatUnit(interval.minute.value.toString(), 'minute') : null;
         const formattedHour = interval.hour ? formatUnit(interval.hour.value.toString(), 'hour') : null;
 
-        // Special case for "at midnight"
         if (formattedMinute === null && formattedHour === 'at midnight') {
             elements.push('at midnight');
         } else {
@@ -752,7 +1208,6 @@ export class Scheduler implements SchedulerType {
         const month = interval.month ? formatUnit(interval.month.value.toString(), 'month') : "every month";
         const year = interval.year ? formatUnit(interval.year.value.toString(), 'year') : "every year";
 
-        // Push only non-null values
         if (day) elements.push(day);
         if (month) elements.push(month);
         if (year) elements.push(year)
@@ -762,5 +1217,86 @@ export class Scheduler implements SchedulerType {
         }
 
         return elements.filter(e => e).join(', ');
+    }
+
+    describeInterval(interval: any): string {
+        const v = (k: 'minute' | 'hour' | 'day' | 'month' | 'year') =>
+            interval?.[k]?.value?.toString?.() ?? '*';
+
+        const pad2 = (n: string | number) => String(n).padStart(2, '0');
+        const minute = v('minute'), hour = v('hour'), day = v('day'),
+            month = v('month'), year = v('year');
+
+        const rawDows: any[] = Array.isArray(interval?.dayOfWeek) ? interval.dayOfWeek : [];
+        const toDowIndex = (x: any): number => {
+            if (typeof x === 'number') return x;
+            const s = String(x).trim();
+            if (/^\d+$/.test(s)) { const n = Number(s); return (n >= 0 && n <= 6) ? n : NaN; }
+            const short = s.slice(0, 3).toLowerCase();
+            const map: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+            return map[short] ?? NaN;
+        };
+        const dows: number[] = rawDows.map(toDowIndex).filter((n) => Number.isFinite(n)) as number[];
+
+        const dowName = (n: number) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][n] ?? String(n);
+        const monthName = (m: number) => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
+
+        const isStar = (s: string) => s === '*';
+        const isStep = (s: string) => typeof s === 'string' && s.includes('/');
+        const stepN = (s: string) => (s.split('/')[1] ?? '').trim();
+        const isFixed = (s: string) => !isStar(s) && !isStep(s);
+
+        const hhmm = () =>
+            (hour !== '*' && minute !== '*') ? `${pad2(hour)}:${pad2(minute)}`
+                : (hour !== '*' && minute === '*') ? `${pad2(hour)}:00`
+                    : '';
+
+        if (dows.length) {
+            const when = hhmm();
+            return `Weekly — ${dows.map((d) => dowName(d)).join(', ')}${when ? ` @ ${when}` : ''}`;
+        }
+
+        if (isStar(hour) && /^\*\/\d+$/.test(minute) && isStar(day) && isStar(month)) {
+            return `Hourly — every ${minute.slice(2)} min`;
+        }
+        if (isStep(hour) && isStar(day) && isStar(month)) {
+            const n = stepN(hour);
+            return `Hourly — every ${n} hours${(minute !== '*' && !isStep(minute)) ? ` @ :${pad2(minute)}` : ''}`;
+        }
+        if (isStar(hour) && minute !== '*' && !isStep(minute) && isStar(day) && isStar(month)) {
+            return `Hourly — at :${pad2(minute)}`;
+        }
+
+        if (isFixed(year) && isFixed(month) && isFixed(day)) {
+            const when = hhmm();
+            const start = `${monthName(Number(month))} ${day}, ${year}`;
+            return `Daily — ${when ? `@ ${when} ` : ''}(starts ${start})`;
+        }
+
+        if (!isStar(day) && !isStep(day) && isStar(year)) {
+            const when = hhmm();
+            if (isStep(month)) {
+                return `Monthly — on ${day} every ${stepN(month)} months${when ? ` @ ${when}` : ''}`;
+            }
+            if (!isStar(month)) {
+                return `Monthly — on ${day} in ${monthName(Number(month))}${when ? ` @ ${when}` : ''}`;
+            }
+            return `Monthly — on ${day}${when ? ` @ ${when}` : ''}`;
+        }
+
+        const when = hhmm();
+        if (isStep(day) && isStar(month)) {
+            return `Daily — every ${stepN(day)} days${when ? ` @ ${when}` : ''}`;
+        }
+        if (isStar(day) && isStar(month)) {
+            return `Daily — ${when ? `@ ${when}` : 'any time'}`;
+        }
+
+        if (!isStar(month)) {
+            if (isStep(month)) return `Monthly — every ${stepN(month)} months${when ? ` @ ${when}` : ''}`;
+            return `Monthly — in ${monthName(Number(month))}${when ? ` @ ${when}` : ''}`;
+        }
+
+        return `Daily — ${when ? `@ ${when}` : 'any time'}`;
     }
 }

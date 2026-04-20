@@ -220,31 +220,42 @@ export class Location implements LocationType {
 }
 
 export class LocationParameter extends ParameterNode implements ParameterNodeType {
-    constructor(label: string, key: string, host: string = "", port: number = 0, user: string = "", root: string = "", path: string = "") {
+    constructor(
+        label: string,
+        key: string,
+        host: string = "",
+        port: number = 22,
+        user: string = "",
+        root: string = "",
+        path: string = "",
+        pass: string = ""
+    ) {
         super(label, key);
         this.addChild(new StringParameter("Host", "host", host));
         this.addChild(new IntParameter("Port", "port", port));
         this.addChild(new StringParameter("User", "user", user));
         this.addChild(new StringParameter("Root", "root", root));
         this.addChild(new StringParameter("Path", "path", path));
-    } 
-
-    // Method to create ZfsDatasetParameter from a location
-    static fromLocation(label: string, key: string, location: Location): LocationParameter {
-        const {host, port, user, root, path } = location;
-        return new LocationParameter(label, key, host, port, user, root, path);
+        this.addChild(new StringParameter("Password (optional)", "pass", pass));
     }
 
-    // Method to convert LocationParameter to a location
+    static fromLocation(label: string, key: string, location: Location): LocationParameter {
+        const { host, port, user, root, path } = location;
+        return new LocationParameter(label, key, host, port, user, root, path, "");
+    }
+
     toLocation(): Location {
-        // Children are added in order: host(0), port(1), user(2), root(3), path(4)
         const host = (this.getChild('host') as StringParameter).value;
         const port = (this.getChild('port') as IntParameter).value;
         const user = (this.getChild('user') as StringParameter).value;
         const root = (this.getChild('root') as StringParameter).value;
         const path = (this.getChild('path') as StringParameter).value;
+        return new Location(host, port, user, root, path);
+    }
 
-        return {host, port, user, root, path };
+    getPassword(): string | undefined {
+        const pass = (this.children.find(c => c.key === 'pass') as StringParameter)?.value?.trim();
+        return pass ? pass : undefined;
     }
 
     getChild(key: string): ParameterNode {

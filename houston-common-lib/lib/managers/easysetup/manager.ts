@@ -17,7 +17,6 @@ import {
   BoolParameter,
   IntParameter,
   StringParameter,
-  SnapshotRetentionParameter,
   TaskScheduleInterval,
   SambaShareConfig,
   LocalUser
@@ -829,10 +828,6 @@ fi
         .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
         .addChild(new StringParameter('Custom Name', 'customName', ''))
         .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
-      )
-      .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
-        .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'days'))  // Hourly task keeps snapshots for 1 day
-        .addChild(new SnapshotRetentionParameter('Destination', 'destination', 1, 'days'))  // Hourly task keeps snapshots for 1 day
       );
 
     const hourlyTask = new TaskInstance(
@@ -841,12 +836,16 @@ fi
       hourlyParams,
       new TaskSchedule(true, [
         new TaskScheduleInterval({
-          minute: { value: '0' }, // At 0 minutes
-          hour: { value: '*' }, // Every hour
-          day: { value: '*' }, // Every day
-          month: { value: '*' }, // Every month
-          year: { value: '*' }, // Every year
-        }) // Every hour
+          minute: { value: '0' },
+          hour: { value: '*' },
+          day: { value: '*' },
+          month: { value: '*' },
+          year: { value: '*' },
+          retention: {
+            source: { retentionTime: 1, retentionUnit: 'days' },
+            destination: { retentionTime: 1, retentionUnit: 'days' },
+          },
+        })
       ]),
       'Take snapshots hourly and save for a day.'
     );
@@ -864,10 +863,6 @@ fi
         .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
         .addChild(new StringParameter('Custom Name', 'customName', ''))
         .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
-      )
-      .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
-        .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'weeks'))  // Daily task keeps snapshots for 1 week
-        .addChild(new SnapshotRetentionParameter('Destination', 'destination', 1, 'weeks'))  // Daily task keeps snapshots for 1 week
       );
 
     const dailyTask = new TaskInstance(
@@ -876,12 +871,16 @@ fi
       dailyParams,
       new TaskSchedule(true, [
         new TaskScheduleInterval({
-          minute: { value: '0' }, // At 0 minutes
-          hour: { value: '0' }, // At midnight
-          day: { value: '*' }, // Every day
-          month: { value: '*' }, // Every month
-          year: { value: '*' }, // Every year
-        }) // Daily at midnight
+          minute: { value: '0' },
+          hour: { value: '0' },
+          day: { value: '*' },
+          month: { value: '*' },
+          year: { value: '*' },
+          retention: {
+            source: { retentionTime: 1, retentionUnit: 'weeks' },
+            destination: { retentionTime: 1, retentionUnit: 'weeks' },
+          },
+        })
       ]),
       'Take snapshots daily and save for a week.'
     );
@@ -899,10 +898,6 @@ fi
         .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
         .addChild(new StringParameter('Custom Name', 'customName', ''))
         .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
-      )
-      .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
-        .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'months'))  // Weekly task keeps snapshots for 1 month
-        .addChild(new SnapshotRetentionParameter('Destination', 'destination', 1, 'months'))  // Weekly task keeps snapshots for 1 month
       );
 
     const weeklyTask = new TaskInstance(
@@ -911,13 +906,17 @@ fi
       weeklyParams,
       new TaskSchedule(true, [
         new TaskScheduleInterval({
-          minute: { value: '0' }, // At 0 minutes
-          hour: { value: '0' }, // At midnight
-          day: { value: '*' }, // Every day
-          month: { value: '*' }, // Every month
-          year: { value: '*' }, // Every year
-          dayOfWeek: ['Fri'] // on Friday
-        }) // Weekly on Friday at midnight
+          minute: { value: '0' },
+          hour: { value: '0' },
+          day: { value: '*' },
+          month: { value: '*' },
+          year: { value: '*' },
+          dayOfWeek: ['Fri'],
+          retention: {
+            source: { retentionTime: 1, retentionUnit: 'months' },
+            destination: { retentionTime: 1, retentionUnit: 'months' },
+          },
+        })
       ]),
       'Take snapshots weekly and save for a month.'
     );
@@ -943,8 +942,14 @@ fi
         .addChild(new ZfsDatasetParameter('Filesystem', 'filesystem', '', 0, '', zfsData.pool.name, `${zfsData.pool.name}/${zfsData.dataset.name}`))
         .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
         .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-        .addChild(new StringParameter('Custom Name', 'customName', ''))
-        .addChild(new SnapshotRetentionParameter('Snapshot Retention', 'snapshotRetention', retentionValue, retentionUnit));
+        .addChild(new StringParameter('Custom Name', 'customName', ''));
+
+      // Put retention on each schedule interval instead of in the parameter tree
+      for (const interval of schedule.intervals) {
+        (interval as any).retention = {
+          source: { retentionTime: retentionValue, retentionUnit },
+        };
+      }
 
       return new TaskInstance(
         taskName,

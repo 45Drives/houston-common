@@ -22,6 +22,10 @@ export type TaskScheduleIntervalType = {
     [K in TimeUnit]?: TimeComponentType;
 } & {
     dayOfWeek?: DayOfWeek[];
+    retention?: {
+        source?: { retentionTime: number; retentionUnit: string; };
+        destination?: { retentionTime: number; retentionUnit: string; };
+    };
 };
 
 /**
@@ -29,6 +33,7 @@ export type TaskScheduleIntervalType = {
  */
 export interface TaskScheduleType {
     enabled: boolean;
+    runOnBoot: boolean;
     intervals: TaskScheduleIntervalType[];
 }
 
@@ -60,7 +65,7 @@ export interface TaskTemplateType {
     name: string;
     parameterSchema: ParameterNodeType;
 
-    createTaskInstance(parameters: ParameterNodeType): TaskInstanceType;
+    createTaskInstance(name: string, parameters: ParameterNodeType, schedule: TaskScheduleType, notes?: string): TaskInstanceType;
 }
 
 /**
@@ -72,6 +77,7 @@ export interface TaskInstanceType {
     parameters: ParameterNodeType;
     schedule: TaskScheduleType;
     notes: string;
+    scope?: 'user' | 'system';
 }
 
 /**
@@ -160,8 +166,8 @@ export interface TaskExecutionLogType {
 export interface TaskExecutionResultType {
     exitCode: number;
     output: string;
-    startDate: string;
-    finishDate: string;
+    startDate: string | number;
+    finishDate: string | number;
 }
 
 /**

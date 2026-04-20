@@ -1,6 +1,6 @@
 import { ParameterNode } from "./Parameters";
-import { providerLogos } from './utils/providerLogos';
 import { CloudSyncRemoteType } from './types';
+import { providerLogos } from './utils/providerLogos';
 
 export class CloudSyncProvider {
     name: string;
@@ -23,8 +23,8 @@ export const cloudSyncProviders: { [key: string]: CloudSyncProvider } = {
     "dropbox": new CloudSyncProvider("Dropbox", "dropbox", {
         parameters: {
             token: { value: "", type: 'object', defaultValue: "" },
-            client_id: { value: "", type: 'string', defaultValue: "" },
-            client_secret: { value: "", type: 'string', defaultValue: "" }
+            client_id: { value: "", type: 'string', defaultValue: "Leave blank to use the built-in OAuth client ID." },
+            client_secret: { value: "", type: 'string', defaultValue: "Leave blank to use the built-in OAuth client secret." }
         },
         oAuthSupported: true
     }),
@@ -32,8 +32,8 @@ export const cloudSyncProviders: { [key: string]: CloudSyncProvider } = {
         parameters: {
             token: { value: "", type: 'object', defaultValue: "" },
             scope: { value: "drive", type: 'select', allowedValues: ["drive", "drive.readonly", "drive.file", "drive.appfolder", "drive.metadata.readonly"], defaultValue: "drive" },
-            client_id: { value: "", type: 'string', defaultValue: "" },
-            client_secret: { value: "", type: 'string', defaultValue: "" },
+            client_id: { value: "", type: 'string', defaultValue: "Leave blank to use the built-in OAuth client ID." },
+            client_secret: { value: "", type: 'string', defaultValue: "Leave blank to use the built-in OAuth client secret." },
             root_folder_id: { value: "", type: 'string', defaultValue: "" },
             service_account_file: { value: "", type: 'string', defaultValue: "" }
         },
@@ -42,8 +42,8 @@ export const cloudSyncProviders: { [key: string]: CloudSyncProvider } = {
     "google cloud storage": new CloudSyncProvider("Google Cloud", "google cloud storage", {
         parameters: {
             token: { value: "", type: 'object', defaultValue: "" },
-            client_id: { value: "", type: 'string', defaultValue: "" },
-            client_secret: { value: "", type: 'string', defaultValue: "" },
+            client_id: { value: "", type: 'string', defaultValue: "Leave blank to use the built-in OAuth client ID." },
+            client_secret: { value: "", type: 'string', defaultValue: "Leave blank to use the built-in OAuth client secret." },
             project_number: { value: "", type: 'string', defaultValue: "" },
             service_account_file: { value: "", type: 'string', defaultValue: "" },
             anonymous: { value: false, type: 'bool', defaultValue: false },
@@ -52,15 +52,6 @@ export const cloudSyncProviders: { [key: string]: CloudSyncProvider } = {
         },
         oAuthSupported: true
     }),
-    // "onedrive": new CloudSyncProvider("Microsoft OneDrive", "onedrive", {
-    //     parameters: {
-    //         // token: { value: "", type: 'object', defaultValue: "" },
-    //         client_id: { value: "", type: 'string', defaultValue: "" },
-    //         client_secret: { value: "", type: 'string', defaultValue: "" },
-    //         region: { value: "global", type: 'select', allowedValues: ["global", "us", "de", "cn"], defaultValue: "global" }
-    //     },
-    //     // oAuthSupported: true
-    // }),
     "azureblob": new CloudSyncProvider("Microsoft Azure Blob", "azureblob", {
         parameters: {
             account: { value: "", type: 'string', defaultValue: "" },
@@ -172,7 +163,7 @@ export class CloudSyncRemote extends ParameterNode implements CloudSyncRemoteTyp
 
     getProviderType() {
         if (this.provider.type == 's3') {
-            return `${this.provider.type}-${this.provider.providerParams.parameters.provider!.value}`
+            return `${this.provider.type}-${this.provider.providerParams.parameters.provider?.value}`
         } else {
             return this.provider.type;
         }
@@ -191,16 +182,10 @@ export class CloudSyncRemote extends ParameterNode implements CloudSyncRemoteTyp
 
 // Functions to fetch logo and color
 export function getProviderLogo(selectedProvider?: CloudSyncProvider, selectedRemote?: CloudSyncRemote): string {
-    // console.log('logo selectedProvider:', selectedProvider)
-    // console.log('logo selectedRemote:', selectedRemote)
-
     // Determine the type and provider, using optional chaining to prevent undefined errors
     const type = selectedProvider ? selectedProvider.type : selectedRemote?.type;
     const provider = selectedProvider?.providerParams?.parameters?.provider?.value
         || selectedRemote?.provider?.providerParams?.parameters?.provider?.value;
-    // console.log('logo type:', type);
-    // console.log('logo provider:', provider);
-    
     // Construct the key for providerLogos and return the appropriate logo
     if (type === "s3" && provider) {
         return providerLogos[`${type}-${provider}`]?.logo || "";
@@ -217,9 +202,9 @@ export function getProviderColor(selectedProvider?: CloudSyncProvider, selectedR
         || selectedRemote?.provider?.providerParams?.parameters?.provider?.value;
 
     if (type === "s3" && provider) {
-        return providerLogos[`${type}-${provider}`]?.mainColor!;
+        return providerLogos[`${type}-${provider}`]?.mainColor ?? "#000000";
     } else if (type) {
-        return providerLogos[type]?.mainColor!;
+        return providerLogos[type]?.mainColor ?? "#000000";
     }
     return "#000000"; // Default color
 }
@@ -230,9 +215,9 @@ export function getProviderHoverColor(selectedProvider?: CloudSyncProvider, sele
         || selectedRemote?.provider?.providerParams?.parameters?.provider?.value;
 
     if (type === "s3" && provider) {
-        return providerLogos[`${type}-${provider}`]?.hoverColor!;
+        return providerLogos[`${type}-${provider}`]?.hoverColor ?? "#000000";
     } else if (type) {
-        return providerLogos[type]?.hoverColor!;
+        return providerLogos[type]?.hoverColor ?? "#000000";
     }
     return "#000000"; // Default color
 }
@@ -241,7 +226,6 @@ export function getButtonStyles(hovered: boolean, selectedProvider?: CloudSyncPr
     const mainColor = getProviderColor(selectedProvider, selectedRemote);
     const hoverColor = getProviderHoverColor(selectedProvider, selectedRemote);
 
-    // console.log(`Hovered: ${hovered}, Main Color: ${mainColor}, Hover Color: ${hoverColor}`);
 
     return {
         backgroundColor: hovered ? hoverColor : mainColor,

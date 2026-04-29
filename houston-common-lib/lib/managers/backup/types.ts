@@ -9,8 +9,9 @@ export interface BackUpTask {
   description: string     // Unique description of the task. Also programatically add ID (Houston-backup-task) so we can query
   source: string          // client folder to backup
   target: string          // mount point for backup location(preappened clientID(client hostname))
-  mirror: boolean
+  mirror?: boolean
   uuid: string
+  name?: string           // Optional user-friendly name for the backup task
   status?:
   | 'online'
   | 'offline_unreachable'

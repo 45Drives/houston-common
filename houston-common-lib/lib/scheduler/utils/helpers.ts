@@ -19,6 +19,26 @@ import { DiskData } from "../types";
 
 const { useSpawn, errorString } = legacy;
 
+/**
+ * Validate SSH-related parameters to prevent injection via crafted values.
+ * Rejects values containing shell metacharacters or SSH option flags.
+ */
+const SAFE_SSH_PARAM_RE = /^[a-zA-Z0-9._\-@]+$/;
+function validateSshParam(value: string | undefined, label: string): void {
+  if (value && !SAFE_SSH_PARAM_RE.test(value)) {
+    throw new Error(`Invalid ${label}: "${value}". Contains disallowed characters.`);
+  }
+}
+
+function validatePort(port: any): void {
+  if (port !== undefined && port !== null && port !== '') {
+    const portNum = Number(port);
+    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+      throw new Error(`Invalid port: "${port}". Must be 1-65535.`);
+    }
+  }
+}
+
 export function injectWithCheck<T>(
   key: InjectionKey<T>,
   errorMessage: string
@@ -65,6 +85,9 @@ export async function getPoolData(
 	port?: any,
 	user?: string) {
   try {
+	if (host) validateSshParam(host, "host");
+	if (user) validateSshParam(user, "user");
+	if (port) validatePort(port);
 	const cmd = [
 	  "/usr/bin/env",
 	  "python3",
@@ -115,6 +138,9 @@ export async function getDatasetData(
 	port?: string| number,
 	user?: string) {
   try {
+	if (host) validateSshParam(host, "host");
+	if (user) validateSshParam(user, "user");
+	if (port) validatePort(port);
 	const cmd = [
 	  "/usr/bin/env",
 	  "python3",
@@ -166,8 +192,8 @@ export async function getDatasetData(
 
 export async function testSSH(sshTarget: string) {
   try {
-  //  console.log(`target: ${sshTarget}`);
-	const state = useSpawn(
+    validateSshParam(sshTarget, "SSH target");
+    const state = useSpawn(
 	  ["/usr/bin/env", "python3", "-c", test_ssh_script, sshTarget],
 	  { superuser: "try", err: "out" }
 	);
@@ -188,6 +214,9 @@ export async function testSSH(sshTarget: string) {
 
 export async function testNetcat(user: string, netcatHost: string, port: any) {
 	try {
+	  validateSshParam(user, "user");
+	  validateSshParam(netcatHost, "host");
+	  validatePort(port);
 	  console.log(`target: ${netcatHost}, port: ${port}`);
 	  
 	  // Pass both hostname and port to the Python script
@@ -479,14 +508,19 @@ export async function checkRemotePathExists(remoteName: string, remotePathStr: s
 
 export async function isDatasetEmpty(mountpoint: string, user?: string, host?: string, port?: any) {
 	try {
-		const baseCommand = ['ls', '-la', `/${mountpoint}`,];
+		if (user) validateSshParam(user, "user");
+		if (host) validateSshParam(host, "host");
+		if (port) validatePort(port);
+
+		// Use find to check for any entries (more robust than parsing ls -la output)
+		const baseCommand = ['find', `/${mountpoint}`, '-maxdepth', '1', '-mindepth', '1', '-print', '-quit'];
 		let command: string[] = [];
 
 	if (user && host) {
 	  // Use SSH for remote command
 	  command = ["ssh"];
 	  if (port && port !== "22") {
-		command.push("-p", port);
+		command.push("-p", port.toString());
 	  }
 	  command.push(`${user}@${host}`, ...baseCommand);
 	} else {
@@ -496,21 +530,10 @@ export async function isDatasetEmpty(mountpoint: string, user?: string, host?: s
 
 	const state = useSpawn(command, { superuser: "try" });
 	const output = await state.promise();
-	// console.log(`output:`, output);
-	// return output.stdout;
 
-	// Split the output into lines
-	const lines = output.stdout!.split("\n");
-
-	// Define the regex pattern to match '.' and '..'
-	const pattern =
-	  /^\S+\s+\d+\s+\S+\s+\S+\s+\d+\s+\w+\s+\d+\s+\d+:\d+\s+(\.|\.\.)$/;
-
-	// Check each line for matches
-	const matches = lines.filter((line: string) => pattern.test(line));
-
-	// If we find only '.' and '..', return true (dataset is empty)
-	if (matches.length <= 2) {
+	// If find produced any output, the directory has entries (not empty)
+	const trimmed = output.stdout!.trim();
+	if (trimmed.length === 0) {
 	  console.log(`dataset at /${mountpoint} is empty`);
 	  return true;
 	} else {
@@ -530,6 +553,10 @@ export async function doSnapshotsExist(
 	port?: any
 ): Promise<boolean> {
 	try {
+		if (user) validateSshParam(user, "user");
+		if (host) validateSshParam(host, "host");
+		if (port) validatePort(port);
+
 		const baseCommand = ["zfs", "list", "-H", "-t", "snapshot", filesystem];
 		let command: string[] = [];
 
@@ -537,7 +564,7 @@ export async function doSnapshotsExist(
 			// Use SSH for remote command
 			command = ["ssh"];
 			if (port && port !== "22") {
-				command.push("-p", port);
+				command.push("-p", port.toString());
 			}
 			command.push(`${user}@${host}`, ...baseCommand);
 		} else {

@@ -3,7 +3,7 @@ import { beforeAll, afterAll, afterEach, vi } from 'vitest';
 
 // Global mock setup (example)
 beforeAll(() => {
-  console.log("🔧 Global setup before all tests run");
+  console.log("Global setup before all tests run");
 });
 
 afterEach(() => {

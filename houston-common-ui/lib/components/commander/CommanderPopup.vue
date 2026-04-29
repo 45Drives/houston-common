@@ -9,17 +9,16 @@
             'border-t-[12px] border-t-slate-800/95 -bottom-[12px] border-x-transparent border-l-[12px] border-r-[12px]': props.placement === 'top'
         }" :style="{
         [props.placement === 'top' || props.placement === 'bottom' ? 'left' : 'top']: `${props.arrowOffset}px`,
-        transform: 'translate' + (props.placement === 'top' || props.placement === 'bottom' ? 'X' : 'Y') + '(-50%)'
     }" />
 
         <img :src="houstonPortrait" alt="Houston Portrait"
             class="w-24 h-24 mr-4 rounded-lg object-cover flex-shrink-0" />
 
-        <div class="flex flex-col">
-            <p class="font-mono text-sm text-muted"><i>Houston Commander says:</i></p>
-            <p class="font-mono text-lg flex-1 overflow-auto max-h-[300px] pr-4 whitespace-normal break-words"
-                v-html="displayedText" />
-        </div>
+                <div class="flex flex-col">
+                    <p class="font-mono text-sm text-muted"><i>Houston Commander says:</i></p>
+                    <p class="font-mono text-lg flex-1 overflow-auto max-h-[300px] pr-4 whitespace-pre-wrap break-words"
+                        v-text="displayedText" />
+                </div>
 
         <button
             class="absolute top-2 right-2 text-white text-xl bg-transparent border-none cursor-pointer font-mono hover:text-red-500"
@@ -62,17 +61,8 @@ const typeMessage = async (newMessage: string) => {
 
     let i = 0;
     while (i < newMessage.length) {
-        if (newMessage.substring(i).startsWith('<a')) {
-            const anchorCloseIndex = newMessage.indexOf('</a>', i);
-            if (anchorCloseIndex !== -1) {
-                displayedText.value += newMessage.substring(i, anchorCloseIndex + 4);
-                i = anchorCloseIndex + 4;
-                continue;
-            }
-        }
-
         if (newMessage[i] === '\n') {
-            displayedText.value += '<br/>';
+            displayedText.value += '\n';
         } else {
             displayedText.value += newMessage[i];
             await new Promise(resolve => setTimeout(resolve, 10));
@@ -80,7 +70,6 @@ const typeMessage = async (newMessage: string) => {
 
         i++;
     }
-
     isTyping.value = false;
 };
 

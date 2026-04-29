@@ -17,12 +17,16 @@ If not, see <https://www.gnu.org/licenses/>.
 -->
 
 <script setup lang="ts">
-import { defineProps, defineEmits } from "vue";
 import LoadingSpinner from "@/components/LoadingSpinner.vue";
 import { useGlobalProcessingState } from "@/composables/useGlobalProcessingState";
 import Logo45Drives from "@/components/Logo45Drives.vue";
 
-const props = defineProps<{ moduleName: string }>();
+const props = withDefaults(defineProps<{
+  moduleName: string;
+  compact?: boolean;
+}>(), {
+  compact: false,
+});
 
 const emit = defineEmits<{ clickHome: [] }>();
 
@@ -67,18 +71,23 @@ function vape() {
 
 <template>
   <div
-    class="px-3 sm:px-5 flex items-center bg-plugin-header font-redhat font-normal shadow-lg z-10"
+    class="px-3 sm:px-5 flex items-center bg-plugin-header font-redhat font-normal z-10"
+    :class="compact
+      ? 'shadow-sm border-b border-neutral-200 dark:border-neutral-700'
+      : 'shadow-lg'"
   >
     <div
       class="flex flex-row flex-wrap items-baseline basis-32 grow shrink-0 gap-x-4 content-between"
     >
-      <div class="flex flex-row items-center my-5">
-        <Logo45Drives class="h-6" />
+      <div class="flex flex-row items-center" :class="compact ? 'my-2.5' : 'my-5'">
+        <Logo45Drives :class="compact ? 'h-5' : 'h-6'" />
       </div>
       <slot name="header-left"></slot>
     </div>
     <h1
-      class="text-red-800 dark:text-white text-base sm:text-2xl cursor-pointer grow-0 text-center px-2"
+      :class="compact
+        ? 'text-red-800 dark:text-white text-sm sm:text-lg font-medium cursor-pointer grow-0 text-center px-2'
+        : 'text-red-800 dark:text-white text-base sm:text-2xl cursor-pointer grow-0 text-center px-2'"
       @click="onClickHome"
     >
       {{ moduleName }}

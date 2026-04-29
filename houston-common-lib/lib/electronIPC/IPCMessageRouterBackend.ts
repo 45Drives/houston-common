@@ -11,12 +11,18 @@ export class IPCMessageRouterBackend<
 
     this.webcontents = webcontents;
     
-    // from backend to renderer
-    ipcMain.on("IPCMessage", (_event, message: string) => {
-      if (!isIPCMessage<MessageTypes>(message)) {
+    // Receive messages from both the renderer and the cockpit webview
+    // (both send on the "IPCMessage" channel via their respective preloads)
+    ipcMain.on("IPCMessage", (_event, message: any) => {
+      let parsed = message;
+      try {
+        if (typeof parsed === "string") parsed = JSON.parse(parsed);
+      } catch { /* not JSON — pass through */ }
+
+      if (!isIPCMessage<MessageTypes>(parsed)) {
         return;
       }
-      this.routeMessage(message);
+      this.routeMessage(parsed);
     });
 
   }
@@ -25,7 +31,8 @@ export class IPCMessageRouterBackend<
     T extends keyof MessageTypes,
     TMessage extends IPCMessage<MessageTypes, T>,
   >(_message: TMessage): void {
-    throw new Error("not implemented");
+    // Backend → Backend: message is already here; deliver locally.
+    throw new Error("Cannot forward to backend from backend — use routeMessage directly");
   }
 
   protected forwardToRenderer<
@@ -39,6 +46,7 @@ export class IPCMessageRouterBackend<
     T extends keyof MessageTypes,
     TMessage extends IPCMessage<MessageTypes, T>,
   >(message: TMessage): void {
+    // Route through the renderer process — it will forward to the webview
     this.webcontents.send("IPCMessage", JSON.stringify(message))
   }
 }

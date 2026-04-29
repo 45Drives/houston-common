@@ -127,7 +127,10 @@ export function factory(): IHoustonDriver {
     Process: CockpitProcess,
     downloadCommandOutputURL(server, command, filename) {
       const safeName = filename.replace(/[\r\n"]/g, "_");
-      const encoded = encodeURIComponent(filename);
+      const encoded = encodeURIComponent(filename).replace(
+        /[!'()*]/g,
+        (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`
+      );
     
       // Check the file extension and set the appropriate content type
       const lower = filename.toLowerCase();
@@ -138,8 +141,7 @@ export function factory(): IHoustonDriver {
           ? "application/x-xz"
           : "application/octet-stream";  // Default content type for other file types
     
-      const query = window.btoa(
-        JSON.stringify({
+      const jsonPayload = JSON.stringify({
           ...command.options,
           err: "message",
           host: server.host,
@@ -150,14 +152,17 @@ export function factory(): IHoustonDriver {
             "content-disposition": `attachment; filename="${safeName}"; filename*=UTF-8''${encoded}`,
             "content-type": contentType,  // Set the content type based on file extension
           },
-        })
-      );
+        });
+      const utf8Bytes = new TextEncoder().encode(jsonPayload);
+      let binaryStr = "";
+      for (const byte of utf8Bytes) {
+        binaryStr += String.fromCharCode(byte);
+      }
+      const query = window.btoa(binaryStr);
     
       const prefix = new URL(cockpit.transport.uri("channel/" + cockpit.transport.csrf_token)).pathname;
       return prefix + "?" + query;
-    }
-    
-    ,
+    },
     gettext: cockpit.gettext,
     localStorage: cockpit.localStorage,
     sessionStorage: cockpit.sessionStorage,

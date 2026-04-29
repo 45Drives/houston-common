@@ -40,15 +40,20 @@ class CameraSetpointController {
   private lambda: number;
   private focusPoint: THREE.Vector3;
   private atFocusPointResolver?: () => void;
+  initialViewZoomMargin: number;
+  driveViewZoomMargin: number;
 
   constructor(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
     chassis: THREE.Object3D,
     componentSlots: ServerComponentSlot[],
-    driveOrientation: DriveOrientation
+    driveOrientation: DriveOrientation,
+    opts?: { initialViewZoomMargin?: number; driveViewZoomMargin?: number }
   ) {
     this.lambda = 0.005;
     this.focusPoint = new THREE.Vector3(0, 0, 0);
+    this.initialViewZoomMargin = opts?.initialViewZoomMargin ?? 0.75;
+    this.driveViewZoomMargin = opts?.driveViewZoomMargin ?? 1;
     this.view = "InitialView";
     const views = this.getViews(camera, chassis, componentSlots, driveOrientation);
     this.initialView = views.initialView;
@@ -305,7 +310,7 @@ class CameraSetpointController {
     };
     const position = this.workingVector;
     position.set(2, 2, 2);
-    const initialView: CameraSetPoint = getView(position, 0.75, getFocus(chassis));
+    const initialView: CameraSetPoint = getView(position, this.initialViewZoomMargin, getFocus(chassis));
 
     let driveSlotFocusOn: THREE.Object3D[] = componentSlots
       .filter((slot) => slot instanceof ServerDriveSlot)
@@ -320,12 +325,12 @@ class CameraSetpointController {
     switch (driveOrientation) {
       case "FrontLoader":
         position.set(0, 0, 2);
-        driveView = getView(position, 1, driveFocus);
+        driveView = getView(position, this.driveViewZoomMargin, driveFocus);
         break;
       case "TopLoader":
         position.set(0, 2, 0).add(driveFocus.center);
         position.z += driveFocus.size.z / 2;
-        driveView = getView(position, 1, driveFocus);
+        driveView = getView(position, this.driveViewZoomMargin, driveFocus);
         break;
       default:
         throw new Error(`DriveOrientation not implemented: ${driveOrientation}`);
@@ -713,6 +718,16 @@ export class ServerView extends THREE.EventDispatcher<
       this.cameraSetpointControllerPromise.then((c) =>
         c.updateViews(this.camera, chassis, this.componentSlots, this.driveOrientation)
       );
+    });
+  }
+
+  setZoomMargins(opts: { driveView?: number; initialView?: number }) {
+    this.cameraSetpointControllerPromise.then((c) => {
+      if (opts.driveView !== undefined) c.driveViewZoomMargin = opts.driveView;
+      if (opts.initialView !== undefined) c.initialViewZoomMargin = opts.initialView;
+      this.chassis.then((chassis) => {
+        c.updateViews(this.camera, chassis, this.componentSlots, this.driveOrientation);
+      });
     });
   }
 

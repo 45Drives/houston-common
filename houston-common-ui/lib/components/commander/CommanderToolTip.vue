@@ -124,16 +124,22 @@ const toggleCommander = async () => {
     };
 };
 
+const handleScroll = () => {
+    showCommander.value = false;
+};
+
 onMounted(() => {
     document.addEventListener("closeAllPopups", () => {
         if (!isHovering.value) showCommander.value = false;
     });
+    document.addEventListener("scroll", handleScroll, true);
 });
 
 onUnmounted(() => {
     document.removeEventListener("closeAllPopups", () => {
         if (!isHovering.value) showCommander.value = false;
     });
+    document.removeEventListener("scroll", handleScroll, true);
 });
 
 

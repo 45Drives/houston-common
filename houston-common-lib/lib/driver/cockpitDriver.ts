@@ -43,10 +43,12 @@ export function factory(): IHoustonDriver {
           }
           this.spawnHandle
             .then((stdout, stderr) => {
+              this.spawnHandle = undefined;
               const exitStatus = 0;
               resolve(new ExitedProcess(this.server, this.command, exitStatus, stdout, stderr));
             })
             .catch((ex, stdout) => {
+              this.spawnHandle = undefined;
               if (
                 (ex.problem !== null && ex.problem !== undefined) ||
                 ex.exit_status === null ||

@@ -178,6 +178,10 @@ declare module 'cockpit' {
         readonly unique_name: string;
         readonly options: DBusOptions;
         proxy(interface: string, path: string, options?: { watch?: boolean }): DBusProxy;
+        call(path: string, iface: string, method: string, args?: any[]): Promise<any>;
+        subscribe(match: { interface?: string; member?: string; path?: string }, callback: (path: string, iface: string, signal: string, args: any[]) => void): { remove(): void };
+        addEventListener(event: string, handler: (...args: any[]) => void): void;
+        removeEventListener(event: string, handler: (...args: any[]) => void): void;
         close(): void;
     }
 

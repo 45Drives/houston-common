@@ -159,7 +159,7 @@ const state = {
   state = {
     loading: true,
     argv: [...argv],
-    proc: cockpit.spawn(argv, opts as any),
+    proc: proc,
     stdout: undefined,
     stderr: undefined,
     status: undefined,
@@ -181,10 +181,6 @@ const state = {
     },
   };
 
-  
-  // Assign the proc and _promise to the state
-  state.proc = proc;
-  state._promise = _promise;
   // state = {
   //   loading: true,
   //   argv: [...argv],

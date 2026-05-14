@@ -41,12 +41,15 @@ export function factory(): IHoustonDriver {
           if (this.spawnHandle === undefined) {
             return reject(new ProcessError(this.prefixMessage("Process never started!")));
           }
-          this.spawnHandle
+          const handle = this.spawnHandle;
+          handle
             .then((stdout, stderr) => {
+              if (this.spawnHandle === handle) this.spawnHandle = undefined;
               const exitStatus = 0;
               resolve(new ExitedProcess(this.server, this.command, exitStatus, stdout, stderr));
             })
             .catch((ex, stdout) => {
+              if (this.spawnHandle === handle) this.spawnHandle = undefined;
               if (
                 (ex.problem !== null && ex.problem !== undefined) ||
                 ex.exit_status === null ||

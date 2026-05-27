@@ -280,7 +280,7 @@ export class SambaManagerNet extends SambaManagerBase implements ISambaManager {
   }
 
   private netConfCommand(...args: string[]) {
-    return new Command(["net", "conf", ...args], this.commandOptions);
+    return new Command(["net", "--", "conf", ...args], this.commandOptions);
   }
 
   private listShareNamesCommand() {

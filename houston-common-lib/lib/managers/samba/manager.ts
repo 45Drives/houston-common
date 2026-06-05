@@ -417,36 +417,76 @@ export class SambaManagerNet extends SambaManagerBase implements ISambaManager {
       .andThen((confFile) =>
         confFile.write(
           // remove include = registry or config backend = registry
-          config.replace(/^[ \t]*(include|config backend)[ \t]*=[ \t]*registry.*$\n?/im, "")
+          config.replace(/^[ \t]*(include|config backend)[ \t]*=[ \t]*registry\b.*$\n?/im, "")
         )
       )
       .andThen((confFile) => this.server.execute(this.netConfCommand("import", confFile.path)))
       .map(() => this);
   }
 
-  checkIfSambaConfIncludesRegistry(sambaConfPath: string) {
-    return new File(this.server, sambaConfPath)
-      .assertExists()
-      .andThen((sambaConf) => sambaConf.read())
-      .andThen(IniSyntax({ duplicateKey: "append" }).apply)
-      .map((sambaConf) => [sambaConf.global?.include ?? []].flat().includes("registry"));
+  checkIfSambaConfIncludesRegistry(
+    sambaConfPath: string,
+    server: Server | [Server, ...Server[]] = this.server
+  ) {
+    const servers = [server].flat();
+    return ResultAsync.combine(
+      servers.map((server) => {
+        return new File(server, sambaConfPath)
+          .assertExists()
+          .andThen((sambaConf) =>
+            sambaConf
+              .read()
+              .andThen(IniSyntax({ duplicateKey: "append" }).apply)
+              .map((sambaConf) =>
+                [sambaConf.global?.include ?? [], sambaConf.global?.["config backend"] ?? []]
+                  .flat()
+                  .includes("registry")
+              )
+          )
+          .orElse(() => ok<boolean, ProcessError>(false));
+      })
+    ).map((results) => results.every((r) => r));
   }
 
-  patchSambaConfIncludeRegistry(sambaConfPath: string) {
-    return new File(this.server, sambaConfPath)
-      .assertExists()
-      .andThen((sambaConf) =>
-        sambaConf.replace(
-          (currentConfig) =>
-            currentConfig.replace(
-              // last line of [global] section
-              /^\s*\[ ?global ?\]\s*$(?:\n^(?!;?\s*\[).*$)*/im,
-              "$&\n\t# inclusion of net registry, inserted by cockpit-file-sharing:\n\tinclude = registry\n"
-            ),
-          this.commandOptions
-        )
-      )
-      .map(() => this);
+  patchSambaConfIncludeRegistry(
+    sambaConfPath: string,
+    server: Server | [Server, ...Server[]] = this.server
+  ) {
+    const servers = [server].flat();
+    return ResultAsync.combineWithAllErrors(
+      servers.map((server) => {
+        return new File(server, sambaConfPath)
+          .assertExists()
+          .orElse(() => new File(server, sambaConfPath).create())
+          .andThen((sambaConf) =>
+            sambaConf.replace((currentConfig) => {
+              if (
+                /^[ \t]*(include|config backend)[ \t]*=[ \t]*registry\b.*$\n?/im.test(currentConfig)
+              ) {
+                // already includes registry, do nothing
+                return currentConfig;
+              }
+              if (/^[ \t]*\[ ?global ?\][ \t]*$/im.test(currentConfig)) {
+                // if [global] section exists, add include = registry to it
+                return currentConfig.replace(
+                  /^\s*\[ ?global ?\]\s*$(?:\n^(?!;?\s*\[).*$)*/im,
+                  "$&\n\t# inclusion of net registry, inserted by cockpit-file-sharing:\n\tinclude = registry\n"
+                );
+              } else {
+                // if no [global] section, add one with include = registry at the beginning of the file
+                return `[global]\n\t# inclusion of net registry, inserted by cockpit-file-sharing:\n\tinclude = registry\n\n${currentConfig}`;
+              }
+            }, this.commandOptions)
+          );
+      })
+    )
+      .map(() => this)
+      .mapErr(
+        (errors) =>
+          new ProcessError(
+            `Failed to patch smb.conf to include registry:\n${errors.map((e) => e.message).join(";\n")}`
+          )
+      );
   }
 
   importFromSambaConf(sambaConfPath: string) {

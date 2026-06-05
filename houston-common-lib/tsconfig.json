@@ -1,9 +1,9 @@
 {
 	"compilerOptions": {
-		"target": "ESNext",
+		"target": "ES6",
 		"useDefineForClassFields": true,
-		"module": "ESNext",
-		"moduleResolution": "Node",
+		"module": "esnext",
+		"moduleResolution": "bundler",
 		"lib": [
 			"ESNext",
 			"DOM"
@@ -17,7 +17,6 @@
 		"noUnusedParameters": true,
 		"noImplicitReturns": true,
 		"skipLibCheck": true,
-		"rootDir": ".",
 		"outDir": "dist",
 		"alwaysStrict": true,
 		"strictFunctionTypes": true,
@@ -29,14 +28,12 @@
 		"noFallthroughCasesInSwitch": true,
 		"emitDecoratorMetadata": true,
 		"experimentalDecorators": true,
-		"downlevelIteration": true,
 		"declaration": true,
 		"declarationMap": true,
 		"pretty": true,
 		"allowJs": false,
 		"checkJs": false,
 		"noUncheckedIndexedAccess": true,
-		"baseUrl": ".",
 		"paths": {
 			"@/*": [
 				"./lib/*"
@@ -58,8 +55,8 @@
 	"exclude": [
 		"dist",
 		"node_modules",
-		"tests",
-    "**/*.test.ts",
-    "**/*.spec.ts"
+	// 	"tests",
+    // "**/*.test.ts",
+    // "**/*.spec.ts"
 	]
 }

@@ -1,18 +1,15 @@
+import { type SyntaxParser, IniSyntax, type KeyValueData, type Transformer } from "@/syntax";
 import {
-  type SyntaxParser,
-  IniSyntax,
-  type KeyValueData,
   KVGrabber,
   KVGrabberCollection,
-  StringToIntCaster,
-  IdentityCaster,
   KVRemainderGrabber,
-  type Transformer,
+  StringToIntCaster,
   IntToStringCaster,
   StringToBooleanCaster,
   BooleanToStringCaster,
-  ParsingError,
-} from "@/index";
+  IdentityCaster,
+} from "@/utils";
+import { ParsingError } from "@/errors";
 import { SambaConfig, SambaGlobalConfig, SambaShareConfig } from "./types";
 import { Result, ok, err } from "neverthrow";
 

@@ -1,4 +1,6 @@
-import { BashCommand, Command, ExitedProcess, server, unwrap } from "@/index";
+import { BashCommand, Command, ExitedProcess } from "@/process";
+import { server } from "@/houston";
+import { unwrap } from "@/unwrap";
 import { suite, test, expect } from "vitest";
 
 suite("Process", () => {

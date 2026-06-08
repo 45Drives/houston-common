@@ -33,14 +33,22 @@ export function factory(): IHoustonDriver {
   const cleanup = () => {
     fs.rmSync(tmpdir, { recursive: true, force: true });
   };
-  process.on("exit", cleanup);
+  try {
+    process.on("exit", cleanup);
+  } catch (e) {
+    console.warn(e);
+  }
 
-  if (process.env.NODE_ENV === 'test') {
+  if (process.env.NODE_ENV === "test") {
     // cleanup for tests, for some reason "exit" is never triggered
     import("vitest").then((vitest) => {
-      vitest.afterAll(() => {
-        cleanup();
-      });
+      try {
+        vitest.afterAll(() => {
+          cleanup();
+        });
+      } catch (e) {
+        console.warn(e);
+      }
     });
   }
 

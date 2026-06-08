@@ -401,4 +401,9 @@
 	.feedback-group {
 		@apply mt-2 flex flex-row justify-start items-center space-x-1;
 	}
+
+	/* defaults for elements */
+	a {
+		@apply text-link;
+	}
 }

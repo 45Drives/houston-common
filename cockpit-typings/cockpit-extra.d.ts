@@ -31,8 +31,12 @@ declare module "cockpit" {
   }
 
   interface Spawn<T> extends DeferredPromise<T> {
-    then(callback: (data: T, message: string) => void | PromiseLike<void>): Spawn<T>;
-    catch(callback: (ex: SpawnException, data: T) => void | PromiseLike<void>): Spawn<T>;
+    then(
+      callback: (data: T, message: string) => void | PromiseLike<void>,
+    ): Spawn<T>;
+    catch(
+      callback: (ex: SpawnException, data: T) => void | PromiseLike<void>,
+    ): Spawn<T>;
     close(problem?: string): void;
   }
 

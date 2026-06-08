@@ -82,4 +82,7 @@ declare module "cockpit" {
   interface FileOpenOptions {
     host?: string;
   }
+
+  export const init: () => Promise<void>;
+  export const info: { version: string };
 }

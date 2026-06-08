@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, ref, type Ref } from "vue";
+import { onMounted, onUnmounted, ref, type Ref, computed } from "vue";
 
 const darkModeState = ref(false);
 
@@ -49,7 +49,12 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 setDarkMode();
 
 export function useDarkModeState(): Ref<boolean> {
-  return darkModeState;
+  return computed({
+    get: () => darkModeState.value,
+    set: (value: boolean) => {
+      setDarkMode(value ? "dark" : "light");
+    }
+  });
 }
 
 export function toggleDarkMode() {

@@ -17,7 +17,7 @@ defineProps<{
   >
     <QuestionMarkCircleIcon class="size-icon icon-default" />
     <div
-      class="text-left absolute bg-default shadow-sm border border-default text-muted font-normal whitespace-pre-wrap text-sm rounded-md p-2 z-50 overflow-y-auto max-h-52"
+      class="text-left absolute bg-default shadow-sm border border-default text-muted font-normal whitespace-pre-wrap text-sm rounded-md p-2 z-50 overflow-y-auto max-h-52 w-max max-w-lg"
       :class="{ 'bottom-5': above }"
       v-if="show"
     >

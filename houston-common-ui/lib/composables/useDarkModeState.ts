@@ -8,12 +8,9 @@ function isCockpitStyleValue(value: string | null): value is "auto" | "dark" | "
 
 const setDarkMode = (style?: "auto" | "dark" | "light") => {
   style =
-    style ??
-    (localStorage.getItem("shell:style") as "auto" | "dark" | "light" | null) ??
-    "auto";
+    style ?? (localStorage.getItem("shell:style") as "auto" | "dark" | "light" | null) ?? "auto";
   if (
-    (window.matchMedia?.("(prefers-color-scheme: dark)").matches &&
-      style === "auto") ||
+    (window.matchMedia?.("(prefers-color-scheme: dark)").matches && style === "auto") ||
     style === "dark"
   ) {
     darkModeState.value = true;
@@ -24,16 +21,16 @@ const setDarkMode = (style?: "auto" | "dark" | "light") => {
   }
 };
 
-window.addEventListener("storage", event => {
+window.addEventListener("storage", (event) => {
   if (event.key === "shell:style" && isCockpitStyleValue(event.newValue)) {
-      setDarkMode(event.newValue);
+    setDarkMode(event.newValue);
   }
 });
 
 // When changing the theme from the shell switcher the localstorage change will not fire for the same page (aka shell)
 // so we need to listen for the event on the window object.
-window.addEventListener("cockpit-style", (event)  => {
-  const styleEvent = event as (Event & {detail?: {style?: string}});
+window.addEventListener("cockpit-style", (event) => {
+  const styleEvent = event as Event & { detail?: { style?: string } };
   const style = styleEvent.detail?.style;
   if (style === undefined || !isCockpitStyleValue(style)) {
     return;
@@ -42,7 +39,7 @@ window.addEventListener("cockpit-style", (event)  => {
   setDarkMode(style);
 });
 
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
   setDarkMode();
 });
 
@@ -52,15 +49,24 @@ export function useDarkModeState(): Ref<boolean> {
   return computed({
     get: () => darkModeState.value,
     set: (value: boolean) => {
-      setDarkMode(value ? "dark" : "light");
-    }
+      const newStyle = value ? "dark" : "light";
+      setDarkMode(newStyle);
+      localStorage.setItem("shell:style", newStyle);
+      window.dispatchEvent(
+        new CustomEvent("cockpit-style", {
+          detail: { style: newStyle },
+        })
+      );
+    },
   });
 }
 
 export function toggleDarkMode() {
   const newStyle = darkModeState.value ? "light" : "dark";
   localStorage.setItem("shell:style", newStyle);
-  window.dispatchEvent(new CustomEvent("cockpit-style", {
-    detail: { style: newStyle }
-  }));
+  window.dispatchEvent(
+    new CustomEvent("cockpit-style", {
+      detail: { style: newStyle },
+    })
+  );
 }

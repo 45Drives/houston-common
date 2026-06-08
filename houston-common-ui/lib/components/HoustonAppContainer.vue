@@ -40,9 +40,13 @@ const globalProcessingState = useGlobalProcessingState();
 const darkModeState = useDarkModeState();
 
 const showDarkModeButton = ref(false);
-globalThis.cockpit?.init().then(() => {
+if (globalThis.cockpit?.init) {
+  globalThis.cockpit.init().then(() => {
+    showDarkModeButton.value = parseInt(globalThis.cockpit?.info?.version ?? "0") < 281;
+  });
+} else {
   showDarkModeButton.value = parseInt(globalThis.cockpit?.info?.version ?? "0") < 281;
-})
+}
 </script>
 
 <template>

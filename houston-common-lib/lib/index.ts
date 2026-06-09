@@ -31,6 +31,7 @@ export const HoustonDriver = HoustonDriver_ as Pick<
   "gettext" | "localStorage" | "sessionStorage"
 >;
 
+export * from "@/notification";
 export * from "@/houston";
 export * from "@/syntax";
 export * from "@/utils";

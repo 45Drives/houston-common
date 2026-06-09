@@ -19,3 +19,8 @@ globalThis.onerror = (event) => {
 };
 
 (globalThis as any).reportHoustonError = reportError;
+
+import { Notification, pushNotification } from ".";
+
+globalThis._pushNotificationBackend = (...args: ConstructorParameters<typeof Notification>) =>
+  pushNotification(new Notification(...args));

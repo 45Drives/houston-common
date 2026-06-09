@@ -4,6 +4,7 @@ import { RegexSnippets } from "@/syntax";
 import { safeJsonParse } from "@/utils";
 import { File } from "@/path";
 import { ResultAsync, ok, err, okAsync } from "neverthrow";
+import { pushNotificationBackend } from "@/notification";
 
 export * from "@/server";
 export * from "@/process";
@@ -49,12 +50,12 @@ export function getServerCluster(
 ): ResultAsync<[Server, ...Server[]], ProcessError | ParsingError> {
   const localServerResult = localServer ? okAsync(localServer) : getServer();
   const getServerResults = (): ResultAsync<
-    ResultAsync<Server, ProcessError | ParsingError>[],
+    { host: string; result: ResultAsync<Server, ProcessError | ParsingError> }[],
     ProcessError
   > => {
     switch (scope) {
       case "local":
-        return okAsync([localServerResult]);
+        return okAsync([{ host: "localhost", result: localServerResult }]);
       case "ctdb":
         return localServerResult.andThen((server) => {
           const ctdbNodesFile = new File(server, "/etc/ctdb/nodes");
@@ -65,13 +66,15 @@ export function getServerCluster(
                   .split(RegexSnippets.newlineSplitter)
                   .map((n) => n.trim())
                   .filter((n) => n)
-                  .map((ip) => getServer(ip))
+                  .map((ip) => ({ host: ip, result: getServer(ip) }))
               );
             } else {
               console.warn(
                 "getServerCluster('ctdb'): File not found: /etc/ctdb/nodes. Assuming single-server."
               );
-              return okAsync([okAsync<Server, ProcessError | ParsingError>(server)]);
+              return okAsync([
+                { host: "localhost", result: okAsync<Server, ProcessError | ParsingError>(server) },
+              ]);
             }
           });
         });
@@ -80,15 +83,20 @@ export function getServerCluster(
           const corosyncConfFile = new File(server, "/etc/corosync/corosync.conf");
           return corosyncConfFile.exists().andThen((corosyncConfFileExists) => {
             if (corosyncConfFileExists) {
-              return corosyncConfFile.read({ superuser: "try" }).map((confString) =>
-                _internal.parseCorosyncConfNodeIps(confString)
-                  .map((ip) => getServer(ip))
-              );
+              return corosyncConfFile
+                .read({ superuser: "try" })
+                .map((confString) =>
+                  _internal
+                    .parseCorosyncConfNodeIps(confString)
+                    .map((ip) => ({ host: ip, result: getServer(ip) }))
+                );
             } else {
               console.warn(
                 "getServerCluster('pcs'): File not found: /etc/corosync/corosync.conf. Assuming single-server."
               );
-              return okAsync([okAsync<Server, ProcessError | ParsingError>(server)]);
+              return okAsync([
+                { host: "localhost", result: okAsync<Server, ProcessError | ParsingError>(server) },
+              ]);
             }
           });
         });
@@ -96,23 +104,31 @@ export function getServerCluster(
   };
 
   return getServerResults()
-    .map((serverResults) => Promise.all(serverResults))
-    .map(
-      (serverResults) =>
-        serverResults
-          .map((serverResult) =>
-            serverResult.match(
-              (s) => s,
-              (e) => {
-                globalThis.reportHoustonError(e, `While getting ${scope} cluster hosts:`);
-                return null;
-              }
-            )
+    .map((serverResults) =>
+      Promise.all(serverResults.map(async ({ host, result }) => ({ host, result: await result })))
+    )
+    .map((serverResults) =>
+      serverResults
+        .map(({ host, result: serverResult }) =>
+          serverResult.match(
+            (s) => s,
+            (e) => {
+              pushNotificationBackend(
+                `Cannot access server in ${scope} cluster`,
+                `Host ${host} is unreachable.\nPossible causes: host is down, passwordless ssh is not set up, or network issues.\nFull error message: ${e.message}`,
+                "error",
+                "never"
+              );
+              return null;
+            }
           )
-          .filter((s): s is Server => s !== null)
+        )
+        .filter((s): s is Server => s !== null)
     )
     .andThen((servers) =>
-      servers.length > 0 ? ok(servers as [Server, ...Server[]]) : err(new ProcessError("No acessible servers in cluster."))
+      servers.length > 0
+        ? ok(servers as [Server, ...Server[]])
+        : err(new ProcessError("No acessible servers in cluster."))
     )
     .orElse((e) => {
       globalThis.reportHoustonError(e, "Assuming single server:");

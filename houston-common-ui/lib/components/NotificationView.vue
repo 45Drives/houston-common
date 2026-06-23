@@ -125,7 +125,7 @@ export class Notification {
   }
 }
 
-const notificationList = ref<Notification[]>([]);
+export const notificationList = ref<Notification[]>([]);
 
 /**
  * Push a notification

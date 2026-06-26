@@ -62,13 +62,13 @@ const loadingPercent = ref(0);
 
 const canvasParent = useTemplateRef<HTMLDivElement>("canvasParent");
 
-const selectedDriveSlots = defineModel<DriveSlot[]>("selectedDriveSlots", { default: [] });
+const selectedDriveSlots = defineModel<DriveSlot[]>("selectedDriveSlots", { default: () => [] });
 
-const driveSlots = defineModel<DriveSlot[]>("driveSlots", { default: [] });
+const driveSlots = defineModel<DriveSlot[]>("driveSlots", { default: () => [] });
 
-const modelSupported = defineModel<boolean>("modelSupported", { default: false });
+const modelSupported = defineModel<boolean>("modelSupported", { default: () => false });
 
-const detectedServerModel = defineModel<string>("serverModel", { default: "" });
+const detectedServerModel = defineModel<string>("serverModel", { default: () => "" });
 
 const darkMode = useDarkModeState();
 

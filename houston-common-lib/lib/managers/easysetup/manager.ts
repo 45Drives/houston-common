@@ -57,7 +57,7 @@ export class EasySetupConfigurator {
   constructor() {
     this.sambaManager = new SambaManagerNet();
     this.zfsManager = new ZFSManager();
-    this.commandOptions = { superuser: "try" };
+    this.commandOptions = { superuser: "require" };
   }
 
   private async ensureAdminSession(): Promise<void> {
@@ -485,9 +485,9 @@ fi
 
     // Pools from config (e.g., tank, tank-backup)
     const storageZfsConfig = config.zfsConfigs[0]!;
-    const backupZfsConfig = config.zfsConfigs[1]!;
+    const backupZfsConfig = config.zfsConfigs[1];
     const storagePoolName = storageZfsConfig.pool.name;
-    const backupPoolName = backupZfsConfig.pool.name;
+    const backupPoolName = backupZfsConfig?.pool?.name;
 
     // 1) Enumerate all existing pools
     const allPools = await this.listAllPools();
@@ -526,7 +526,7 @@ fi
     if (allPools.includes(storagePoolName)) {
       console.log(`Verified destruction of storage pool '${storagePoolName}'.`);
     }
-    if (allPools.includes(backupPoolName)) {
+    if (backupPoolName && allPools.includes(backupPoolName)) {
       console.log(`Verified destruction of backup pool '${backupPoolName}'.`);
     }
   }
@@ -1146,6 +1146,9 @@ fi
   }
 
   private withSmbusersSemantics(share: SambaShareConfig): SambaShareConfig {
+    // If per-share valid users were configured in the wizard, preserve them;
+    // otherwise default to the entire smbusers group.
+    const validUsers = share.advancedOptions?.["valid users"] || "@smbusers";
     return {
       ...share,
       // typed boolean that maps to "inherit permissions = yes"
@@ -1153,7 +1156,7 @@ fi
       // free-form samba options live here:
       advancedOptions: {
         ...(share.advancedOptions ?? {}),
-        "valid users": "@smbusers",
+        "valid users": validUsers,
         "inherit acls": "yes",
         "force group": "smbusers",
         "create mask": "0660",

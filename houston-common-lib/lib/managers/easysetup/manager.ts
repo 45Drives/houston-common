@@ -1212,8 +1212,10 @@ fi
 
     // Verify ZFS pools are imported and share paths exist
     const zfsConfigs = config.zfsConfigs ?? [];
-    for (const zfsCfg of zfsConfigs) {
-      const poolName = zfsCfg.pool.name;
+    for (let i = 0; i < zfsConfigs.length; i++) {
+      // Skip the backup pool (index 1) when splitPools is not enabled
+      if (i === 1 && !config.splitPools) continue;
+      const poolName = zfsConfigs[i]!.pool.name;
       if (!await this.poolExists(poolName)) {
         console.error(`[EasySetup] ZFS pool '${poolName}' is not imported after setup!`);
         throw new Error(`ZFS pool '${poolName}' failed to import after creation.`);

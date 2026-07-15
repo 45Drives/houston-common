@@ -12,6 +12,7 @@ export interface BackUpTask {
   mirror?: boolean
   uuid: string
   name?: string           // Optional user-friendly name for the backup task
+  disabled?: boolean      // If true, the task exists but won't run on schedule
   status?:
   | 'online'
   | 'offline_unreachable'

@@ -11,6 +11,8 @@ export type EasySetupConfig = {
   splitPools?: boolean
   serverConfig?: ServerInfoConfig;
   usersAndGroups?: UsersAndGroupsConfig;
+  /** If true, skip destruction of existing ZFS pools and Samba shares (step 3) */
+  skipClearExisting?: boolean;
 };
 
 export type BackupLogEntry = {

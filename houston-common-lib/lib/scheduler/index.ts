@@ -7,3 +7,4 @@ export * from "./Scheduler";
 export * from "./RemoteManager";
 export * from "./Tasks";
 export * from "./TaskLog";
+export * from "./defaultTaskConfigs";

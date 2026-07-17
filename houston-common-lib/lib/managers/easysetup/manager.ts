@@ -11,14 +11,6 @@ import {
   ValueError,
   Scheduler,
   ZFSReplicationTaskTemplate,
-  TaskInstance,
-  ParameterNode,
-  ZfsDatasetParameter,
-  BoolParameter,
-  IntParameter,
-  StringParameter,
-  SnapshotRetentionParameter,
-  TaskScheduleInterval,
   SambaShareConfig,
   LocalUser
 } from "@/index";
@@ -31,7 +23,11 @@ import {
 import { ZFSManager } from "@/index";
 import * as defaultConfigs from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
-import { AutomatedSnapshotTaskTemplate, ScrubTaskTemplate, TaskSchedule } from "@/scheduler";
+import {
+  AutomatedSnapshotTaskTemplate,
+  ScrubTaskTemplate,
+  generateAllDefaultConfigs,
+} from "@/scheduler";
 
 // List of required Samba ports
 const sambaPorts = [
@@ -327,33 +323,27 @@ fi
       new ScrubTaskTemplate(),
     ];
 
-    const taskInstances: TaskInstance[] = [];
-    const myScheduler = new Scheduler(taskTemplates, taskInstances);
+    const myScheduler = new Scheduler(taskTemplates, []);
 
-    if (config.splitPools) {
-      const repTasks = await this.createReplicationTasks(storageZfsConfig, backupZfsConfig);
-      for (const task of repTasks) {
-        taskInstances.push(task);
-        myScheduler.registerTaskInstance(task);
-      }
+    const taskConfig = generateAllDefaultConfigs({
+      splitPools: !!config.splitPools,
+      storagePool: {
+        poolName: storageZfsConfig.pool.name,
+        datasetName: storageZfsConfig.dataset.name,
+      },
+      backupPool: config.splitPools ? {
+        poolName: backupZfsConfig.pool.name,
+        datasetName: backupZfsConfig.dataset.name,
+      } : undefined,
+    });
 
-      const scrubTasks = await this.createScrubTasks(storageZfsConfig, backupZfsConfig);
-      for (const task of scrubTasks) {
-        taskInstances.push(task);
-        myScheduler.registerTaskInstance(task);
-      }
-    } else {
-      const snapTasks = await this.createAutoSnapshotTasks(storageZfsConfig);
-      for (const task of snapTasks) {
-        taskInstances.push(task);
-        myScheduler.registerTaskInstance(task);
-      }
+    const result = await myScheduler.importTasksFromConfig(JSON.stringify(taskConfig));
 
-      const scrubTasks = await this.createScrubTasks(storageZfsConfig);
-      for (const task of scrubTasks) {
-        taskInstances.push(task);
-        myScheduler.registerTaskInstance(task);
-      }
+    if (result.errors.length > 0) {
+      console.error('Task import errors:', result.errors);
+    }
+    if (result.imported.length > 0) {
+      console.log('Tasks imported:', result.imported.join(', '));
     }
   }
 
@@ -807,342 +797,34 @@ fi
           );
         }
       }
-      await this.clearReplicationTasks();
-      await this.clearSnapshotTasks();
-      await this.clearScrubTasks();
+      await this.clearAllSchedulerTasks();
     } else {
-      await this.clearReplicationTasks();
-      await this.clearSnapshotTasks();
-      await this.clearScrubTasks();
+      await this.clearAllSchedulerTasks();
     }
 
   }
 
-  private async clearReplicationTasks() {
-    const scheduler = new Scheduler([new ZFSReplicationTaskTemplate()], []);
+  private async clearAllSchedulerTasks() {
+    const taskTemplates = [
+      new ZFSReplicationTaskTemplate(),
+      new AutomatedSnapshotTaskTemplate(),
+      new ScrubTaskTemplate(),
+    ];
+    const scheduler = new Scheduler(taskTemplates, []);
     await scheduler.loadTaskInstances();
 
-    const replicationTasks = scheduler.taskInstances.filter(
-      task => task.template instanceof ZFSReplicationTaskTemplate
-    );
+    if (scheduler.taskInstances.length === 0) return;
 
-    for (const task of replicationTasks) {
-      try {
-        await scheduler.unregisterTaskInstance(task);
-        // console.log(` Unregistered replication task: ${task.name}`);
-      } catch (error) {
-        console.error(` Failed to unregister task ${task.name}:`, error);
+    const result = await scheduler.batchDeleteTasks(scheduler.taskInstances);
+
+    if (result.deleted.length > 0) {
+      console.log(`Cleared ${result.deleted.length} scheduler tasks: ${result.deleted.join(', ')}`);
+    }
+    if (result.errors.length > 0) {
+      for (const err of result.errors) {
+        console.error(`Failed to unregister task ${err.task}: ${err.error}`);
       }
     }
-  }
-
-  private async clearSnapshotTasks() {
-    const scheduler = new Scheduler([new AutomatedSnapshotTaskTemplate()], []);
-    await scheduler.loadTaskInstances();
-
-    const replicationTasks = scheduler.taskInstances.filter(
-      task => task.template instanceof AutomatedSnapshotTaskTemplate
-    );
-
-    for (const task of replicationTasks) {
-      try {
-        await scheduler.unregisterTaskInstance(task);
-        // console.log(` Unregistered snapshot task: ${task.name}`);
-      } catch (error) {
-        console.error(` Failed to unregister task ${task.name}:`, error);
-      }
-    }
-  }
-
-
-  private async clearScrubTasks() {
-    const scheduler = new Scheduler([new ScrubTaskTemplate()], []);
-    await scheduler.loadTaskInstances();
-
-    const scrubTasks = scheduler.taskInstances.filter(
-      task => task.template instanceof ScrubTaskTemplate
-    );
-
-    for (const task of scrubTasks) {
-      try {
-        await scheduler.unregisterTaskInstance(task);
-        console.log(` Unregistered scrub task: ${task.name}`);
-      } catch (error) {
-        console.error(` Failed to unregister task ${task.name}:`, error);
-      }
-    }
-  }
-
-  private async createReplicationTasks(sourceData: ZFSConfig, destData: ZFSConfig): Promise<TaskInstance[]> {
-    const tasks: TaskInstance[] = []
-
-    // Create HourlyForADay Task
-    const hourlyParams = new ParameterNode("ZFS Replication Task Config", "zfsRepConfig")
-      .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
-      .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, `${destData.pool.name}/${destData.dataset.name}`))
-      .addChild(new ParameterNode('Send Options', 'sendOptions')
-        .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
-        .addChild(new BoolParameter('Raw', 'raw_flag', false))
-        .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
-        .addChild(new IntParameter('MBuffer Size', 'mbufferSize', 1))
-        .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
-        .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-        .addChild(new StringParameter('Custom Name', 'customName', ''))
-        .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
-      )
-      .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
-        .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'days'))  // Hourly task keeps snapshots for 1 day
-        .addChild(new SnapshotRetentionParameter('Destination', 'destination', 1, 'days'))  // Hourly task keeps snapshots for 1 day
-      );
-
-    const hourlyTask = new TaskInstance(
-      'ActiveBackup_HourlyForADay',
-      new ZFSReplicationTaskTemplate(),
-      hourlyParams,
-      new TaskSchedule(true, [
-        new TaskScheduleInterval({
-          minute: { value: '0' }, // At 0 minutes
-          hour: { value: '*' }, // Every hour
-          day: { value: '*' }, // Every day
-          month: { value: '*' }, // Every month
-          year: { value: '*' }, // Every year
-        }) // Every hour
-      ]),
-      'Take snapshots hourly and save for a day.'
-    );
-
-    // Create DailyForAWeek Task
-    const dailyParams = new ParameterNode("ZFS Replication Task Config", "zfsRepConfig")
-      .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
-      .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, `${destData.pool.name}/${destData.dataset.name}`))
-      .addChild(new ParameterNode('Send Options', 'sendOptions')
-        .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
-        .addChild(new BoolParameter('Raw', 'raw_flag', false))
-        .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
-        .addChild(new IntParameter('MBuffer Size', 'mbufferSize', 1))
-        .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
-        .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-        .addChild(new StringParameter('Custom Name', 'customName', ''))
-        .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
-      )
-      .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
-        .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'weeks'))  // Daily task keeps snapshots for 1 week
-        .addChild(new SnapshotRetentionParameter('Destination', 'destination', 1, 'weeks'))  // Daily task keeps snapshots for 1 week
-      );
-
-    const dailyTask = new TaskInstance(
-      'ActiveBackup_DailyForAWeek',
-      new ZFSReplicationTaskTemplate(),
-      dailyParams,
-      new TaskSchedule(true, [
-        new TaskScheduleInterval({
-          minute: { value: '0' }, // At 0 minutes
-          hour: { value: '0' }, // At midnight
-          day: { value: '*' }, // Every day
-          month: { value: '*' }, // Every month
-          year: { value: '*' }, // Every year
-        }) // Daily at midnight
-      ]),
-      'Take snapshots daily and save for a week.'
-    );
-
-    // Create WeeklyForAMonth Task
-    const weeklyParams = new ParameterNode("ZFS Replication Task Config", "zfsRepConfig")
-      .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
-      .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, `${destData.pool.name}/${destData.dataset.name}`))
-      .addChild(new ParameterNode('Send Options', 'sendOptions')
-        .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
-        .addChild(new BoolParameter('Raw', 'raw_flag', false))
-        .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
-        .addChild(new IntParameter('MBuffer Size', 'mbufferSize', 1))
-        .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
-        .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-        .addChild(new StringParameter('Custom Name', 'customName', ''))
-        .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
-      )
-      .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
-        .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'months'))  // Weekly task keeps snapshots for 1 month
-        .addChild(new SnapshotRetentionParameter('Destination', 'destination', 1, 'months'))  // Weekly task keeps snapshots for 1 month
-      );
-
-    const weeklyTask = new TaskInstance(
-      'ActiveBackup_WeeklyForAMonth',
-      new ZFSReplicationTaskTemplate(),
-      weeklyParams,
-      new TaskSchedule(true, [
-        new TaskScheduleInterval({
-          minute: { value: '0' }, // At 0 minutes
-          hour: { value: '0' }, // At midnight
-          day: { value: '*' }, // Every day
-          month: { value: '*' }, // Every month
-          year: { value: '*' }, // Every year
-          dayOfWeek: ['Fri'] // on Friday
-        }) // Weekly on Friday at midnight
-      ]),
-      'Take snapshots weekly and save for a month.'
-    );
-
-    // Push all tasks to the array
-    tasks.push(hourlyTask, dailyTask, weeklyTask);
-    // console.log('tasks:', tasks);
-    return tasks;
-  }
-
-  private async createAutoSnapshotTasks(zfsData: ZFSConfig): Promise<TaskInstance[]> {
-    //  .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
-    const tasks: TaskInstance[] = [];
-
-    const baseParams = (
-      retentionValue: number,
-      retentionUnit: 'days' | 'weeks' | 'months',
-      taskName: string,
-      schedule: TaskSchedule,
-      notes: string
-    ): TaskInstance => {
-      const autoSnapParams = new ParameterNode("Automated Snapshot Task Config", "autoSnapConfig")
-        .addChild(new ZfsDatasetParameter('Filesystem', 'filesystem', '', 0, '', zfsData.pool.name, `${zfsData.pool.name}/${zfsData.dataset.name}`))
-        .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
-        .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-        .addChild(new StringParameter('Custom Name', 'customName', ''))
-        .addChild(new SnapshotRetentionParameter('Snapshot Retention', 'snapshotRetention', retentionValue, retentionUnit));
-
-      return new TaskInstance(
-        taskName,
-        new AutomatedSnapshotTaskTemplate(),
-        autoSnapParams,
-        schedule,
-        notes
-      );
-    };
-
-    // Hourly snapshots retained for 1 day
-    const hourlySchedule = new TaskSchedule(true, [
-      new TaskScheduleInterval({
-        minute: { value: '0' },
-        hour: { value: '*' },
-        day: { value: '*' },
-        month: { value: '*' },
-        year: { value: '*' },
-      }),
-    ]);
-    const hourlyTask = baseParams(
-      1,
-      'days',
-      'AutoSnapshot_HourlyForADay',
-      hourlySchedule,
-      'Take snapshots every hour and keep them for 1 day.'
-    );
-
-    // Daily snapshots retained for 1 week
-    const dailySchedule = new TaskSchedule(true, [
-      new TaskScheduleInterval({
-        minute: { value: '0' },
-        hour: { value: '0' },
-        day: { value: '*' },
-        month: { value: '*' },
-        year: { value: '*' },
-      }),
-    ]);
-    const dailyTask = baseParams(
-      1,
-      'weeks',
-      'AutoSnapshot_DailyForAWeek',
-      dailySchedule,
-      'Take snapshots daily and keep them for 1 week.'
-    );
-
-    // Weekly snapshots retained for 1 month (on Fridays at midnight)
-    const weeklySchedule = new TaskSchedule(true, [
-      new TaskScheduleInterval({
-        minute: { value: '0' },
-        hour: { value: '0' },
-        day: { value: '*' },
-        month: { value: '*' },
-        year: { value: '*' },
-        dayOfWeek: ['Fri'],
-      }),
-    ]);
-    const weeklyTask = baseParams(
-      1,
-      'months',
-      'AutoSnapshot_WeeklyForAMonth',
-      weeklySchedule,
-      'Take snapshots every Friday and keep them for 1 month.'
-    );
-
-    tasks.push(hourlyTask, dailyTask, weeklyTask);
-    // console.log('autoSnapshotTasks:', tasks);
-    return tasks;
-  }
-
-  private async createScrubTasks(zfsData: ZFSConfig, backupZfsData?: ZFSConfig) {
-    const tasks: TaskInstance[] = [];
-
-    const baseParams = (
-      taskName: string,
-      schedule: TaskSchedule,
-      notes: string
-    ): TaskInstance => {
-      const scrubParams = new ParameterNode('Scrub Task Config', 'scrubConfig')
-        .addChild(new ZfsDatasetParameter('Pool', 'pool', '', 0, '', zfsData.pool.name, `${zfsData.pool.name}`))
-
-      return new TaskInstance(
-        taskName,
-        new ScrubTaskTemplate(),
-        scrubParams,
-        schedule,
-        notes
-      );
-    };
-
-    //  Weekly snapshots retained for 1 month (on Fridays at midnight)
-    const weeklySchedule = new TaskSchedule(true, [
-      new TaskScheduleInterval({
-        minute: { value: '0' },
-        hour: { value: '0' },
-        day: { value: '*' },
-        month: { value: '*' },
-        year: { value: '*' },
-        dayOfWeek: ['Fri'],
-      }),
-    ]);
-    const weeklyScrub = baseParams(
-      'WeeklyScrub',
-      weeklySchedule,
-      'Scrub storage pool weekly to ensure data integrity.'
-    );
-
-    tasks.push(weeklyScrub);
-
-    if (backupZfsData) {
-      const baseParams = (
-        taskName: string,
-        schedule: TaskSchedule,
-        notes: string
-      ): TaskInstance => {
-        const scrubParams = new ParameterNode('Scrub Task Config', 'scrubConfig')
-          .addChild(new ZfsDatasetParameter('Pool', 'pool', '', 0, '', backupZfsData.pool.name, `${backupZfsData.pool.name}`))
-
-        return new TaskInstance(
-          taskName,
-          new ScrubTaskTemplate(),
-          scrubParams,
-          schedule,
-          notes
-        );
-      };
-
-      const weeklyBackupScrub = baseParams(
-        'WeeklyScrub-Backup',
-        weeklySchedule,
-        'Scrub backup pool weekly to ensure data integrity.'
-      );
-
-      tasks.push(weeklyBackupScrub);
-    }
-
-    // console.log('scrubtasks:', tasks);
-    return tasks;
   }
 
   private withSmbusersSemantics(share: SambaShareConfig): SambaShareConfig {

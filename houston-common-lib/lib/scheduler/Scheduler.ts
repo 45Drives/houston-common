@@ -693,6 +693,91 @@ export class Scheduler implements SchedulerType {
         }
     }
 
+    /**
+     * Batch delete multiple tasks. Sequentially stops and unregisters each task,
+     * collecting results. Continues on individual failures.
+     */
+    async batchDeleteTasks(
+        tasks: TaskInstanceType[]
+    ): Promise<{ deleted: string[]; errors: { task: string; error: string }[] }> {
+        const result = { deleted: [] as string[], errors: [] as { task: string; error: string }[] };
+
+        for (const task of tasks) {
+            try {
+                await this.unregisterTaskInstance(task);
+                result.deleted.push(task.name);
+            } catch (e: any) {
+                result.errors.push({
+                    task: task.name,
+                    error: e?.message ?? String(e),
+                });
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Import tasks from a JSON config string. Creates and registers each task.
+     * Config format: { tasks: [{ name, template, parameters, schedule, notes }] }
+     * Returns import results.
+     */
+    async importTasksFromConfig(
+        jsonString: string
+    ): Promise<{ imported: string[]; errors: string[] }> {
+        const result = { imported: [] as string[], errors: [] as string[] };
+
+        let data: any;
+        try {
+            data = JSON.parse(jsonString);
+        } catch {
+            result.errors.push('Invalid JSON config.');
+            return result;
+        }
+
+        const tasks = data?.tasks;
+        if (!Array.isArray(tasks)) {
+            result.errors.push('No tasks array found in config.');
+            return result;
+        }
+
+        for (const t of tasks) {
+            try {
+                if (!t?.name || !t?.template) {
+                    result.errors.push('Skipped invalid entry (missing name or template).');
+                    continue;
+                }
+
+                const templateKey = formatTemplateName(t.template);
+                let tpl: any;
+                switch (templateKey) {
+                    case 'ZfsReplicationTask': tpl = new ZFSReplicationTaskTemplate(); break;
+                    case 'AutomatedSnapshotTask': tpl = new AutomatedSnapshotTaskTemplate(); break;
+                    case 'RsyncTask': tpl = new RsyncTaskTemplate(); break;
+                    case 'ScrubTask': tpl = new ScrubTaskTemplate(); break;
+                    case 'SmartTest': tpl = new SmartTestTemplate(); break;
+                    case 'CloudSyncTask': tpl = new CloudSyncTaskTemplate(); break;
+                    case 'CustomTask': tpl = new CustomTaskTemplate(); break;
+                    default:
+                        result.errors.push(`${t.name}: Unknown template "${t.template}".`);
+                        continue;
+                }
+
+                const paramNode = this.createParameterNodeFromSchema(tpl.parameterSchema, t.parameters || {});
+                const intervals = (t.schedule?.intervals || []).map((i: any) => new TaskScheduleInterval(i));
+                const schedule = new TaskSchedule(!!t.schedule?.enabled, intervals);
+
+                const inst = new TaskInstance(t.name, tpl, paramNode, schedule, t.notes || '');
+                await this.registerTaskInstance(inst);
+                result.imported.push(t.name);
+            } catch (e: any) {
+                result.errors.push(`${t.name}: ${e?.message ?? String(e)}`);
+            }
+        }
+
+        return result;
+    }
+
     parseIntervalIntoString(interval: TaskScheduleInterval) {
         const elements: string[] = [];
 

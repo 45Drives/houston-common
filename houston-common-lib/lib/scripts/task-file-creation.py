@@ -4,8 +4,32 @@ import argparse
 import json
 import os
 import logging
+import configparser
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+SCHEDULER_CONF_PATH = "/opt/45drives/houston/scheduler/scheduler.conf"
+
+RETRY_DEFAULTS = {
+    "restart_sec": 5,
+    "start_limit_burst": 3,
+}
+
+
+def get_retry_settings():
+    """Read retry settings from scheduler.conf, falling back to defaults.
+    StartLimitIntervalSec is auto-calculated to always be large enough."""
+    config = configparser.ConfigParser()
+    if os.path.exists(SCHEDULER_CONF_PATH):
+        config.read(SCHEDULER_CONF_PATH)
+    restart_sec = config.getint("retry", "restart_sec", fallback=RETRY_DEFAULTS["restart_sec"])
+    start_limit_burst = config.getint("retry", "start_limit_burst", fallback=RETRY_DEFAULTS["start_limit_burst"])
+    start_limit_interval_sec = (start_limit_burst + 1) * restart_sec
+    return {
+        "restart_sec": restart_sec,
+        "start_limit_burst": start_limit_burst,
+        "start_limit_interval_sec": start_limit_interval_sec,
+    }
 
 def read_template_file(template_file_path):
     logging.debug(f'Reading template file: {template_file_path}')
@@ -18,16 +42,23 @@ def parse_env_file(parameter_env_file_path):
     logging.debug(f'Parsing env file: {parameter_env_file_path}')
     parameters = {}
     with open(parameter_env_file_path, "r") as f:
-        for line in f:
-            key, value = line.strip().split('=')
+        for raw in f:
+            line = raw.strip()
+            # skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
+            if '=' not in line:
+                logging.warning(f"Skipping malformed env line (no '='): {line!r}")
+                continue
+            key, value = line.split('=', 1)
             parameters[key] = value
         
     logging.debug('Env file parsed successfully')
     return parameters
 
 def generate_exec_start(templateName, parameters, scriptPath):
-    base_python_command = f"python3 {scriptPath}"
-    custom_task_wrapper = "python3 /opt/45drives/houston/scheduler/scripts/run-custom-task.py"
+    base_python_command = f"python3 -u {scriptPath}"
+    custom_task_wrapper = "python3 -u /opt/45drives/houston/scheduler/scripts/run-custom-task.py"
     
     if(templateName=="CustomTask"):
         file_path = parameters.get('customTaskConfig_filePath', '')
@@ -155,7 +186,20 @@ def create_task(template_name, script_path, param_env_path):
     exec_start_command = generate_exec_start(template_name, parameters, script_path)
     service_template_content = service_template_content.replace("{task_name}", task_instance_name)
     service_template_content = service_template_content.replace("{env_path}", param_env_path)
-    service_template_content = service_template_content.replace("{ExecStart}", exec_start_command)
+    # Wrap with flock to prevent concurrent runs of the same task
+    locked_exec = (
+        "/bin/sh -c 'exec 9>/run/%n.lock && flock -n 9 || "
+        '{ echo "Already running, skipping." >&2; '
+        'systemd-notify --status="Skipped: previous run still active" 2>/dev/null; '
+        "exit 0; }; exec " + exec_start_command + "'"
+    )
+    service_template_content = service_template_content.replace("{ExecStart}", locked_exec)
+
+    # Apply retry settings from global config
+    retry = get_retry_settings()
+    service_template_content = service_template_content.replace("{restart_sec}", str(retry["restart_sec"]))
+    service_template_content = service_template_content.replace("{start_limit_burst}", str(retry["start_limit_burst"]))
+    service_template_content = service_template_content.replace("{start_limit_interval_sec}", str(retry["start_limit_interval_sec"]))
     
     generate_concrete_file(service_template_content, output_path_service)
     logging.debug("Standalone concrete service file generated successfully.")

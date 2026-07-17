@@ -276,6 +276,8 @@ export class Scheduler implements SchedulerType {
                 return 'autosnap-script';
             case 'RsyncTask':
                 return 'rsync-script';
+            case 'ScrubTask':
+                return 'scrub-script';
             case 'SmartTest':
                 return 'smart-test-script';
             case 'CloudSyncTask':

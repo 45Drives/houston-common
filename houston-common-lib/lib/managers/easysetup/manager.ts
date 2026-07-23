@@ -122,8 +122,12 @@ export class EasySetupConfigurator {
       await this.applyServerConfig(config);
 
       report(3, "Clearing any existing ZFS and Samba data...");
-      await this.deleteZFSPoolAndSMBShares(config);
-
+      if (config.skipClearExisting) {
+        console.log("[EasySetup] Skipping pool/share destruction (skipClearExisting=true)");
+      } else {
+        await this.deleteZFSPoolAndSMBShares(config);
+      }
+      
       report(4, "Updating Server Name (if changed)...");
       await this.updateHostname(config);
 

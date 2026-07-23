@@ -127,7 +127,7 @@ export class EasySetupConfigurator {
       } else {
         await this.deleteZFSPoolAndSMBShares(config);
       }
-      
+
       report(4, "Updating Server Name (if changed)...");
       await this.updateHostname(config);
 
@@ -766,6 +766,19 @@ fi
   private async applyZFSConfig(config: EasySetupConfig) {
     let storageZfsConfig = config!.zfsConfigs![0];
     let backupZfsConfig = config!.zfsConfigs![1];
+
+    // Guard: splitPools requires more than 4 disks total
+    if (config.splitPools) {
+      const totalDisks = storageZfsConfig!.pool.vdevs.reduce(
+        (sum, v) => sum + v.disks.length, 0
+      ) + (backupZfsConfig?.pool.vdevs.reduce(
+        (sum, v) => sum + v.disks.length, 0
+      ) ?? 0);
+      if (totalDisks <= 4) {
+        console.warn(`[EasySetup] splitPools disabled: only ${totalDisks} disks (need more than 4)`);
+        config.splitPools = false;
+      }
+    }
 
     await this.zfsManager.createPool(storageZfsConfig!.pool, storageZfsConfig!.poolOptions);
     await this.zfsManager.addDataset(

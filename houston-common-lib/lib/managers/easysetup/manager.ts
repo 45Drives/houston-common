@@ -925,9 +925,10 @@ fi
   private async verifyPostSetup(config: EasySetupConfig) {
     const distro = await this.getLinuxDistro();
     const sambaServices = distro === "ubuntu" ? ["smbd"] : ["smb"];
+    const criticalServices = [...sambaServices, "houston-broadcaster"];
 
-    // Verify samba services are active
-    for (const svc of sambaServices) {
+    // Verify critical services are active
+    for (const svc of criticalServices) {
       try {
         const result = await unwrap(
           server.execute(new Command(["systemctl", "is-active", svc], this.commandOptions), true)
@@ -935,13 +936,13 @@ fi
         const status = new TextDecoder().decode(result.stdout).trim();
         if (status !== "active") {
           console.error(`[EasySetup] Service ${svc} is not active (status: ${status}), attempting restart...`);
-          await unwrap(server.execute(new Command(["systemctl", "restart", svc], this.commandOptions)));
+          await unwrap(server.execute(new Command(["systemctl", "enable", "--now", svc], this.commandOptions)));
         }
       } catch (err) {
         console.error(`[EasySetup] Service ${svc} verification failed:`, err);
         // Attempt recovery
         try {
-          await unwrap(server.execute(new Command(["systemctl", "restart", svc], this.commandOptions)));
+          await unwrap(server.execute(new Command(["systemctl", "enable", "--now", svc], this.commandOptions)));
           console.log(`[EasySetup] Service ${svc} recovered after restart.`);
         } catch (restartErr) {
           console.error(`[EasySetup] Service ${svc} could not be recovered:`, restartErr);

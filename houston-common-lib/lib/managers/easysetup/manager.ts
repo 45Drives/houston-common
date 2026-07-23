@@ -460,7 +460,10 @@ fi
     }
 
     console.log(`Unmounting and destroying ${poolName}...`);
-    await this.stopSambaIfRunning();
+    await this.stopServicesUsingPool();
+
+    // Kill any processes using the pool mountpoint (lsof/fuser)
+    await this.killProcessesOnMount(poolPath);
 
     await this.tryDestroyPoolWithRetries(poolName);
 
@@ -526,14 +529,46 @@ fi
   }
 
 
-  private async stopSambaIfRunning() {
+  /**
+   * Stop services that may hold open files on pool mountpoints.
+   */
+  private async stopServicesUsingPool() {
     const distro = await this.getLinuxDistro();
-    const services = (distro === "ubuntu") ? ["smbd", "nmbd"] : ["smb", "nmb"];
+    const sambaServices = (distro === "ubuntu") ? ["smbd", "nmbd"] : ["smb", "nmb"];
+    const allServices = ["houston-broadcaster", ...sambaServices];
 
-    for (const svc of services) {
+    for (const svc of allServices) {
       // ignore if not present
       await server.execute(new Command(["systemctl", "stop", svc], { superuser: "try" }), true);
     }
+    // Brief delay to let file handles be released
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  /**
+   * Kill any processes with open files/cwd under the given mountpoint.
+   * Best-effort — fuser may not be installed on all distros.
+   */
+  private async killProcessesOnMount(mountPath: string) {
+    // Try fuser first (sends SIGKILL to all processes using the mount)
+    try {
+      await server.execute(
+        new Command(["fuser", "-km", mountPath], { superuser: "try" }), true
+      );
+      console.log(`fuser killed processes on ${mountPath}`);
+    } catch {
+      // fuser not installed or no processes found — that's fine
+    }
+    // Also try lsof-based kill as fallback
+    try {
+      await server.execute(
+        new Command(["bash", "-c", `lsof +D "${mountPath}" 2>/dev/null | awk 'NR>1{print $2}' | sort -u | xargs -r kill -9`], { superuser: "try" }), true
+      );
+    } catch {
+      // best effort
+    }
+    // Give processes a moment to die
+    await new Promise(r => setTimeout(r, 500));
   }
 
   private async poolExists(poolName: string): Promise<boolean> {
@@ -582,7 +617,7 @@ fi
     }
   }
 
-  private async tryDestroyPoolWithRetries(poolName: string, maxRetries = 3, delayMs = 1000) {
+  private async tryDestroyPoolWithRetries(poolName: string, maxRetries = 3, delayMs = 2000) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       if (!(await this.poolExists(poolName))) {
         console.log(`Pool ${poolName} already gone (before attempt ${attempt}).`);
@@ -595,6 +630,8 @@ fi
       } catch (err) {
         console.error(`Attempt ${attempt} failed to destroy pool:`, err);
         if (attempt < maxRetries) {
+          // Kill any lingering processes and retry
+          await this.killProcessesOnMount(`/${poolName}`);
           await new Promise((r) => setTimeout(r, delayMs));
         } else {
           await this.logPoolUsers(poolName);   // <- key addition

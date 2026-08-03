@@ -1,6 +1,7 @@
 import re
 import subprocess
 import argparse
+import configparser
 import json
 import os
 import logging
@@ -61,12 +62,17 @@ def generate_exec_start(templateName, parameters, scriptPath):
     custom_task_wrapper = "python3 -u /opt/45drives/houston/scheduler/scripts/run-custom-task.py"
     
     if(templateName=="CustomTask"):
+        # Multi-script mode: wrapper reads scripts from env, no args needed
+        scripts_json = parameters.get('customTaskConfig_scripts', '')
+        if scripts_json:
+            return custom_task_wrapper
+
         file_path = parameters.get('customTaskConfig_filePath', '')
         if not file_path:
             command = parameters.get('customTaskConfig_command', 'No command provided')
             return f"{custom_task_wrapper} {command}"
         if file_path.endswith('.py'):
-            return f"{custom_task_wrapper} python3 {file_path}"
+            return f"{custom_task_wrapper} python3 -u {file_path}"
         elif file_path.endswith('.sh'):
             return f"{custom_task_wrapper} bash {file_path}"
         elif file_path.endswith('.bash'):
@@ -92,8 +98,14 @@ def interval_to_on_calendar(interval):
     parts = []
     
     if 'dayOfWeek' in interval and interval['dayOfWeek']:
-        day_of_week = ','.join(interval['dayOfWeek'])
-        parts.append(day_of_week)
+        DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+        normalized = []
+        for v in interval['dayOfWeek']:
+            if isinstance(v, int):
+                normalized.append(DOW_NAMES[max(0, min(6, v))])
+            else:
+                normalized.append(str(v)[:3].title())
+        parts.append(','.join(normalized))
     
     year_part = interval.get('year', {}).get('value', '*')
     month_part = interval.get('month', {}).get('value', '*')
@@ -173,6 +185,9 @@ def start_timer(timer_name):
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to start {timer_name}: {e}")
 
+ZFS_TASK_TEMPLATES = {'AutomatedSnapshotTask', 'ZfsReplicationTask', 'ScrubTask'}
+VPN_TASK_TEMPLATES = {'RsyncTask', 'ZfsReplicationTask'}
+
 def create_task(template_name, script_path, param_env_path):
     logging.debug(f'Creating task with service template: {template_name} and env file: {param_env_path}')
     param_env_filename = os.path.basename(param_env_path)
@@ -186,6 +201,21 @@ def create_task(template_name, script_path, param_env_path):
     exec_start_command = generate_exec_start(template_name, parameters, script_path)
     service_template_content = service_template_content.replace("{task_name}", task_instance_name)
     service_template_content = service_template_content.replace("{env_path}", param_env_path)
+
+    # Add ZFS ordering dependencies for ZFS-dependent task types
+    if template_name in ZFS_TASK_TEMPLATES:
+        zfs_deps = "After=zfs-mount.service zfs-import.target\nWants=zfs-import.target\n"
+    else:
+        zfs_deps = ""
+    service_template_content = service_template_content.replace("{zfs_dependencies}", zfs_deps)
+
+    # Add VPN tunnel preflight for remote-capable task types
+    if template_name in VPN_TASK_TEMPLATES:
+        vpn_pre = "ExecStartPre=-/bin/bash -c 'test -x /usr/lib/wire-wizard/preflight.sh && /usr/lib/wire-wizard/preflight.sh || true'\n"
+    else:
+        vpn_pre = ""
+    service_template_content = service_template_content.replace("{vpn_preflight}", vpn_pre)
+
     # Wrap with flock to prevent concurrent runs of the same task
     locked_exec = (
         "/bin/sh -c 'exec 9>/run/%n.lock && flock -n 9 || "
@@ -214,7 +244,7 @@ def create_schedule(schedule_json_path, timer_template_path, full_unit_name):
         return
 
     timer_template_content = read_template_file(timer_template_path)
-    on_calendar_lines = [interval_to_on_calendar(interval) for interval in schedule_data['intervals']]
+    on_calendar_lines = [interval_to_on_calendar(interval) for interval in schedule_data.get('intervals', [])]
     on_calendar_lines_str = "\n".join(on_calendar_lines)
     timer_template_content = timer_template_content.replace("{description}", f"Timer for {full_unit_name}").replace("{on_calendar_lines}", on_calendar_lines_str)
     

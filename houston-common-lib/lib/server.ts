@@ -8,7 +8,7 @@ import { Download } from "@/download";
 import { safeJsonParse } from "./utils";
 import { assertProp } from "./utils";
 
-import { getentBashScriptJsonOuptut } from "./scripts/getent";
+import { getentBashScriptJsonOutput } from "./scripts/getent";
 
 import DiskInfoPy from "@/scripts/disk_info.py?raw";
 
@@ -376,7 +376,7 @@ export class Server {
 
   getDomainUsers(cache: boolean = true): ResultAsync<DomainUser[], ProcessError> {
     if (this.domainUsers === undefined || cache === false) {
-      return this.execute(new BashCommand(getentBashScriptJsonOuptut("passwd", true)))
+      return this.execute(new BashCommand(getentBashScriptJsonOutput("passwd", true)))
         .map((proc) => proc.getStdout())
         .andThen(safeJsonParse<DomainUser[]>)
         .map((users) => (this.domainUsers = users as DomainUser[]));
@@ -386,7 +386,7 @@ export class Server {
 
   getDomainGroups(cache: boolean = true): ResultAsync<DomainGroup[], ProcessError> {
     if (this.domainGroups === undefined || cache === false) {
-      return this.execute(new BashCommand(getentBashScriptJsonOuptut("group", true)))
+      return this.execute(new BashCommand(getentBashScriptJsonOutput("group", true)))
         .map((proc) => proc.getStdout())
         .andThen(safeJsonParse<DomainGroup[]>)
         .map((groups) => (this.domainGroups = groups as DomainGroup[]));

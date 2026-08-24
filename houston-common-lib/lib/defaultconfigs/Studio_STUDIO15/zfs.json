@@ -1,0 +1,66 @@
+[
+    {
+        "pool": {
+            "name": "tank",
+            "vdevs": [
+                {
+                    "type": "raidz2",
+                    "disks": []
+                }
+            ]
+        },
+        "poolOptions": {
+            "autoexpand": "off",
+            "autoreplace": "off",
+            "compression": "lz4",
+            "recordsize": 131072,
+            "sectorsize": 12,
+            "dedup": "off",
+            "forceCreate": true,
+            "refreservationPercent": 10
+        },
+        "dataset": {
+            "name": "storage"
+        },
+        "datasetOptions": {
+            "compression": "lz4",
+            "encryption": "off",
+            "atime": "on",
+            "dedup": "off",
+            "quota": "none",
+            "readonly": "off"
+        }
+    },
+    {
+        "pool": {
+            "name": "tank-backup",
+            "vdevs": [
+                {
+                    "type": "raidz2",
+                    "disks": []
+                }
+            ]
+        },
+        "poolOptions": {
+            "autoexpand": "off",
+            "autoreplace": "off",
+            "compression": "lz4",
+            "recordsize": 131072,
+            "sectorsize": 12,
+            "dedup": "off",
+            "forceCreate": true,
+            "refreservationPercent": 10
+        },
+        "dataset": {
+            "name": "active-backup"
+        },
+        "datasetOptions": {
+            "compression": "lz4",
+            "encryption": "off",
+            "atime": "on",
+            "dedup": "off",
+            "quota": "none",
+            "readonly": "off"
+        }
+    }
+]

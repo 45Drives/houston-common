@@ -49,8 +49,9 @@ const props = withDefaults(
     enableRotate: false,
     enablePan: false,
     enableZoom: false,
-    driveViewZoomMargin: 1,
-    initialViewZoomMargin: 0.75,
+    // Left undefined so the per-chassis values in the model LUT win unless a caller overrides.
+    driveViewZoomMargin: undefined,
+    initialViewZoomMargin: undefined,
   }
 );
 
@@ -82,6 +83,14 @@ type AnyServerView = {
   setDriveSlotInfo(slots: DriveSlot[]): Promise<void> | void;
   setSlotHighlights(flag: any, ids: string[], value?: boolean): Promise<void> | void;
   setZoomMargins?(opts: { driveView?: number; initialView?: number }): void;
+  setLighting?(opts: { exposure?: number; environmentIntensity?: number }): void;
+  getViewDefaults?(): {
+    driveViewZoomMargin: number;
+    initialViewZoomMargin: number;
+    exposure: number;
+    environmentIntensity: number;
+  };
+  getChassisDriveSlots?(): Promise<{ slotId: string; driveType: string }[]>;
   addEventListener(type: "selectionchange", cb: (e: any) => void): void;
   enableSelection: boolean;
   enableRotate: boolean;
@@ -193,7 +202,8 @@ const serverView = Promise.all([
 
   watchHandles.push(
     watchEffect(() => {
-      view.setBackground(darkMode.value ? 0x262626 : 0xffffff);
+      // Lighter than the surrounding panel so black powdercoat chassis stay visible.
+      view.setBackground(darkMode.value ? 0x4a4a4f : 0xffffff);
     })
   );
 

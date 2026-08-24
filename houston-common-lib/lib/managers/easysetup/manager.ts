@@ -39,6 +39,170 @@ const sambaPorts = [
 
 const decode = (buf: Uint8Array) => new TextDecoder().decode(buf);
 
+/** Only paths matching this are ever passed to the destructive wipe script. */
+const DEVICE_PATH_REGEX = /^\/dev\/[A-Za-z0-9._\/-]+$/;
+
+/** How many drives are erased concurrently in "full" mode. */
+const FULL_WIPE_CONCURRENCY = 8;
+
+/**
+ * Minimum drives before Active Backup (split pools) is offered.
+ * Below this each pool would fall back to a 2-way mirror or a bare disk, so the
+ * redundancy lost to splitting is not worth the second copy.
+ */
+export const MIN_SPLIT_POOL_DISKS = 6;
+
+/**
+ * Shell helpers shared by the guard and the wipe script so both judge "is this a
+ * system disk?" identically. Emits nothing on its own.
+ */
+const systemDiskProbe = `
+# Canonical whole-disk node for a path that may be a symlink, a partition, or a disk.
+canon() {
+  p=$(readlink -f "$1" 2>/dev/null) || return 0
+  [ -b "$p" ] || return 0
+  if [ "$(lsblk -ndo TYPE "$p" 2>/dev/null)" = "part" ]; then
+    parent=$(lsblk -ndo PKNAME "$p" 2>/dev/null)
+    [ -n "$parent" ] && p="/dev/$parent"
+  fi
+  printf '%s\\n' "$p"
+}
+
+# Every whole disk underneath a device, walking down through md/LVM/LUKS stacks
+# so both halves of a mirrored boot device are reported, not just the array node.
+holders() {
+  lsblk -nrso NAME,TYPE "$1" 2>/dev/null | awk '$2=="disk"{print "/dev/" $1}'
+}
+
+# Disks the running OS depends on, as "<device><TAB><reason>".
+system_disks() {
+  for mp in / /boot /boot/efi /usr /etc /var; do
+    src=$(findmnt -nvo SOURCE --target "$mp" 2>/dev/null | head -n1)
+    [ -n "$src" ] || continue
+    case "$src" in
+      /dev/*)
+        for d in $(holders "$src"); do printf '%s\\t%s\\n' "$d" "holds $mp"; done
+        ;;
+      *)
+        # ZFS root: SOURCE is a dataset, so expand the pool to its leaf vdevs.
+        pool=\${src%%/*}
+        case "$pool" in ""|*[!A-Za-z0-9_.:-]*) continue ;; esac
+        for leaf in $(zpool list -vHPL "$pool" 2>/dev/null | awk '$1 ~ /^\\/dev\\//{print $1}'); do
+          for d in $(holders "$leaf"); do
+            printf '%s\\t%s\\n' "$d" "is a member of root pool '$pool' holding $mp"
+          done
+        done
+        ;;
+    esac
+  done
+  if [ -r /proc/swaps ]; then
+    for s in $(awk 'NR>1 && $1 ~ /^\\/dev\\//{print $1}' /proc/swaps); do
+      for d in $(holders "$s"); do printf '%s\\t%s\\n' "$d" "holds active swap"; done
+    done
+  fi
+}
+`;
+
+/**
+ * Run as \`bash -c <script> disk-guard <devicePath...>\`.
+ * Prints one \`<severity><TAB><path><TAB><reason>\` line per problem drive and nothing for clean ones.
+ */
+const systemDiskGuardScript = `
+set -u
+${systemDiskProbe}
+protected=$(system_disks)
+
+for arg in "$@"; do
+  dev=$(canon "$arg")
+  if [ -z "$dev" ]; then
+    printf 'missing\\t%s\\t%s\\n' "$arg" "does not resolve to a block device"
+    continue
+  fi
+
+  reason=$(printf '%s\\n' "$protected" | awk -F'\\t' -v d="$dev" '$1==d{print $2; exit}')
+  if [ -n "$reason" ]; then
+    printf 'system\\t%s\\t%s (resolves to %s)\\n' "$arg" "$reason" "$dev"
+    continue
+  fi
+
+  parttypes=$(lsblk -nro PARTTYPE "$dev" 2>/dev/null | tr 'A-Z' 'a-z')
+  case "$parttypes" in
+    *c12a7328-f81f-11d2-ba4b-00a0c93ec93b*)
+      printf 'boot\\t%s\\t%s\\n' "$arg" "carries an EFI System Partition ($dev)"
+      ;;
+    *21686148-6449-6e6f-744e-656564454649*)
+      printf 'boot\\t%s\\t%s\\n' "$arg" "carries a BIOS boot partition ($dev)"
+      ;;
+  esac
+done
+`;
+
+/** Run as `bash -c <script> wipe-drive <devicePath> <quick|full>` so neither argument is interpolated into shell text. */
+const wipeDriveScript = `
+set -u
+${systemDiskProbe}
+disk="$1"
+mode="$2"
+method=""
+
+if [ ! -b "$disk" ]; then
+  echo "skipped (not a block device): $disk"
+  exit 0
+fi
+
+# Re-checked here rather than trusting the caller: a full erase runs for hours,
+# so the disk behind this path may not be the one that passed the earlier guard.
+canonical=$(canon "$disk")
+guard=$(system_disks | awk -F'\\t' -v d="$canonical" '$1==d{print $2; exit}')
+if [ -n "$guard" ]; then
+  echo "REFUSED: $disk resolves to $canonical which $guard" >&2
+  exit 3
+fi
+
+# Metadata teardown, both modes: pool labels, RAID superblocks, filesystem magic, partition table.
+for dev in "$disk" "$disk"?*; do
+  [ -b "$dev" ] || continue
+  zpool labelclear -f "$dev" >/dev/null 2>&1 || true
+  wipefs -a -f "$dev" >/dev/null 2>&1 || true
+  mdadm --zero-superblock --force "$dev" >/dev/null 2>&1 || true
+done
+sgdisk --zap-all "$disk" >/dev/null 2>&1 || true
+
+if [ "$mode" = "full" ]; then
+  case "$disk" in
+    *nvme*)
+      if nvme format "$disk" --ses=1 --force >/dev/null 2>&1; then method="nvme-format"; fi
+      ;;
+  esac
+  if [ -z "$method" ] && blkdiscard -f "$disk" >/dev/null 2>&1; then method="blkdiscard"; fi
+  if [ -z "$method" ] && blkdiscard "$disk" >/dev/null 2>&1; then method="blkdiscard"; fi
+  if [ -z "$method" ]; then
+    # oflag=direct is unsupported on some HBAs, so probe before committing to the long write
+    if dd if=/dev/zero of="$disk" bs=4M count=1 oflag=direct >/dev/null 2>&1; then
+      ddflags="oflag=direct"
+    else
+      ddflags=""
+    fi
+    dd if=/dev/zero of="$disk" bs=64M $ddflags >/dev/null 2>&1 || true
+    sync
+    method="zero-overwrite"
+  fi
+  sgdisk --zap-all "$disk" >/dev/null 2>&1 || true
+else
+  method="signatures-only"
+  dd if=/dev/zero of="$disk" bs=1M count=16 conv=fsync >/dev/null 2>&1 || true
+  sectors=$(blockdev --getsz "$disk" 2>/dev/null || echo 0)
+  case "$sectors" in ''|*[!0-9]*) sectors=0 ;; esac
+  if [ "$sectors" -gt 32768 ]; then
+    dd if=/dev/zero of="$disk" bs=512 seek=$((sectors - 32768)) count=32768 conv=fsync >/dev/null 2>&1 || true
+  fi
+fi
+
+partprobe "$disk" >/dev/null 2>&1 || true
+udevadm settle >/dev/null 2>&1 || true
+echo "wiped ($mode/$method): $disk"
+`;
+
 export interface EasySetupProgress {
   message: string;
   step: number;
@@ -90,17 +254,19 @@ export class EasySetupConfigurator {
     config: EasySetupConfig,
     progressCallback: (progress: EasySetupProgress) => void
   ) {
-    const total = 10;
+    // The optional drive wipe is a real step, so the total shifts with it
+    const total = config.wipeDrives ? 11 : 10;
 
-    const report = (step: number, message: string) =>
-      progressCallback({ step, total, message });
+    let stepNumber = 0;
+    const report = (message: string) =>
+      progressCallback({ step: ++stepNumber, total, message });
 
 
     // Start logging to /tmp immediately (works even if admin is denied)
     const run = startEasySetupRunLogging();
 
     try {
-      report(1, "Initializing Storage Setup...");
+      report("Initializing Storage Setup...");
 
       try {
         await this.ensureAdminSession();
@@ -118,36 +284,48 @@ export class EasySetupConfigurator {
         return;
       }
 
-      report(2, "Configuring SSH Security and Root Access...");
+      // Fail before the first destructive step if the OS lives on a selected drive.
+      await this.assertNoSystemDisks(config, "pre-flight");
+
+      report("Configuring SSH Security and Root Access...");
       await this.applyServerConfig(config);
 
-      report(3, "Clearing any existing ZFS and Samba data...");
+      report("Clearing any existing ZFS and Samba data...");
       if (config.skipClearExisting) {
         console.log("[EasySetup] Skipping pool/share destruction (skipClearExisting=true)");
       } else {
         await this.deleteZFSPoolAndSMBShares(config);
       }
 
-      report(4, "Updating Server Name (if changed)...");
+      if (config.wipeDrives) {
+        report(
+          config.wipeMode === "full"
+            ? "Erasing every block on the selected drives (this can take hours)..."
+            : "Erasing partition tables and signatures on the selected drives..."
+        );
+        await this.wipeConfiguredDrives(config);
+      }
+
+      report("Updating Server Name (if changed)...");
       await this.updateHostname(config);
 
-      report(5, "Creating Users and Groups...");
+      report("Creating Users and Groups...");
       await this.applyUsersAndGroups(config);
 
-      report(6, "Configuring ZFS Storage with available drives...");
+      report("Configuring ZFS Storage with available drives...");
       await this.applyZFSConfig(config);
 
-      report(7, "Configuring Storage Sharing...");
+      report("Configuring Storage Sharing...");
       await this.applySambaConfig(config);
 
-      report(8, "Opening Samba Port...");
+      report("Opening Samba Port...");
       await this.applyOpenSambaPorts();
 
-      report(9, "Ensuring Required Node Version (18)...");
+      report("Ensuring Required Node Version (18)...");
       const version = await this.getNodeVersion();
       if (!version?.startsWith("18.")) await this.ensureNode18();
 
-      report(10, config.splitPools ? "Scheduling Active Backup tasks..." : "Scheduling Snapshot tasks...");
+      report(config.splitPools ? "Scheduling Active Backup tasks..." : "Scheduling Snapshot tasks...");
       await this.scheduleTasks(config);
 
       // Post-setup verification: confirm critical services are active and pools are imported
@@ -530,10 +708,146 @@ fi
 
 
   /**
+   * Every disk path that will be handed to `zpool create`, de-duplicated.
+   * The backup pool is only included when split pools are actually enabled.
+   */
+  private collectConfiguredDiskPaths(config: EasySetupConfig): string[] {
+    const zfsConfigs = (config.zfsConfigs ?? []).filter(
+      (_cfg, index) => index === 0 || config.splitPools
+    );
+    const paths = new Set<string>();
+    for (const zfsConfig of zfsConfigs) {
+      for (const vdev of zfsConfig?.pool?.vdevs ?? []) {
+        for (const disk of vdev.disks ?? []) {
+          // Same order ZFSManager.formatVDevArgv uses, so the wipe and the pool
+          // always target the identical device rather than an unstable /dev/sdX.
+          const path = [disk.path, disk.vdev_path, disk.sd_path, disk.phy_path].find(
+            (candidate) => candidate && candidate !== "N/A"
+          );
+          if (!path) continue;
+          if (!DEVICE_PATH_REGEX.test(path)) {
+            console.warn(`[EasySetup] Ignoring unexpected device path: ${path}`);
+            continue;
+          }
+          paths.add(path);
+        }
+      }
+    }
+    return [...paths];
+  }
+
+  /**
+   * Refuse to touch any configured drive that backs the running OS.
+   *
+   * The wizard only lists bay-aliased drives, so on a normal install this never
+   * fires. It exists so an unusual OS location fails loudly instead of silently
+   * being erased, and it is re-run immediately before `zpool create` because a
+   * full wipe can leave hours between the first check and the destructive step.
+   */
+  private async assertNoSystemDisks(config: EasySetupConfig, stage: string) {
+    const diskPaths = this.collectConfiguredDiskPaths(config);
+    if (diskPaths.length === 0) return;
+
+    let findings: string[];
+    try {
+      const proc = await unwrap(
+        server.execute(
+          new Command(["bash", "-c", systemDiskGuardScript, "disk-guard", ...diskPaths], this.commandOptions),
+          true
+        )
+      );
+      findings = decode(proc.stdout).split("\n").filter((line) => line.trim() !== "");
+    } catch (err) {
+      console.error(`[EasySetup] System-disk guard failed to run (${stage}):`, err);
+      throw new Error(
+        "Could not verify that the selected drives are safe to erase. Aborting before any destructive step."
+      );
+    }
+
+    const blocked: string[] = [];
+    for (const line of findings) {
+      const [severity, path, reason] = line.split("\t");
+      if (!severity || !path || !reason) continue;
+      if (severity === "system") {
+        blocked.push(`${path} — ${reason}`);
+      } else if (severity === "boot") {
+        console.warn(
+          `[EasySetup] WARNING (${stage}): ${path} ${reason}, but nothing is mounted from it. ` +
+            `Treating it as a leftover from a previous OS install; it will be erased.`
+        );
+      } else {
+        console.warn(`[EasySetup] WARNING (${stage}): ${path} ${reason}`);
+      }
+    }
+
+    if (blocked.length > 0) {
+      const detail = blocked.map((entry) => `  • ${entry}`).join("\n");
+      console.error(`[EasySetup] ABORT (${stage}): system disks are in the storage configuration:\n${detail}`);
+      throw new Error(
+        `Refusing to continue: ${blocked.length} selected drive(s) are part of the running system, ` +
+          `and erasing them would destroy this installation.\n${detail}\n\n` +
+          `Remove these drives from the storage configuration and run setup again.`
+      );
+    }
+  }
+
+  /**
+   * Destroy all on-disk metadata for the configured drives so `zpool create` sees blank media.
+   */
+  private async wipeConfiguredDrives(config: EasySetupConfig) {
+    const diskPaths = this.collectConfiguredDiskPaths(config);
+    if (diskPaths.length === 0) {
+      console.warn("[EasySetup] wipeDrives requested but no drives were resolved from the config");
+      return;
+    }
+
+    await this.assertNoSystemDisks(config, "pre-wipe");
+
+    const mode = config.wipeMode === "full" ? "full" : "quick";
+    console.log(`[EasySetup] Wiping ${diskPaths.length} drive(s) in "${mode}" mode:`, diskPaths);
+    await this.stopServicesUsingPool();
+
+    const wipeOne = async (diskPath: string) => {
+      const startedAt = Date.now();
+      try {
+        const proc = await unwrap(
+          server.execute(
+            new Command(["bash", "-c", wipeDriveScript, "wipe-drive", diskPath, mode], this.commandOptions),
+            true
+          )
+        );
+        const elapsed = Math.round((Date.now() - startedAt) / 1000);
+        console.log(`[EasySetup] ${decode(proc.stdout).trim()} (${elapsed}s)`);
+      } catch (err) {
+        console.error(`[EasySetup] Failed to wipe ${diskPath}:`, err);
+        throw new Error(`Failed to wipe drive ${diskPath}. Aborting before pool creation.`);
+      }
+    };
+
+    if (mode === "quick") {
+      for (const diskPath of diskPaths) {
+        await wipeOne(diskPath);
+      }
+      return;
+    }
+
+    // A full erase is bound by per-drive throughput, so overlap drives instead of serializing hours of writes.
+    const queue = [...diskPaths];
+    const workers = Array.from(
+      { length: Math.min(FULL_WIPE_CONCURRENCY, queue.length) },
+      async () => {
+        for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+          await wipeOne(next);
+        }
+      }
+    );
+    await Promise.all(workers);
+  }
+
+  /**
    * Stop services that may hold open files on pool mountpoints.
    */
-  private async stopServicesUsingPool() {
-    const distro = await this.getLinuxDistro();
+  private async stopServicesUsingPool() {    const distro = await this.getLinuxDistro();
     const sambaServices = (distro === "ubuntu") ? ["smbd", "nmbd"] : ["smb", "nmb"];
     const allServices = ["houston-broadcaster", ...sambaServices];
 
@@ -804,15 +1118,17 @@ fi
     let storageZfsConfig = config!.zfsConfigs![0];
     let backupZfsConfig = config!.zfsConfigs![1];
 
-    // Guard: splitPools requires more than 4 disks total
+    await this.assertNoSystemDisks(config, "pre-pool-create");
+
+    // Guard: splitting into two redundant pools needs a minimum drive count
     if (config.splitPools) {
       const totalDisks = storageZfsConfig!.pool.vdevs.reduce(
         (sum, v) => sum + v.disks.length, 0
       ) + (backupZfsConfig?.pool.vdevs.reduce(
         (sum, v) => sum + v.disks.length, 0
       ) ?? 0);
-      if (totalDisks <= 4) {
-        console.warn(`[EasySetup] splitPools disabled: only ${totalDisks} disks (need more than 4)`);
+      if (totalDisks < MIN_SPLIT_POOL_DISKS) {
+        console.warn(`[EasySetup] splitPools disabled: only ${totalDisks} disks (need at least ${MIN_SPLIT_POOL_DISKS})`);
         config.splitPools = false;
       }
     }

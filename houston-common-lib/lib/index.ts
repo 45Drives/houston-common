@@ -35,6 +35,7 @@ export * from "@/houston";
 export * from "@/syntax";
 export * from "@/utils";
 export * from "@/electronIPC";
+export * from "@/logging";
 export * from "@/errors";
 export * from "@/download";
 export * from "@/upload";

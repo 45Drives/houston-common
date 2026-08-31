@@ -216,6 +216,9 @@ export class EasySetupConfigurator {
   zfsManager: ZFSManager;
   commandOptions: CommandOptions;
 
+  /** Set for the duration of applyConfig so nested steps can surface non-fatal problems. */
+  private reportWarning?: (message: string) => void;
+
   constructor() {
     this.sambaManager = new SambaManagerNet();
     this.zfsManager = new ZFSManager();
@@ -268,6 +271,7 @@ export class EasySetupConfigurator {
       console.warn(`[EasySetup] ${message}`);
       progressCallback({ step: 0, total, message, warning: true });
     };
+    this.reportWarning = reportWarning;
     this.zfsManager.onWarning = reportWarning;
 
 
@@ -532,6 +536,10 @@ fi
 
     if (result.errors.length > 0) {
       console.error('Task import errors:', result.errors);
+      this.reportWarning?.(
+        `${result.errors.length} scheduled ${result.errors.length === 1 ? "task" : "tasks"} could not be created, ` +
+          `so automatic snapshots and/or scrubs are not configured: ${result.errors.join(" ")}`
+      );
     }
     if (result.imported.length > 0) {
       console.log('Tasks imported:', result.imported.join(', '));

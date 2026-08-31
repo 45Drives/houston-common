@@ -39,6 +39,21 @@ import get_tasks_script from '@/scripts/get-task-instances.py?raw';
 
 const { errorString, useSpawn } = legacy;
 
+/** Canonical keys ("ScrubTask") and display names ("Scrub Task") both normalize to the same entry. */
+const TASK_TEMPLATE_FACTORIES: Record<string, () => TaskTemplateType> = {
+    zfsreplicationtask: () => new ZFSReplicationTaskTemplate(),
+    automatedsnapshottask: () => new AutomatedSnapshotTaskTemplate(),
+    rsynctask: () => new RsyncTaskTemplate(),
+    scrubtask: () => new ScrubTaskTemplate(),
+    smarttest: () => new SmartTestTemplate(),
+    cloudsynctask: () => new CloudSyncTaskTemplate(),
+    customtask: () => new CustomTaskTemplate(),
+};
+
+function resolveTaskTemplate(name: string): (() => TaskTemplateType) | undefined {
+    return TASK_TEMPLATE_FACTORIES[name.replace(/[^a-z0-9]/gi, '').toLowerCase()];
+}
+
 /** Validate task name to prevent path traversal in systemd file paths */
 const SAFE_TASK_NAME_RE = /^[a-zA-Z0-9_\-]+$/;
 function validateTaskName(name: string): void {
@@ -750,20 +765,12 @@ export class Scheduler implements SchedulerType {
                     continue;
                 }
 
-                const templateKey = formatTemplateName(t.template);
-                let tpl: any;
-                switch (templateKey) {
-                    case 'ZfsReplicationTask': tpl = new ZFSReplicationTaskTemplate(); break;
-                    case 'AutomatedSnapshotTask': tpl = new AutomatedSnapshotTaskTemplate(); break;
-                    case 'RsyncTask': tpl = new RsyncTaskTemplate(); break;
-                    case 'ScrubTask': tpl = new ScrubTaskTemplate(); break;
-                    case 'SmartTest': tpl = new SmartTestTemplate(); break;
-                    case 'CloudSyncTask': tpl = new CloudSyncTaskTemplate(); break;
-                    case 'CustomTask': tpl = new CustomTaskTemplate(); break;
-                    default:
-                        result.errors.push(`${t.name}: Unknown template "${t.template}".`);
-                        continue;
+                const makeTemplate = resolveTaskTemplate(t.template);
+                if (!makeTemplate) {
+                    result.errors.push(`${t.name}: Unknown template "${t.template}".`);
+                    continue;
                 }
+                const tpl: any = makeTemplate();
 
                 const paramNode = this.createParameterNodeFromSchema(tpl.parameterSchema, t.parameters || {});
                 const intervals = (t.schedule?.intervals || []).map((i: any) => new TaskScheduleInterval(i));

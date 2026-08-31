@@ -152,18 +152,6 @@ export class ZFSManager implements IZFSManager {
     if (options.recordsize !== undefined) fsProps.push(`recordsize=${options.recordsize}`);
     if (options.dedup !== undefined) fsProps.push(`dedup=${options.dedup}`);
 
-    // Handle refreservation
-    if (options.refreservationPercent !== undefined) {
-      // Estimate total disk capacity from all vdevs
-      const totalBytes = pool.vdevs.flatMap(v => v.disks)
-        .map(disk => convertToBytes(disk.capacity ?? "0"))
-        .reduce((acc, curr) => acc + curr, 0);
-
-      const fraction = Math.min(Math.max(options.refreservationPercent, 0), 100) / 100;
-      const refreservationBytes = Math.floor(totalBytes * fraction);
-      fsProps.push(`refreservation=${refreservationBytes}`);
-    }
-
     // fs props are ['-O', 'prop=value']
     argv.push(...fsProps.flatMap((prop) => ["-O", prop]));
 
@@ -178,7 +166,49 @@ export class ZFSManager implements IZFSManager {
 
     const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
     console.log('createPool output:', proc.getStdout());
+
+    if (options.refreservationPercent !== undefined) {
+      await this.applyRefreservation(pool.name, options.refreservationPercent);
+    }
+
     return proc;
+  }
+
+  /**
+   * Reserve a share of the pool's real post-parity capacity.
+   *
+   * Sizing this from the raw sum of disk capacities overshoots badly on raidz/mirror
+   * and on pools with mismatched drive sizes, and passing it to `zpool create` as
+   * `-O refreservation=` has the pool reject the whole create with ENOSPC, which libzfs
+   * reports as "one or more devices is out of space". Both problems go away by asking
+   * the finished pool what it actually has.
+   */
+  private async applyRefreservation(poolName: string, percent: number): Promise<void> {
+    const fraction = Math.min(Math.max(percent, 0), 100) / 100;
+    if (fraction === 0) return;
+
+    const availProc = await unwrap(
+      this.server.execute(
+        new Command(["zfs", "get", "-Hp", "-o", "value", "available", poolName], this.commandOptions)
+      )
+    );
+    const availableBytes = Number(availProc.getStdout().trim());
+
+    if (!Number.isFinite(availableBytes) || availableBytes <= 0) {
+      console.warn(`[ZFS] Could not read available space for '${poolName}'; skipping refreservation.`);
+      return;
+    }
+
+    const bytes = Math.floor(availableBytes * fraction);
+    console.log(
+      `[ZFS] Setting refreservation=${bytes} on '${poolName}' (${percent}% of ${availableBytes} usable bytes)`
+    );
+
+    await unwrap(
+      this.server.execute(
+        new Command(["zfs", "set", `refreservation=${bytes}`, poolName], this.commandOptions)
+      )
+    );
   }
 
   async destroyPool(pool: ZPoolBase | string, options: ZPoolDestroyOptions = {}): Promise<void> {

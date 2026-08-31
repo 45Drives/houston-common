@@ -9,7 +9,7 @@
 	"main": "./dist/index.js",
 	"exports": {
 		".": {
-			"types": "./dist/lib/index.d.ts",
+			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
 			"require": "./dist/index.cjs"
 		}
@@ -23,7 +23,7 @@
 			"!**/*.spec.js"
 		]
 	},
-	"types": "dist/lib/index.d.ts",
+	"types": "dist/index.d.ts",
 	"scripts": {
 		"build:lib": "tsc --noEmit && vite build",
 		"build": "tsc --noEmit && vite build",

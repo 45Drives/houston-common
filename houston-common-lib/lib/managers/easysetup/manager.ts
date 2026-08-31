@@ -207,6 +207,8 @@ export interface EasySetupProgress {
   message: string;
   step: number;
   total: number;
+  /** Non-fatal problem. Setup continues; step/total do not advance. */
+  warning?: boolean;
 }
 
 export class EasySetupConfigurator {
@@ -260,6 +262,13 @@ export class EasySetupConfigurator {
     let stepNumber = 0;
     const report = (message: string) =>
       progressCallback({ step: ++stepNumber, total, message });
+
+    // step 0 never matches an advance, an error (< 0) or completion (=== total)
+    const reportWarning = (message: string) => {
+      console.warn(`[EasySetup] ${message}`);
+      progressCallback({ step: 0, total, message, warning: true });
+    };
+    this.zfsManager.onWarning = reportWarning;
 
 
     // Start logging to /tmp immediately (works even if admin is denied)

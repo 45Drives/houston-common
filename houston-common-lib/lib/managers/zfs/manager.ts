@@ -67,6 +67,9 @@ export interface IZFSManager {
 export class ZFSManager implements IZFSManager {
   private commandOptions: CommandOptions;
 
+  /** Called for problems that don't fail the operation but should still reach the user. */
+  onWarning?: (message: string) => void;
+
   constructor(protected server: Server = new Server()) {
     this.commandOptions = { superuser: "try" };
   }
@@ -168,7 +171,17 @@ export class ZFSManager implements IZFSManager {
     console.log('createPool output:', proc.getStdout());
 
     if (options.refreservationPercent !== undefined) {
-      await this.applyRefreservation(pool.name, options.refreservationPercent);
+      // Non-fatal: the pool is already created, so throwing here would strand it un-retryable.
+      try {
+        await this.applyRefreservation(pool.name, options.refreservationPercent);
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e);
+        console.warn(`[ZFS] refreservation failed on '${pool.name}':`, e);
+        this.onWarning?.(
+          `Pool '${pool.name}' was created, but the ${options.refreservationPercent}% space reservation could not be applied (${detail}). ` +
+            `Storage is usable. To apply it manually, run: zfs set refreservation=<bytes> ${pool.name}`
+        );
+      }
     }
 
     return proc;
@@ -195,8 +208,9 @@ export class ZFSManager implements IZFSManager {
     const availableBytes = Number(availProc.getStdout().trim());
 
     if (!Number.isFinite(availableBytes) || availableBytes <= 0) {
-      console.warn(`[ZFS] Could not read available space for '${poolName}'; skipping refreservation.`);
-      return;
+      throw new Error(
+        `could not read available space for '${poolName}' (got "${availProc.getStdout().trim()}")`
+      );
     }
 
     const bytes = Math.floor(availableBytes * fraction);

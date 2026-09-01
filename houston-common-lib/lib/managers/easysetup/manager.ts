@@ -46,13 +46,6 @@ const DEVICE_PATH_REGEX = /^\/dev\/[A-Za-z0-9._\/-]+$/;
 const FULL_WIPE_CONCURRENCY = 8;
 
 /**
- * Minimum drives before Active Backup (split pools) is offered.
- * Below this each pool would fall back to a 2-way mirror or a bare disk, so the
- * redundancy lost to splitting is not worth the second copy.
- */
-export const MIN_SPLIT_POOL_DISKS = 6;
-
-/**
  * Shell helpers shared by the guard and the wipe script so both judge "is this a
  * system disk?" identically. Emits nothing on its own.
  */
@@ -260,7 +253,7 @@ export class EasySetupConfigurator {
     progressCallback: (progress: EasySetupProgress) => void
   ) {
     // The optional drive wipe is a real step, so the total shifts with it
-    const total = config.wipeDrives ? 11 : 10;
+    const total = config.wipeDrives ? 10 : 9;
 
     let stepNumber = 0;
     const report = (message: string) =>
@@ -334,11 +327,7 @@ export class EasySetupConfigurator {
       report("Opening Samba Port...");
       await this.applyOpenSambaPorts();
 
-      report("Ensuring Required Node Version (18)...");
-      const version = await this.getNodeVersion();
-      if (!version?.startsWith("18.")) await this.ensureNode18();
-
-      report(config.splitPools ? "Scheduling Active Backup tasks..." : "Scheduling Snapshot tasks...");
+      report("Scheduling Snapshot tasks...");
       await this.scheduleTasks(config);
 
       // Post-setup verification: confirm critical services are active and pools are imported
@@ -429,91 +418,10 @@ export class EasySetupConfigurator {
     }
   }
 
-  // Check current Node.js version
-  private async getNodeVersion(): Promise<string | null> {
-    try {
-      const result = await unwrap(
-        server.execute(new Command(["node", "-v"], { superuser: "try" }))
-      );
-      const output = new TextDecoder().decode(result.stdout);
-      return output.replace(/^v/, "");
-    } catch {
-      return null;
-    }
-  }
-
-  // Ensure NVM is installed
-  private async ensureNvmInstalled(): Promise<void> {
-    const check = `export NVM_DIR="$HOME/.nvm"; test -s "$NVM_DIR/nvm.sh"`;
-    const has: any = await server.execute(new Command(["bash", "-lc", check], this.commandOptions), true);
-
-    if (has.exited === 0) return;
-
-    const installGit = `
-if ! command -v git >/dev/null 2>&1; then
-  if command -v apt-get >/dev/null 2>&1; then
-    if [ "$(id -u)" -ne 0 ]; then sudo apt-get update && sudo apt-get install -y git; else apt-get update && apt-get install -y git; fi
-  elif command -v dnf >/dev/null 2>&1; then
-    if [ "$(id -u)" -ne 0 ]; then sudo dnf install -y git; else dnf install -y git; fi
-  elif command -v yum >/dev/null 2>&1; then
-    if [ "$(id -u)" -ne 0 ]; then sudo yum install -y git; else yum install -y git; fi
-  else
-    echo "git is required to install nvm" >&2
-    exit 1
-  fi
-fi
-`;
-
-    await unwrap(
-      server.execute(
-        new Command(["bash", "-lc", installGit], this.commandOptions)
-      )
-    );
-
-    await unwrap(
-      server.execute(
-        new Command(["bash", "-lc", "rm -rf \"$HOME/.nvm\" && git clone --depth 1 --branch v0.39.7 https://github.com/nvm-sh/nvm.git \"$HOME/.nvm\""], this.commandOptions)
-      )
-    );
-  }
-
-  // Load NVM into the current shell
-  private loadNvm() {
-    return 'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"';
-  }
-
-  // Ensure Node.js v18 is installed and set as default
-  private async ensureNode18() {
-    await this.ensureNvmInstalled();
-
-    const shellLoadNvm = this.loadNvm();
-
-    // Install Node 18 if not present
-    try {
-      await unwrap(
-        server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm ls 18`], this.commandOptions))
-      );
-      console.log(" Node 18 is already installed.");
-    } catch {
-      console.log(" Installing Node.js v18...");
-      await unwrap(
-        server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm install 18`], this.commandOptions))
-      );
-    }
-
-    // Set Node 18 as default
-    await unwrap(
-      server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm alias default 18`], this.commandOptions))
-    );
-    console.log(" Node.js v18 set as default.");
-  }
-
   private async scheduleTasks(config: EasySetupConfig) {
     const storageZfsConfig = config.zfsConfigs![0]!;
-    const backupZfsConfig = config.zfsConfigs![1]!;
 
     const taskTemplates = [
-      new ZFSReplicationTaskTemplate(),
       new AutomatedSnapshotTaskTemplate(),
       new ScrubTaskTemplate(),
     ];
@@ -521,15 +429,10 @@ fi
     const myScheduler = new Scheduler(taskTemplates, []);
 
     const taskConfig = generateAllDefaultConfigs({
-      splitPools: !!config.splitPools,
       storagePool: {
         poolName: storageZfsConfig.pool.name,
         datasetName: storageZfsConfig.dataset.name,
       },
-      backupPool: config.splitPools ? {
-        poolName: backupZfsConfig.pool.name,
-        datasetName: backupZfsConfig.dataset.name,
-      } : undefined,
     });
 
     const result = await myScheduler.importTasksFromConfig(JSON.stringify(taskConfig));
@@ -675,11 +578,8 @@ fi
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
     if (!config.zfsConfigs) return;
 
-    // Pools from config (e.g., tank, tank-backup)
     const storageZfsConfig = config.zfsConfigs[0]!;
-    const backupZfsConfig = config.zfsConfigs[1];
     const storagePoolName = storageZfsConfig.pool.name;
-    const backupPoolName = backupZfsConfig?.pool?.name;
 
     // 1) Enumerate all existing pools
     const allPools = await this.listAllPools();
@@ -718,20 +618,14 @@ fi
     if (allPools.includes(storagePoolName)) {
       console.log(`Verified destruction of storage pool '${storagePoolName}'.`);
     }
-    if (backupPoolName && allPools.includes(backupPoolName)) {
-      console.log(`Verified destruction of backup pool '${backupPoolName}'.`);
-    }
   }
 
 
   /**
    * Every disk path that will be handed to `zpool create`, de-duplicated.
-   * The backup pool is only included when split pools are actually enabled.
    */
   private collectConfiguredDiskPaths(config: EasySetupConfig): string[] {
-    const zfsConfigs = (config.zfsConfigs ?? []).filter(
-      (_cfg, index) => index === 0 || config.splitPools
-    );
+    const zfsConfigs = config.zfsConfigs ?? [];
     const paths = new Set<string>();
     for (const zfsConfig of zfsConfigs) {
       for (const vdev of zfsConfig?.pool?.vdevs ?? []) {
@@ -977,7 +871,7 @@ fi
   private async applyServerConfig(config: EasySetupConfig) {
     const serverCfg = config.serverConfig;
 
-    if (serverCfg?.disableRootSSH !== false) {
+    if (serverCfg?.disableRootSSH === true) {
       // Replace existing line (commented or uncommented)
       await unwrap(server.execute(
         new Command([
@@ -1002,7 +896,7 @@ fi
       await unwrap(server.execute(new Command(["timedatectl", "set-ntp", "true"], this.commandOptions)));
     }
 
-    if (serverCfg?.newRootPass) {
+    if (serverCfg?.changeRootPassword && serverCfg.newRootPass) {
       const chpasswdProc = server.spawnProcess(
         new Command(["chpasswd"], this.commandOptions)
       );
@@ -1132,63 +1026,25 @@ fi
   }
 
   private async applyZFSConfig(config: EasySetupConfig) {
-    let storageZfsConfig = config!.zfsConfigs![0];
-    let backupZfsConfig = config!.zfsConfigs![1];
+    const storageZfsConfig = config!.zfsConfigs![0]!;
 
     await this.assertNoSystemDisks(config, "pre-pool-create");
 
-    // Guard: splitting into two redundant pools needs a minimum drive count
-    if (config.splitPools) {
-      const totalDisks = storageZfsConfig!.pool.vdevs.reduce(
-        (sum, v) => sum + v.disks.length, 0
-      ) + (backupZfsConfig?.pool.vdevs.reduce(
-        (sum, v) => sum + v.disks.length, 0
-      ) ?? 0);
-      if (totalDisks < MIN_SPLIT_POOL_DISKS) {
-        console.warn(`[EasySetup] splitPools disabled: only ${totalDisks} disks (need at least ${MIN_SPLIT_POOL_DISKS})`);
-        config.splitPools = false;
-      }
-    }
-
-    await this.zfsManager.createPool(storageZfsConfig!.pool, storageZfsConfig!.poolOptions);
+    await this.zfsManager.createPool(storageZfsConfig.pool, storageZfsConfig.poolOptions);
     await this.zfsManager.addDataset(
-      storageZfsConfig!.pool.name,
-      storageZfsConfig!.dataset.name,
-      storageZfsConfig!.datasetOptions
+      storageZfsConfig.pool.name,
+      storageZfsConfig.dataset.name,
+      storageZfsConfig.datasetOptions
     );
-    // Create additional datasets on the storage pool
-    if (storageZfsConfig!.additionalDatasets) {
-      for (const extra of storageZfsConfig!.additionalDatasets) {
-        await this.zfsManager.addDataset(
-          storageZfsConfig!.pool.name,
-          extra.dataset.name,
-          extra.datasetOptions
-        );
-      }
-    }
-
-    if (config.splitPools) {
-      await this.zfsManager.createPool(backupZfsConfig!.pool, backupZfsConfig!.poolOptions);
+    for (const extra of storageZfsConfig.additionalDatasets ?? []) {
       await this.zfsManager.addDataset(
-        backupZfsConfig!.pool.name,
-        backupZfsConfig!.dataset.name,
-        backupZfsConfig!.datasetOptions
+        storageZfsConfig.pool.name,
+        extra.dataset.name,
+        extra.datasetOptions
       );
-      // Create additional datasets on the backup pool
-      if (backupZfsConfig!.additionalDatasets) {
-        for (const extra of backupZfsConfig!.additionalDatasets) {
-          await this.zfsManager.addDataset(
-            backupZfsConfig!.pool.name,
-            extra.dataset.name,
-            extra.datasetOptions
-          );
-        }
-      }
-      await this.clearAllSchedulerTasks();
-    } else {
-      await this.clearAllSchedulerTasks();
     }
 
+    await this.clearAllSchedulerTasks();
   }
 
   private async clearAllSchedulerTasks() {
@@ -1284,11 +1140,8 @@ fi
     }
 
     // Verify ZFS pools are imported and share paths exist
-    const zfsConfigs = config.zfsConfigs ?? [];
-    for (let i = 0; i < zfsConfigs.length; i++) {
-      // Skip the backup pool (index 1) when splitPools is not enabled
-      if (i === 1 && !config.splitPools) continue;
-      const poolName = zfsConfigs[i]!.pool.name;
+    for (const zfsConfig of config.zfsConfigs ?? []) {
+      const poolName = zfsConfig.pool.name;
       if (!await this.poolExists(poolName)) {
         console.error(`[EasySetup] ZFS pool '${poolName}' is not imported after setup!`);
         throw new Error(`ZFS pool '${poolName}' failed to import after creation.`);
@@ -1317,6 +1170,28 @@ fi
     }
   }
 
+  /**
+   * Strip the distro's stock auto-shares from /etc/samba/smb.conf. `[homes]`
+   * surfaces as a share named after the logged-in user, which users mistake for
+   * the share the wizard created.
+   */
+  private async removeStockSambaSections() {
+    const script = [
+      `conf=/etc/samba/smb.conf`,
+      `[ -f "$conf" ] || exit 0`,
+      `awk '`,
+      `  /^[[:space:]]*\\[/ {`,
+      `    s = $0`,
+      `    gsub(/[[:space:]]/, "", s)`,
+      `    drop = (s == "[homes]" || s == "[printers]" || s == "[print$]")`,
+      `  }`,
+      `  !drop`,
+      `' "$conf" > "$conf.45d.tmp" && mv "$conf.45d.tmp" "$conf"`,
+    ].join("\n");
+
+    await server.execute(new Command(["bash", "-c", script], this.commandOptions), true);
+  }
+
   private async applySambaConfig(config: EasySetupConfig) {
     if (!config.smbUser) throw new ValueError("config.smbUser is undefined!");
     if (!config.smbPass) throw new ValueError("config.smbPass is undefined!");
@@ -1337,6 +1212,8 @@ fi
             : this.sambaManager.patchSambaConfIncludeRegistry("/etc/samba/smb.conf")
         )
     );
+
+    await this.removeStockSambaSections();
 
     // Apply shares
     const shares = config.sambaConfig.shares ?? [];

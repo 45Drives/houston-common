@@ -8,7 +8,6 @@ export type EasySetupConfig = {
   smbPass?: string
   srvrName?: string
   folderName?: string
-  splitPools?: boolean
   serverConfig?: ServerInfoConfig;
   usersAndGroups?: UsersAndGroupsConfig;
   /** If true, skip destruction of existing ZFS pools and Samba shares (step 3) */
@@ -36,7 +35,9 @@ export type BackupLog = {
 export type ServerInfoConfig = {
   adminUser: string;
   adminPass: string;
+  /** Opt-in hardening; root SSH is left as the OS shipped it unless this is true. */
   disableRootSSH: boolean;
+  changeRootPassword?: boolean;
   newRootPass?: string;
   timezone?: string;
   setTimezone?: boolean;

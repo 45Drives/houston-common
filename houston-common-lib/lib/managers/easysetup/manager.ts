@@ -252,8 +252,11 @@ export class EasySetupConfigurator {
     config: EasySetupConfig,
     progressCallback: (progress: EasySetupProgress) => void
   ) {
-    // The optional drive wipe is a real step, so the total shifts with it
-    const total = config.wipeDrives ? 10 : 9;
+    // The optional drive wipe is a real step, so the count shifts with it.
+    // `total` is one past the last announced step: a step report means that step is
+    // *starting*, so completion is only signalled once all work has actually finished.
+    const announcedSteps = config.wipeDrives ? 11 : 10;
+    const total = announcedSteps + 1;
 
     let stepNumber = 0;
     const report = (message: string) =>
@@ -330,6 +333,8 @@ export class EasySetupConfigurator {
       report("Scheduling Snapshot tasks...");
       await this.scheduleTasks(config);
 
+      report("Checking Services and Storage...");
+
       // Post-setup verification: confirm critical services are active and pools are imported
       await this.verifyPostSetup(config);
 
@@ -340,6 +345,9 @@ export class EasySetupConfigurator {
 
       const ok = await storeEasySetupConfig(config, serverName);
       console.log(`[EasySetup] simple-setup-log.json write ${ok ? "OK" : "FAILED"}`);
+
+      // Every step has finished; only now is it safe to tell the UI setup is complete.
+      progressCallback({ step: total, total, message: "Setup complete." });
 
     } catch (error: any) {
       console.error("Error in setupStorage:", error);

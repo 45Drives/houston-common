@@ -36,27 +36,11 @@ export async function storeEasySetupConfig(config: EasySetupConfig, serverName: 
         await server.execute(new Command(["mkdir", "-p", configDir], { superuser: "require" }), true);
 
         const logFile = new File(server, configSavePath);
-        let backupLog: BackupLog = {};
 
-        const exists = await logFile.exists();
-        if (exists.isErr()) {
-            console.error("Could not check if log file exists:", exists.error.message);
-            return false;
-        }
-
-        if (exists.value) {
-            const readResult = await logFile.read({ superuser: "require" } as any);
-            if ((readResult as any).isOk?.() && (readResult as any).value.trim() !== "") {
-                try {
-                    backupLog = JSON.parse((readResult as any).value);
-                } catch {
-                    console.warn("Failed to parse existing log. Starting fresh.");
-                    backupLog = {};
-                }
-            }
-        }
-
-        backupLog[ipAddress] = newEntry;
+        // The file only ever describes this machine, so keys for previously held
+        // IPs are stale history that getSetupInfo resurrects when a DHCP lease is
+        // reused. Replace the map instead of merging into it.
+        const backupLog: BackupLog = { [ipAddress]: newEntry };
 
         const writeResult = await logFile.write(JSON.stringify(backupLog, null, 2), {
             superuser: "require",

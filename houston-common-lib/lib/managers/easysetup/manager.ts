@@ -1127,8 +1127,9 @@ export class EasySetupConfigurator {
     // Verify critical services are active
     for (const svc of criticalServices) {
       try {
+        // `is-active` exits non-zero for inactive/failed units, so don't treat that as a throw
         const result = await unwrap(
-          server.execute(new Command(["systemctl", "is-active", svc], this.commandOptions), true)
+          server.execute(new Command(["systemctl", "is-active", svc], this.commandOptions), false)
         );
         const status = new TextDecoder().decode(result.stdout).trim();
         if (status !== "active") {
@@ -1253,6 +1254,27 @@ export class EasySetupConfigurator {
     }
 
     await this.restartSambaServices();
+    await this.restartBroadcaster();
+  }
+
+  /** stopServicesUsingPool() takes the broadcaster down; bring it back once the pool and shares exist. */
+  private async restartBroadcaster() {
+    try {
+      await unwrap(
+        server.execute(
+          new Command(["systemctl", "enable", "--now", "houston-broadcaster"], this.commandOptions),
+          true
+        )
+      );
+      await unwrap(
+        server.execute(
+          new Command(["systemctl", "restart", "houston-broadcaster"], this.commandOptions),
+          true
+        )
+      );
+    } catch (err) {
+      console.warn("[EasySetup] Could not start houston-broadcaster:", err);
+    }
   }
 
 

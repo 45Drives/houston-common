@@ -35,6 +35,9 @@ const sambaPorts = [
   { port: 138, protocol: "udp" },
   { port: 139, protocol: "tcp" },
   { port: 445, protocol: "tcp" },
+  // Clients address the share by the server's .local name, so mDNS has to be
+  // reachable too or the hostname never resolves.
+  { port: 5353, protocol: "udp" },
 ];
 
 const decode = (buf: Uint8Array) => new TextDecoder().decode(buf);
@@ -409,6 +412,7 @@ export class EasySetupConfigurator {
           ["ufw", "allow", "138/udp"],
           ["ufw", "allow", "139/tcp"],
           ["ufw", "allow", "445/tcp"],
+          ["ufw", "allow", "5353/udp"],
         ];
         for (const args of allowCmds) {
           await unwrap(server.execute(new Command(args, this.commandOptions)));

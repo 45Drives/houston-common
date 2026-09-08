@@ -1266,8 +1266,65 @@ export class EasySetupConfigurator {
     await this.restartBroadcaster();
   }
 
+  /**
+   * Registration normally happens over HTTP from the desktop client, which needs the
+   * broadcaster up. If it is down the server bootstraps in stock mode forever, so seed
+   * the app config locally instead.
+   */
+  private async registerStorageWizardApp() {
+    const script = [
+      "import json, os, datetime",
+      'p = "/etc/45drives/houston-apps.json"',
+      "os.makedirs(os.path.dirname(p), exist_ok=True)",
+      "try:",
+      "    with open(p) as f:",
+      "        cfg = json.load(f)",
+      "except Exception:",
+      "    cfg = {}",
+      "if not isinstance(cfg, dict):",
+      "    cfg = {}",
+      'apps = cfg.get("apps")',
+      "if not isinstance(apps, list):",
+      "    apps = []",
+      'if "storage-wizard" not in apps:',
+      '    apps.append("storage-wizard")',
+      'cfg["apps"] = apps',
+      'settings = cfg.get("settings")',
+      "if not isinstance(settings, dict):",
+      "    settings = {}",
+      'settings.setdefault("http_port", 80)',
+      'settings.setdefault("https_port", 443)',
+      'settings.setdefault("bcast_port", 9095)',
+      'settings.setdefault("manage_nginx", True)',
+      'settings.setdefault("manage_firewall", True)',
+      'cfg["settings"] = settings',
+      'registered = cfg.get("registered_at")',
+      "if not isinstance(registered, dict):",
+      "    registered = {}",
+      'registered.setdefault("storage-wizard", datetime.datetime.utcnow().isoformat() + "Z")',
+      'cfg["registered_at"] = registered',
+      'tmp = p + ".tmp"',
+      'with open(tmp, "w") as f:',
+      "    json.dump(cfg, f, indent=2)",
+      "os.replace(tmp, p)",
+    ].join("\n");
+
+    try {
+      await unwrap(
+        server.execute(new Command(["python3", "-c", script], this.commandOptions), true)
+      );
+      console.log("[EasySetup] Registered storage-wizard in /etc/45drives/houston-apps.json");
+    } catch (err) {
+      console.warn("[EasySetup] Could not register storage-wizard app:", err);
+    }
+  }
+
   /** stopServicesUsingPool() takes the broadcaster down; bring it back once the pool and shares exist. */
   private async restartBroadcaster() {
+    // Must precede the restart: the bootstrap unit reads this file at start, and an empty
+    // app list sends it down the stock/discovery-only path.
+    await this.registerStorageWizardApp();
+
     try {
       await unwrap(
         server.execute(

@@ -517,7 +517,7 @@ export class EasySetupConfigurator {
     // 3) Bounce daemons that read hostname (quietly in case a unit is missing)
     await server.execute(new Command(["systemctl", "restart", "systemd-hostnamed"], this.commandOptions), true);
     await server.execute(new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions), true);
-    await server.execute(new Command(["systemctl", "restart", "houston-broadcaster.service"], this.commandOptions), true);
+    await server.execute(new Command(["systemctl", "restart", "--no-block", "houston-broadcaster.service"], this.commandOptions), true);
   }
 
   private async getAdminGroupName(): Promise<"wheel" | "sudo"> {
@@ -1123,6 +1123,11 @@ export class EasySetupConfigurator {
     };
   }
 
+  /** A unit whose start job is queued behind a slow dependency would otherwise block forever. */
+  private enableNowCommand(svc: string) {
+    return new Command(["timeout", "120s", "systemctl", "enable", "--now", svc], this.commandOptions);
+  }
+
   private async verifyPostSetup(config: EasySetupConfig) {
     const distro = await this.getLinuxDistro();
     const sambaServices = distro === "ubuntu" ? ["smbd"] : ["smb"];
@@ -1138,13 +1143,13 @@ export class EasySetupConfigurator {
         const status = new TextDecoder().decode(result.stdout).trim();
         if (status !== "active") {
           console.error(`[EasySetup] Service ${svc} is not active (status: ${status}), attempting restart...`);
-          await unwrap(server.execute(new Command(["systemctl", "enable", "--now", svc], this.commandOptions)));
+          await unwrap(server.execute(this.enableNowCommand(svc)));
         }
       } catch (err) {
         console.error(`[EasySetup] Service ${svc} verification failed:`, err);
         // Attempt recovery
         try {
-          await unwrap(server.execute(new Command(["systemctl", "enable", "--now", svc], this.commandOptions)));
+          await unwrap(server.execute(this.enableNowCommand(svc)));
           console.log(`[EasySetup] Service ${svc} recovered after restart.`);
         } catch (restartErr) {
           console.error(`[EasySetup] Service ${svc} could not be recovered:`, restartErr);
@@ -1266,13 +1271,15 @@ export class EasySetupConfigurator {
     try {
       await unwrap(
         server.execute(
-          new Command(["systemctl", "enable", "--now", "houston-broadcaster"], this.commandOptions),
+          new Command(["systemctl", "enable", "houston-broadcaster"], this.commandOptions),
           true
         )
       );
+      // --no-block: the unit is ordered After=bootstrap-houston-broadcaster.service, whose
+      // first-run job can take minutes. Waiting on it stalls the whole wizard.
       await unwrap(
         server.execute(
-          new Command(["systemctl", "restart", "houston-broadcaster"], this.commandOptions),
+          new Command(["systemctl", "restart", "--no-block", "houston-broadcaster"], this.commandOptions),
           true
         )
       );

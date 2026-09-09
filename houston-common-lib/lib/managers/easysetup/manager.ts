@@ -299,6 +299,8 @@ export class EasySetupConfigurator {
       // Fail before the first destructive step if the OS lives on a selected drive.
       await this.assertNoSystemDisks(config, "pre-flight");
 
+      await this.checkRootDirectoryOwnership();
+
       report("Configuring SSH Security and Root Access...");
       await this.applyServerConfig(config);
 
@@ -359,6 +361,33 @@ export class EasySetupConfigurator {
       await flushConsoleFileLogger();
     }
 
+  }
+
+  /**
+   * systemd-tmpfiles refuses to canonicalize a path that crosses from a user-owned
+   * directory into a root-owned one, so a bad `/` silently stops every runtime
+   * directory from being created and services like smbd exit before they open a socket.
+   */
+  private async checkRootDirectoryOwnership() {
+    try {
+      const proc = await unwrap(
+        server.execute(new Command(["stat", "-c", "%u %g %a", "/"], { superuser: "try" }), true)
+      );
+      const [uid, gid, mode] = decode(proc.stdout).trim().split(/\s+/);
+      if (uid === undefined || gid === undefined || mode === undefined) return;
+
+      const bits = parseInt(mode, 8);
+      if (uid === "0" && (bits & 0o022) === 0) return;
+
+      this.reportWarning?.(
+        `The server's root directory / is owned by uid ${uid}:gid ${gid} with permissions ${mode}, ` +
+          `instead of root:root 755. This blocks systemd from creating runtime directories, which can ` +
+          `stop Samba and other services from starting, and lets non-root users modify the top level of ` +
+          `the filesystem. Run "chown root:root / && chmod 755 /" on the server, then run setup again.`
+      );
+    } catch (err) {
+      console.warn("[EasySetup] Could not check / ownership:", err);
+    }
   }
 
   // Detect the Linux distro
@@ -587,6 +616,20 @@ export class EasySetupConfigurator {
   }
 
 
+  /** A failed probe returns true so a transient error never deletes a working share. */
+  private async pathExists(path: string): Promise<boolean> {
+    if (!path.startsWith("/")) return true;
+    try {
+      const proc = await unwrap(
+        server.execute(new Command(["test", "-d", path], { superuser: "try" }), false)
+      );
+      return proc.succeeded();
+    } catch (err) {
+      console.warn(`[EasySetup] Could not probe share path ${path}:`, err);
+      return true;
+    }
+  }
+
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
     if (!config.zfsConfigs) return;
 
@@ -605,7 +648,13 @@ export class EasySetupConfigurator {
       for (const share of allShares) {
         // Match if path starts with /<poolName> for any current pool
         const owningPool = allPools.find(p => share.path.startsWith(`/${p}`));
-        if (!owningPool) continue;
+
+        // Shares left over from a pool that was destroyed outside this wizard point at a
+        // path that no longer exists, and would otherwise survive every future setup run.
+        if (!owningPool) {
+          if (await this.pathExists(share.path)) continue;
+          console.log(`Removing orphaned share '${share.name}': ${share.path} no longer exists`);
+        }
 
         try {
           await unwrap(this.sambaManager.closeSambaShare(share.name));
@@ -1133,6 +1182,8 @@ export class EasySetupConfigurator {
     const sambaServices = distro === "ubuntu" ? ["smbd"] : ["smb"];
     const criticalServices = [...sambaServices, "houston-broadcaster"];
 
+    await this.ensureSambaRuntimeDirs();
+
     // Verify critical services are active
     for (const svc of criticalServices) {
       try {
@@ -1169,9 +1220,41 @@ export class EasySetupConfigurator {
     console.log("[EasySetup] Post-setup verification passed.");
   }
 
+  /**
+   * /run is tmpfs and Samba's runtime dirs come from tmpfiles at boot, so smbd exits
+   * 255 ("Failed to create pipe directory /run/samba/ncalrpc") on any box where samba
+   * was installed after the last reboot.
+   */
+  private async ensureSambaRuntimeDirs() {
+    const script = [
+      `for f in /usr/lib/tmpfiles.d/samba.conf /etc/tmpfiles.d/samba.conf; do`,
+      `  [ -f "$f" ] && systemd-tmpfiles --create "$f" >/dev/null 2>&1`,
+      `done`,
+      `mkdir -p /run/samba/ncalrpc /run/samba/msg.lock /run/samba/private`,
+      `chmod 755 /run/samba /run/samba/ncalrpc`,
+      `chmod 700 /run/samba/msg.lock /run/samba/private`,
+      `command -v restorecon >/dev/null 2>&1 && restorecon -R /run/samba >/dev/null 2>&1`,
+      `exit 0`,
+    ].join("\n");
+
+    await server.execute(new Command(["bash", "-c", script], this.commandOptions), true);
+  }
+
+  /** Bring Samba and the broadcaster back up without re-running the whole wizard. */
+  async restartFailedServices() {
+    await this.ensureSambaRuntimeDirs();
+    try {
+      await this.restartSambaServices();
+    } finally {
+      await this.restartBroadcaster();
+    }
+  }
+
   private async restartSambaServices() {
     const distro = await this.getLinuxDistro();
     const services = distro === "ubuntu" ? ["smbd", "nmbd"] : ["smb", "nmb"];
+
+    await this.ensureSambaRuntimeDirs();
 
     for (const svc of services) {
       try {
@@ -1268,8 +1351,13 @@ export class EasySetupConfigurator {
       await this.setGroupOwnedTree(share.path, "smbusers");
     }
 
-    await this.restartSambaServices();
-    await this.restartBroadcaster();
+    // stopServicesUsingPool() took the broadcaster down, so it has to come back even
+    // when Samba refuses to start; otherwise the server vanishes from the client app.
+    try {
+      await this.restartSambaServices();
+    } finally {
+      await this.restartBroadcaster();
+    }
   }
 
   /**

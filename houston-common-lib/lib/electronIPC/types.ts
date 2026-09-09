@@ -21,7 +21,7 @@ export type IPCMessageTypes = {
   /** Progress update during a long-running restore/backup operation */
   restoreProgress: {
     operationId: string;
-    phase: 'listing' | 'downloading' | 'staging' | 'copying' | 'complete' | 'error';
+    phase: 'listing' | 'downloading' | 'staging' | 'copying' | 'complete' | 'cancelled' | 'error';
     currentFile?: string;
     filesProcessed?: number;
     filesTotal?: number;

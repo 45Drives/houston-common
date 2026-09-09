@@ -1256,6 +1256,12 @@ export class EasySetupConfigurator {
       // enforce group semantics via advancedOptions
       share = this.withSmbusersSemantics(share);
 
+      // `net conf addshare` and the chown/chmod below both require the directory to exist.
+      // Shares pointing at a subfolder of a dataset have no directory until now.
+      await unwrap(
+        server.execute(new Command(["mkdir", "-p", share.path], this.commandOptions), true)
+      );
+
       await unwrap(this.sambaManager.addShare(share));
 
       // filesystem ownership: group-owned by smbusers (not a specific user)

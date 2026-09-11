@@ -1,5 +1,6 @@
 import { SambaConfig } from "../samba/types";
 import { ZFSConfig } from "../zfs/types";
+import { SnapshotPolicyName } from "../../scheduler/defaultTaskConfigs";
 
 export type EasySetupConfig = {
   zfsConfigs?: ZFSConfig[]
@@ -14,6 +15,11 @@ export type EasySetupConfig = {
   skipClearExisting?: boolean;
   /** If true, erase every configured drive before creating pools */
   wipeDrives?: boolean;
+  /**
+   * How much snapshot history the default snapshot tasks keep.
+   * "none" skips creating snapshot tasks entirely. Defaults to "standard".
+   */
+  snapshotPolicy?: SnapshotPolicyName;
   /**
    * "quick" clears partition tables and filesystem/ZFS/RAID signatures only.
    * "full" additionally erases every block via NVMe format, discard, or a zero overwrite.

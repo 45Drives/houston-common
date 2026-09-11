@@ -474,6 +474,7 @@ export class EasySetupConfigurator {
         poolName: storageZfsConfig.pool.name,
         datasetName: storageZfsConfig.dataset.name,
       },
+      snapshotPolicy: config.snapshotPolicy,
     });
 
     const result = await myScheduler.importTasksFromConfig(JSON.stringify(taskConfig));

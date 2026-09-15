@@ -49,8 +49,8 @@
 		"lib/**/*.ts",
 		"lib/**/*.d.ts",
 		"lib/**/*.js",
-		"lib/defaultconfigs/**/smb.conf",
-		"lib/defaultconfigs/**/zfs.json",
+		"lib/defaultconfigs/smb.conf",
+		"lib/defaultconfigs/zfs.json",
 	],
 	"exclude": [
 		"dist",

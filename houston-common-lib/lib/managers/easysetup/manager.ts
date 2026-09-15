@@ -21,7 +21,7 @@ import {
   flushConsoleFileLogger,
 } from "./logConfig";
 import { ZFSManager } from "@/index";
-import * as defaultConfigs from "@/defaultconfigs";
+import { smbconf, zfsconf } from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
 import {
   AutomatedSnapshotTaskTemplate,
@@ -1441,18 +1441,13 @@ export class EasySetupConfigurator {
   }
 
 
-  static async loadConfig(
-    easyConfigName: keyof typeof defaultConfigs
-  ): Promise<EasySetupConfig | null> {
-    // console.log("loading config for:", easyConfigName);
-    // console.log("list of defaultconfigs:", defaultConfigs);
-    const dc = defaultConfigs[easyConfigName];
+  static async loadConfig(): Promise<EasySetupConfig | null> {
     return SambaConfParser()
-      .apply(dc.smbconf)
+      .apply(smbconf)
       .map((sambaConfig): EasySetupConfig => {
         return {
           sambaConfig,
-          zfsConfigs: dc.zfsconf as ZFSConfig[],
+          zfsConfigs: zfsconf as ZFSConfig[],
         };
       })
       .unwrapOr(null);

@@ -42,7 +42,7 @@
 				"./typings/*"
 			]
 		},
-		"types": ["electron"]
+		"types": ["node"]
 	},
 	"include": [
 		"typings/**/*.d.ts",

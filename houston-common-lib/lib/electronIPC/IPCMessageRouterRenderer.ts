@@ -51,6 +51,11 @@ export class IPCMessageRouterRenderer<
   }
 
   setCockpitWebView(webviewElement: any) {
+    // did-finish-load fires again on every Cockpit navigation and reconnect, so without
+    // this guard each reload adds another listener and every message is routed twice.
+    if (this.webviewElement === webviewElement) {
+      return;
+    }
     this.webviewElement = webviewElement;
     // Legacy fallback: if the cockpit webview sends IPC messages via
     // console.log (old approach), pick them up here so nothing is lost.

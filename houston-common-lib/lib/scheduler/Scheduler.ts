@@ -347,16 +347,11 @@ export class Scheduler implements SchedulerType {
         await this.ensureDir('/etc/systemd/system');
 
         const envFile = new File(server, envFilePath);
-        await envFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` created ${envFilePath}`),
-                err => console.error(` create file failed:`, err)
-            );
-        await envFile.write(envKeyValuesString, { superuser: 'require' })
-            .match(
-                () => console.log(` wrote env for ${templateName}`),
-                err => console.error(` write env failed:`, err)
-            );
+        // unwrap() so a failed write throws instead of silently leaving the task missing
+        await unwrap(envFile.create(true, { superuser: 'require' }));
+        console.log(` created ${envFilePath}`);
+        await unwrap(envFile.write(envKeyValuesString, { superuser: 'require' }));
+        console.log(` wrote env for ${templateName}`);
 
         const jsonFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.json`;
         // console.log('jsonFilePath:', jsonFilePath);
@@ -367,16 +362,10 @@ export class Scheduler implements SchedulerType {
         const notes = taskInstance.notes;
 
         const notesFile = new File(server, notesFilePath);
-        await notesFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` created ${notesFilePath}`),
-                err => console.error(` create notes failed:`, err)
-            );
-        await notesFile.write(notes, { superuser: 'require' })
-            .match(
-                () => console.log(` wrote notes for ${templateName}`),
-                err => console.error(` write notes failed:`, err)
-            );
+        await unwrap(notesFile.create(true, { superuser: 'require' }));
+        console.log(` created ${notesFilePath}`);
+        await unwrap(notesFile.write(notes, { superuser: 'require' }));
+        console.log(` wrote notes for ${templateName}`);
 
         //run script to generate service + timer via template, param env and schedule json
         if (taskInstance.schedule.intervals.length < 1) {
@@ -393,16 +382,10 @@ export class Scheduler implements SchedulerType {
             const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
             const jsonFile = new File(server, jsonFilePath);
             // await this.ensureDir('/etc/systemd/system');
-            await jsonFile.create(true, { superuser: 'require' })
-                .match(
-                    () => console.log(` created ${jsonFilePath}`),
-                    err => console.error(` create json failed:`, err)
-                );
-            await jsonFile.write(jsonString, { superuser: 'require' })
-                .match(
-                    () => console.log(` wrote schedule JSON`),
-                    err => console.error(` write schedule JSON failed:`, err)
-                );
+            await unwrap(jsonFile.create(true, { superuser: 'require' }));
+            console.log(` created ${jsonFilePath}`);
+            await unwrap(jsonFile.write(jsonString, { superuser: 'require' }));
+            console.log(` wrote schedule JSON`);
             
             await createTaskFiles(templateName, scriptPath, envFilePath, templateTimerPath, jsonFilePath);
         }
@@ -446,16 +429,10 @@ export class Scheduler implements SchedulerType {
       //  console.log('envFilePath:', envFilePath);
 
         const envFile = new File(server, envFilePath);
-        await envFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` recreated ${envFilePath}`),
-                err => console.error(` recreate env failed:`, err)
-            );
-        await envFile.write(envKeyValuesString, { superuser: 'require' })
-            .match(
-                () => console.log(` updated env for ${templateName}`),
-                err => console.error(` update env failed:`, err)
-            );
+        await unwrap(envFile.create(true, { superuser: 'require' }));
+        console.log(` recreated ${envFilePath}`);
+        await unwrap(envFile.write(envKeyValuesString, { superuser: 'require' }));
+        console.log(` updated env for ${templateName}`);
 
         await createStandaloneTask(templateName, scriptPath, envFilePath);
 
@@ -476,16 +453,10 @@ export class Scheduler implements SchedulerType {
         console.log('notesFilePath:', notesFilePath);
 
         const notesFile = new File(server, notesFilePath);
-        await notesFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` recreated ${notesFilePath}`),
-                err => console.error(` recreate notes failed:`, err)
-            );
-        await notesFile.write(taskInstance.notes, { superuser: 'require' })
-            .match(
-                () => console.log(` updated notes for ${templateName}`),
-                err => console.error(` update notes failed:`, err)
-            );
+        await unwrap(notesFile.create(true, { superuser: 'require' }));
+        console.log(` recreated ${notesFilePath}`);
+        await unwrap(notesFile.write(taskInstance.notes, { superuser: 'require' }));
+        console.log(` updated notes for ${templateName}`);
 
         // Reload the system daemon
         let command = ['sudo', 'systemctl', 'daemon-reload'];

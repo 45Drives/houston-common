@@ -100,7 +100,10 @@ def create_task_instances(system_dir, valid_files):
                 if '.json' in file_dict:
                     json_file_name = file_dict['.json']
                     schedule_data = read_json_schedule(os.path.join(system_dir, json_file_name))
-                    schedule = TaskSchedule(schedule_data['enabled'], schedule_data['intervals'])
+                    if schedule_data:
+                        schedule = TaskSchedule(schedule_data['enabled'], schedule_data['intervals'])
+                    else:
+                        schedule = TaskSchedule(False, [])
                 else:
                     schedule = TaskSchedule(False, [])
                 
@@ -112,8 +115,8 @@ def create_task_instances(system_dir, valid_files):
                     # notes = json.dumps(file_dict, indent=4)  # Convert dict to JSON string for readability
                     notes = "" 
 
-            task_instance = TaskInstance(task_name, template, parameters, schedule, notes)
-            task_instances.append(task_instance)
+                task_instance = TaskInstance(task_name, template, parameters, schedule, notes)
+                task_instances.append(task_instance)
 
     return json.dumps([instance.__dict__ for instance in task_instances], indent=4)
 

@@ -165,8 +165,9 @@ export function generateScrubConfigs(
                 name: 'WeeklyScrub',
                 template: 'ScrubTask',
                 parameters: {
+                    // Scrub always targets the whole pool; the scheduler UI leaves this blank too.
                     scrubConfig_pool_pool: storagePool.poolName,
-                    scrubConfig_pool_dataset: storagePool.poolName,
+                    scrubConfig_pool_dataset: '',
                 },
                 schedule: {
                     enabled: true,

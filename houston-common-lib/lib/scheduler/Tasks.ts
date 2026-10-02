@@ -14,7 +14,6 @@ import {
     IntParameter,
     SelectionParameter,
     SelectionOption,
-    SnapshotRetentionParameter,
     LocationParameter
 } from './Parameters';
 import { cloudSyncProviders } from './CloudSync';
@@ -48,6 +47,7 @@ export class TaskSchedule implements TaskScheduleType {
 export class TaskScheduleInterval implements TaskScheduleIntervalType {
     [key: string]: any;
     dayOfWeek?: DayOfWeek[];
+    retention?: TaskScheduleIntervalType['retention'];
 
     constructor(intervalData: TaskScheduleIntervalType) {
         Object.assign(this, intervalData);
@@ -95,11 +95,6 @@ export class ZFSReplicationTaskTemplate extends TaskTemplate implements TaskTemp
                     .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
                     .addChild(new StringParameter('Custom Name', 'customName', ''))
                     .addChild(new StringParameter('Transfer Method', 'transferMethod', ''))
-            )
-            .addChild(
-                new ParameterNode('Snapshot Retention', 'snapshotRetention')
-                    .addChild(new SnapshotRetentionParameter('Source', 'source', 0, 'minutes'))
-                    .addChild(new SnapshotRetentionParameter('Destination', 'destination', 0, 'minutes'))
             );
         super(name, parameterSchema);
     }
@@ -127,8 +122,7 @@ export class AutomatedSnapshotTaskTemplate extends TaskTemplate implements TaskT
             .addChild(new ZfsDatasetParameter('Filesystem', 'filesystem'))
             .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
             .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-            .addChild(new StringParameter('Custom Name', 'customName', ''))
-            .addChild(new SnapshotRetentionParameter('Snapshot Retention', 'snapshotRetention', 0, 'minutes'));
+            .addChild(new StringParameter('Custom Name', 'customName', ''));
         super(name, parameterSchema);
     }
 

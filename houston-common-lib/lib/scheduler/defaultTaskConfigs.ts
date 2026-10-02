@@ -73,16 +73,12 @@ export function generateSnapshotConfigs(
     const filesystem = `${pool.poolName}/${pool.datasetName}`;
     const resolved = resolveSnapshotPolicy(policy);
 
-    const baseParams = (retention: SnapshotRetention) => ({
+    const baseParams = () => ({
         autoSnapConfig_filesystem_pool: pool.poolName,
         autoSnapConfig_filesystem_dataset: filesystem,
         autoSnapConfig_recursive_flag: 'false',
         autoSnapConfig_customName_flag: 'false',
         autoSnapConfig_customName: '',
-        // Kept for snapshot scripts predating per-interval retention; the scheduler
-        // strips these once it migrates the task to the interval-based format.
-        autoSnapConfig_snapshotRetention_retentionTime: String(retention.retentionTime),
-        autoSnapConfig_snapshotRetention_retentionUnit: retention.retentionUnit,
     });
 
     const tiers: {
@@ -138,7 +134,7 @@ export function generateSnapshotConfigs(
                 return {
                     name: t.name,
                     template: 'AutomatedSnapshotTask',
-                    parameters: baseParams(retention),
+                    parameters: baseParams(),
                     schedule: {
                         enabled: true,
                         intervals: [{

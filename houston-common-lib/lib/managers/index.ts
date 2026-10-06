@@ -6,6 +6,7 @@ export * from "./easysetup/types";
 export * from "./easysetup/logConfig";
 export * from "./zfs/types";
 export * from "./zfs/manager";
+export * from "./zfs/layout";
 export * from "./calendar/manager";
 export * from "./calendar/types";
 export * from "./backup";

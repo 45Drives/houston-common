@@ -1,12 +1,19 @@
-import { IPCMessageRouter, IPCMessageTypes, IPCMessage, isIPCMessage } from "./types";
+import {
+  IPCMessageRouter,
+  IPCMessageTypes,
+  IPCMessage,
+  isIPCMessage,
+  IPCWebContentsLike,
+  IPCMainLike,
+} from "./types";
 
 export class IPCMessageRouterBackend<
   MessageTypes extends Record<string, any> = IPCMessageTypes,
 > extends IPCMessageRouter<MessageTypes> {
 
-  webcontents: Electron.WebContents;
+  webcontents: IPCWebContentsLike;
 
-  constructor(webcontents: Electron.WebContents, ipcMain: Electron.IpcMain) {
+  constructor(webcontents: IPCWebContentsLike, ipcMain: IPCMainLike) {
     super("backend");
 
     this.webcontents = webcontents;

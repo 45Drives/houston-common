@@ -12,6 +12,8 @@ const props = defineProps<{
   hideHeader?: boolean;
   hideProgress?: boolean;
   progressOverride?: number | null;
+  /** Maps a step index to a percent, for wizards whose steps branch into separate flows. */
+  progressFor?: (index: number) => number | null | undefined;
 }>();
 
 const emit = defineEmits(["goBack", "onComplete"]);
@@ -44,10 +46,16 @@ const computedProgress = computed(() => {
 });
 
 
+const clampPercent = (n: number) => Math.min(100, Math.max(0, Math.round(n)));
+
 const progress = computed(() => {
   const p = props.progressOverride;
   if (typeof p === "number" && Number.isFinite(p)) {
-    return Math.min(100, Math.max(0, Math.round(p)));
+    return clampPercent(p);
+  }
+  const mapped = props.progressFor?.(state.index.value);
+  if (typeof mapped === "number" && Number.isFinite(mapped)) {
+    return clampPercent(mapped);
   }
   return computedProgress.value;
 });

@@ -2,6 +2,16 @@ import {BackUpTask} from "../managers/backup"
 
 export type IPCMessageTarget = "cockpit" | "renderer" | "backend";
 
+// Structural subsets of Electron.WebContents / Electron.IpcMain so this lib
+// doesn't need the electron package installed (Cockpit modules never run Electron).
+export interface IPCWebContentsLike {
+  send(channel: string, ...args: any[]): void;
+}
+
+export interface IPCMainLike {
+  on(channel: string, listener: (event: any, ...args: any[]) => void): unknown;
+}
+
 /**
  * All IPC message types flowing through the IPCMessageRouter bus.
  *
@@ -21,7 +31,7 @@ export type IPCMessageTypes = {
   /** Progress update during a long-running restore/backup operation */
   restoreProgress: {
     operationId: string;
-    phase: 'listing' | 'downloading' | 'staging' | 'copying' | 'complete' | 'error';
+    phase: 'listing' | 'downloading' | 'staging' | 'copying' | 'complete' | 'cancelled' | 'error';
     currentFile?: string;
     filesProcessed?: number;
     filesTotal?: number;

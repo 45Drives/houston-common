@@ -1,5 +1,6 @@
 import { SambaConfig } from "../samba/types";
 import { ZFSConfig } from "../zfs/types";
+import { SnapshotPolicyName } from "../../scheduler/defaultTaskConfigs";
 
 export type EasySetupConfig = {
   zfsConfigs?: ZFSConfig[]
@@ -8,9 +9,23 @@ export type EasySetupConfig = {
   smbPass?: string
   srvrName?: string
   folderName?: string
-  splitPools?: boolean
   serverConfig?: ServerInfoConfig;
   usersAndGroups?: UsersAndGroupsConfig;
+  /** If true, skip destruction of existing ZFS pools and Samba shares (step 3) */
+  skipClearExisting?: boolean;
+  /** If true, erase every configured drive before creating pools */
+  wipeDrives?: boolean;
+  /**
+   * How much snapshot history the default snapshot tasks keep.
+   * "none" skips creating snapshot tasks entirely. Defaults to "standard".
+   */
+  snapshotPolicy?: SnapshotPolicyName;
+  /**
+   * "quick" clears partition tables and filesystem/ZFS/RAID signatures only.
+   * "full" additionally erases every block via NVMe format, discard, or a zero overwrite.
+   * Defaults to "quick".
+   */
+  wipeMode?: "quick" | "full";
 };
 
 export type BackupLogEntry = {
@@ -26,7 +41,9 @@ export type BackupLog = {
 export type ServerInfoConfig = {
   adminUser: string;
   adminPass: string;
+  /** Opt-in hardening; root SSH is left as the OS shipped it unless this is true. */
   disableRootSSH: boolean;
+  changeRootPassword?: boolean;
   newRootPass?: string;
   timezone?: string;
   setTimezone?: boolean;

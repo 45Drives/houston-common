@@ -15,12 +15,17 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 import { LAYER_DEFAULT, LAYER_NO_SELECT } from "./constants";
 
-import { getChassisModel, type DriveOrientation } from "@/components/ServerView/assets";
+import {
+  getChassisModel,
+  type DriveOrientation,
+  type DriveViewFit,
+} from "@/components/ServerView/assets";
 import {
   isDriveSlotType,
   ServerComponentSlot,
   ServerDriveSlot,
   SlotHighlight,
+  type DriveSlotType,
   type ServerComponentSlotEventMap,
 } from "./ServerComponent";
 
@@ -42,18 +47,27 @@ class CameraSetpointController {
   private atFocusPointResolver?: () => void;
   initialViewZoomMargin: number;
   driveViewZoomMargin: number;
+  private driveViewOffset?: THREE.Vector3;
+  private driveViewFit?: DriveViewFit;
 
   constructor(
     camera: THREE.OrthographicCamera | THREE.PerspectiveCamera,
     chassis: THREE.Object3D,
     componentSlots: ServerComponentSlot[],
     driveOrientation: DriveOrientation,
-    opts?: { initialViewZoomMargin?: number; driveViewZoomMargin?: number }
+    opts?: {
+      initialViewZoomMargin?: number;
+      driveViewZoomMargin?: number;
+      driveViewOffset?: THREE.Vector3;
+      driveViewFit?: DriveViewFit;
+    }
   ) {
     this.lambda = 0.005;
     this.focusPoint = new THREE.Vector3(0, 0, 0);
     this.initialViewZoomMargin = opts?.initialViewZoomMargin ?? 0.75;
     this.driveViewZoomMargin = opts?.driveViewZoomMargin ?? 1;
+    this.driveViewOffset = opts?.driveViewOffset;
+    this.driveViewFit = opts?.driveViewFit;
     this.view = "InitialView";
     const views = this.getViews(camera, chassis, componentSlots, driveOrientation);
     this.initialView = views.initialView;
@@ -252,10 +266,17 @@ class CameraSetpointController {
       };
     };
 
-    const getView = (position: THREE.Vector3, zoomMargin: number, focus: Focus): CameraSetPoint => {
+    const getView = (
+      position: THREE.Vector3,
+      zoomMargin: number,
+      focus: Focus,
+      fit?: DriveViewFit
+    ): CameraSetPoint => {
       camera.position.copy(position);
 
       camera.lookAt(focus.center);
+      // project() reads matrixWorldInverse, which lookAt() alone leaves stale on a detached clone.
+      camera.updateMatrixWorld(true);
 
       if (camera instanceof THREE.OrthographicCamera) {
         camera.zoom = 1;
@@ -286,12 +307,11 @@ class CameraSetpointController {
       // console.log("projected size:", projectedSize);
 
       if (camera instanceof THREE.OrthographicCamera) {
-        const cameraW = camera.right - camera.left;
-        const cameraH = camera.top - camera.bottom;
-        const cameraAspect = cameraW / cameraH;
-        const boundsAspect = projectedSize.x / projectedSize.y;
-
-        if (boundsAspect > cameraAspect) {
+        // projectedSize is already in NDC, so it has the viewport aspect baked in. Comparing it
+        // against the camera aspect double-counts it and makes the fit axis flip on resize.
+        const fitWidth =
+          fit === "width" || (fit === undefined && projectedSize.x > projectedSize.y);
+        if (fitWidth) {
           camera.zoom = (2 / projectedSize.x) * zoomMargin;
         } else {
           camera.zoom = (2 / projectedSize.y) * zoomMargin;
@@ -324,13 +344,19 @@ class CameraSetpointController {
     let driveView: CameraSetPoint;
     switch (driveOrientation) {
       case "FrontLoader":
-        position.set(0, 0, 2);
-        driveView = getView(position, this.driveViewZoomMargin, driveFocus);
+        // Offsetting from the slot centroid keeps lookAt() axis-aligned; the legacy absolute
+        // (0, 0, 2) skews the view whenever the slots aren't centred on the chassis bounding box.
+        if (this.driveViewOffset) {
+          position.copy(this.driveViewOffset).add(driveFocus.center);
+        } else {
+          position.set(0, 0, 2);
+        }
+        driveView = getView(position, this.driveViewZoomMargin, driveFocus, this.driveViewFit);
         break;
       case "TopLoader":
         position.set(0, 2, 0).add(driveFocus.center);
         position.z += driveFocus.size.z / 2;
-        driveView = getView(position, this.driveViewZoomMargin, driveFocus);
+        driveView = getView(position, this.driveViewZoomMargin, driveFocus, this.driveViewFit);
         break;
       default:
         throw new Error(`DriveOrientation not implemented: ${driveOrientation}`);
@@ -363,6 +389,7 @@ export class ServerView extends THREE.EventDispatcher<
   private mouseEventTranslator: MouseEventTranslator;
 
   private chassis: Promise<THREE.Object3D>;
+  private chassisObject?: THREE.Object3D;
 
   private resetCameraControlsTimeoutHandle?: number;
   private static resetCameraControlsTimeout = 5000;
@@ -372,6 +399,10 @@ export class ServerView extends THREE.EventDispatcher<
   private componentSlots: ServerComponentSlot[];
 
   private driveOrientation: DriveOrientation;
+  private driveViewOffset?: THREE.Vector3;
+  private driveViewFit?: DriveViewFit;
+  private driveViewZoomMargin = 1;
+  private initialViewZoomMargin = 0.75;
   private cameraSetpointControllerPromise: Promise<CameraSetpointController>;
   private cameraSetpointController?: CameraSetpointController;
 
@@ -385,7 +416,7 @@ export class ServerView extends THREE.EventDispatcher<
 
   private materials = {
     powdercoat: new THREE.MeshPhysicalMaterial({
-      roughness: 1,
+      roughness: 0.5,
       color: 0x000000,
       reflectivity: 0.5,
     }),
@@ -483,17 +514,10 @@ export class ServerView extends THREE.EventDispatcher<
     }
     light.dispose();
 
-    // generate env map
-    const roomCube = new THREE.Mesh(
-      new THREE.BoxGeometry(10, 5.1, 10),
-      new THREE.MeshStandardMaterial({ color: 0x807774, side: THREE.BackSide, roughness: 1 })
-    );
-    this.scene.add(roomCube);
-    this.scene.environment = new THREE.PMREMGenerator(this.renderer).fromScene(
-      this.scene,
-      0.05
-    ).texture;
-    this.scene.remove(roomCube);
+    // Studio lightbox env map; a flat grey room gives powdercoat no specular to catch.
+    const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmremGenerator.dispose();
 
     this.componentSlots = [];
 
@@ -504,8 +528,19 @@ export class ServerView extends THREE.EventDispatcher<
       driveOrientation,
       defaultPowdercoat,
       defaultLabels,
+      driveViewOffset,
+      driveViewFit,
+      driveViewZoomMargin,
+      initialViewZoomMargin,
+      exposure,
+      environmentIntensity,
     } = getChassisModel(serverModel);
     this.driveOrientation = driveOrientation;
+    this.driveViewOffset = driveViewOffset;
+    this.driveViewFit = driveViewFit;
+    this.driveViewZoomMargin = driveViewZoomMargin;
+    this.initialViewZoomMargin = initialViewZoomMargin;
+    this.setLighting({ exposure, environmentIntensity });
     this.materials.powdercoat.color.copy(defaultPowdercoat);
     this.materials.labels.color.copy(defaultLabels);
     this.chassis = chassisModelPromise
@@ -544,6 +579,7 @@ export class ServerView extends THREE.EventDispatcher<
             }
           }
         });
+        this.chassisObject = chassis;
         this.scene.add(chassis);
         return chassis;
       });
@@ -590,7 +626,13 @@ export class ServerView extends THREE.EventDispatcher<
           this.camera,
           chassis,
           this.componentSlots,
-          this.driveOrientation
+          this.driveOrientation,
+          {
+            driveViewOffset: this.driveViewOffset,
+            driveViewFit: this.driveViewFit,
+            driveViewZoomMargin: this.driveViewZoomMargin,
+            initialViewZoomMargin: this.initialViewZoomMargin,
+          }
         );
         ctrlr.forceView("InitialView", this.camera);
         this.cameraSetpointController = ctrlr;
@@ -600,6 +642,15 @@ export class ServerView extends THREE.EventDispatcher<
     Promise.all([this.chassis, this.cameraSetpointControllerPromise]).then(() => {
       this.onLoadingEnd?.("Loaded.", 3, 3);
     });
+  }
+
+  /** Drive slots declared by the chassis GLB, once it has finished loading. */
+  getChassisDriveSlots(): Promise<{ slotId: string; driveType: DriveSlotType }[]> {
+    return this.chassis.then(() =>
+      this.componentSlots
+        .filter((s): s is ServerDriveSlot => s instanceof ServerDriveSlot)
+        .map(({ slotId, driveType }) => ({ slotId, driveType }))
+    );
   }
 
   start(parent: HTMLElement) {
@@ -748,6 +799,25 @@ export class ServerView extends THREE.EventDispatcher<
     this.materials.labels.color.set(color);
   }
 
+  setLighting(opts: { exposure?: number; environmentIntensity?: number }) {
+    if (opts.exposure !== undefined) {
+      this.renderer.toneMappingExposure = opts.exposure;
+    }
+    if (opts.environmentIntensity !== undefined) {
+      this.scene.environmentIntensity = opts.environmentIntensity;
+    }
+  }
+
+  /** Framing and lighting this chassis resolved to from the model LUT. */
+  getViewDefaults() {
+    return {
+      driveViewZoomMargin: this.driveViewZoomMargin,
+      initialViewZoomMargin: this.initialViewZoomMargin,
+      exposure: this.renderer.toneMappingExposure,
+      environmentIntensity: this.scene.environmentIntensity,
+    };
+  }
+
   async setDriveSlotInfo(slots: DriveSlot[]) {
     await this.chassis;
     this.dispatchEvent({ type: "driveslotchange", slots });
@@ -886,6 +956,11 @@ export class ServerView extends THREE.EventDispatcher<
 
     for (const slot of this.componentSlots) {
       slot.animate(time);
+    }
+
+    // Chassis GLTFs are cached and shared, so another ServerView may have re-parented ours away.
+    if (this.chassisObject && this.chassisObject.parent !== this.scene) {
+      this.scene.add(this.chassisObject);
     }
 
     this.renderer.render(this.scene, this.camera);

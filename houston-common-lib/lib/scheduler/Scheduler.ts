@@ -39,6 +39,21 @@ import get_tasks_script from '@/scripts/get-task-instances.py?raw';
 
 const { errorString, useSpawn } = legacy;
 
+/** Canonical keys ("ScrubTask") and display names ("Scrub Task") both normalize to the same entry. */
+const TASK_TEMPLATE_FACTORIES: Record<string, () => TaskTemplateType> = {
+    zfsreplicationtask: () => new ZFSReplicationTaskTemplate(),
+    automatedsnapshottask: () => new AutomatedSnapshotTaskTemplate(),
+    rsynctask: () => new RsyncTaskTemplate(),
+    scrubtask: () => new ScrubTaskTemplate(),
+    smarttest: () => new SmartTestTemplate(),
+    cloudsynctask: () => new CloudSyncTaskTemplate(),
+    customtask: () => new CustomTaskTemplate(),
+};
+
+function resolveTaskTemplate(name: string): (() => TaskTemplateType) | undefined {
+    return TASK_TEMPLATE_FACTORIES[name.replace(/[^a-z0-9]/gi, '').toLowerCase()];
+}
+
 /** Validate task name to prevent path traversal in systemd file paths */
 const SAFE_TASK_NAME_RE = /^[a-zA-Z0-9_\-]+$/;
 function validateTaskName(name: string): void {
@@ -88,7 +103,7 @@ export class Scheduler implements SchedulerType {
                 schedule: { intervals: any[]; enabled: boolean };
                 name: string;
             }>;
-            tasksData.forEach((task) => {
+            for (const task of tasksData) {
                 const newTaskTemplate = ref();
                 if (task.template == 'ZfsReplicationTask') {
                     newTaskTemplate.value = new ZFSReplicationTaskTemplate;
@@ -118,11 +133,15 @@ export class Scheduler implements SchedulerType {
                     taskIntervals.push(thisInterval);
                 });
                 const newSchedule = new TaskSchedule(task.schedule.enabled, taskIntervals);
+                const migrated = this.migrateEnvRetentionToIntervals(task.template, parameters, newSchedule);
                 const newTaskInstance = new TaskInstance(task.name, newTaskTemplate.value, parameterNodeStructure, newSchedule,notes); 
                 // console.log("SCHEDULER - TaskInstance:", newTaskInstance);
 
                 this.taskInstances.push(newTaskInstance);
-            });
+                if (migrated) {
+                    await this.updateTaskInstance(newTaskInstance);
+                }
+            }
 
             // console.log('this.taskInstances:', this.taskInstances);
 
@@ -186,7 +205,8 @@ export class Scheduler implements SchedulerType {
     */
     parseEnvKeyValues(
         envKeyValues: string[],
-        templateName: string
+        templateName: string,
+        schedule?: TaskInstanceType['schedule']
     ): Record<string, string> {
         // 1) Annotate the accumulator as Record<string,string>
         // 2) Destructure [key, value = ''] so `value` is never undefined
@@ -204,6 +224,10 @@ export class Scheduler implements SchedulerType {
             },
             {}
         );
+
+        if (schedule) {
+            this.migrateEnvRetentionToIntervals(templateName, envObject, schedule);
+        }
 
         // now indexing envObject[...] is always legal
         const formatEnvOption = (
@@ -230,6 +254,15 @@ export class Scheduler implements SchedulerType {
                 ) {
                     envObject['zfsRepConfig_sendOptions_raw_flag'] = '';
                 }
+                delete envObject['zfsRepConfig_snapshotRetention_source_retentionTime'];
+                delete envObject['zfsRepConfig_snapshotRetention_source_retentionUnit'];
+                delete envObject['zfsRepConfig_snapshotRetention_destination_retentionTime'];
+                delete envObject['zfsRepConfig_snapshotRetention_destination_retentionUnit'];
+                break;
+
+            case 'AutomatedSnapshotTask':
+                delete envObject['autoSnapConfig_snapshotRetention_retentionTime'];
+                delete envObject['autoSnapConfig_snapshotRetention_retentionUnit'];
                 break;
 
             case 'RsyncTask':
@@ -276,6 +309,8 @@ export class Scheduler implements SchedulerType {
                 return 'autosnap-script';
             case 'RsyncTask':
                 return 'rsync-script';
+            case 'ScrubTask':
+                return 'scrub-script';
             case 'SmartTest':
                 return 'smart-test-script';
             case 'CloudSyncTask':
@@ -293,7 +328,7 @@ export class Scheduler implements SchedulerType {
         // console.log('envKeyVals Before Parse:', envKeyValues);
         const templateName = formatTemplateName(taskInstance.template.name);
         let scriptPath: string;
-        const envObject = this.parseEnvKeyValues(envKeyValues, templateName);
+        const envObject = this.parseEnvKeyValues(envKeyValues, templateName, taskInstance.schedule);
         envObject['taskName'] = taskInstance.name;
 
         // console.log('registering task data:', taskInstance);
@@ -330,16 +365,11 @@ export class Scheduler implements SchedulerType {
         await this.ensureDir('/etc/systemd/system');
 
         const envFile = new File(server, envFilePath);
-        await envFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` created ${envFilePath}`),
-                err => console.error(` create file failed:`, err)
-            );
-        await envFile.write(envKeyValuesString, { superuser: 'require' })
-            .match(
-                () => console.log(` wrote env for ${templateName}`),
-                err => console.error(` write env failed:`, err)
-            );
+        // unwrap() so a failed write throws instead of silently leaving the task missing
+        await unwrap(envFile.create(true, { superuser: 'require' }));
+        console.log(` created ${envFilePath}`);
+        await unwrap(envFile.write(envKeyValuesString, { superuser: 'require' }));
+        console.log(` wrote env for ${templateName}`);
 
         const jsonFilePath = `/etc/systemd/system/${houstonSchedulerPrefix}${templateName}_${taskInstance.name}.json`;
         // console.log('jsonFilePath:', jsonFilePath);
@@ -350,16 +380,10 @@ export class Scheduler implements SchedulerType {
         const notes = taskInstance.notes;
 
         const notesFile = new File(server, notesFilePath);
-        await notesFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` created ${notesFilePath}`),
-                err => console.error(` create notes failed:`, err)
-            );
-        await notesFile.write(notes, { superuser: 'require' })
-            .match(
-                () => console.log(` wrote notes for ${templateName}`),
-                err => console.error(` write notes failed:`, err)
-            );
+        await unwrap(notesFile.create(true, { superuser: 'require' }));
+        console.log(` created ${notesFilePath}`);
+        await unwrap(notesFile.write(notes, { superuser: 'require' }));
+        console.log(` wrote notes for ${templateName}`);
 
         //run script to generate service + timer via template, param env and schedule json
         if (taskInstance.schedule.intervals.length < 1) {
@@ -376,16 +400,10 @@ export class Scheduler implements SchedulerType {
             const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
             const jsonFile = new File(server, jsonFilePath);
             // await this.ensureDir('/etc/systemd/system');
-            await jsonFile.create(true, { superuser: 'require' })
-                .match(
-                    () => console.log(` created ${jsonFilePath}`),
-                    err => console.error(` create json failed:`, err)
-                );
-            await jsonFile.write(jsonString, { superuser: 'require' })
-                .match(
-                    () => console.log(` wrote schedule JSON`),
-                    err => console.error(` write schedule JSON failed:`, err)
-                );
+            await unwrap(jsonFile.create(true, { superuser: 'require' }));
+            console.log(` created ${jsonFilePath}`);
+            await unwrap(jsonFile.write(jsonString, { superuser: 'require' }));
+            console.log(` wrote schedule JSON`);
             
             await createTaskFiles(templateName, scriptPath, envFilePath, templateTimerPath, jsonFilePath);
         }
@@ -398,7 +416,10 @@ export class Scheduler implements SchedulerType {
       //  console.log('envKeyVals:', envKeyValues);
         const templateName = formatTemplateName(taskInstance.template.name);
         let scriptPath: string;
-        const envObject = this.parseEnvKeyValues(envKeyValues, templateName);
+        const envObject = this.parseEnvKeyValues(envKeyValues, templateName, taskInstance.schedule);
+        if (taskInstance.schedule.intervals.length > 0) {
+            await this.updateSchedule(taskInstance);
+        }
         envObject['taskName'] = taskInstance.name;
 
         if (templateName === 'CustomTask') {
@@ -429,16 +450,10 @@ export class Scheduler implements SchedulerType {
       //  console.log('envFilePath:', envFilePath);
 
         const envFile = new File(server, envFilePath);
-        await envFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` recreated ${envFilePath}`),
-                err => console.error(` recreate env failed:`, err)
-            );
-        await envFile.write(envKeyValuesString, { superuser: 'require' })
-            .match(
-                () => console.log(` updated env for ${templateName}`),
-                err => console.error(` update env failed:`, err)
-            );
+        await unwrap(envFile.create(true, { superuser: 'require' }));
+        console.log(` recreated ${envFilePath}`);
+        await unwrap(envFile.write(envKeyValuesString, { superuser: 'require' }));
+        console.log(` updated env for ${templateName}`);
 
         await createStandaloneTask(templateName, scriptPath, envFilePath);
 
@@ -459,16 +474,10 @@ export class Scheduler implements SchedulerType {
         console.log('notesFilePath:', notesFilePath);
 
         const notesFile = new File(server, notesFilePath);
-        await notesFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` recreated ${notesFilePath}`),
-                err => console.error(` recreate notes failed:`, err)
-            );
-        await notesFile.write(taskInstance.notes, { superuser: 'require' })
-            .match(
-                () => console.log(` updated notes for ${templateName}`),
-                err => console.error(` update notes failed:`, err)
-            );
+        await unwrap(notesFile.create(true, { superuser: 'require' }));
+        console.log(` recreated ${notesFilePath}`);
+        await unwrap(notesFile.write(taskInstance.notes, { superuser: 'require' }));
+        console.log(` updated notes for ${templateName}`);
 
         // Reload the system daemon
         let command = ['sudo', 'systemctl', 'daemon-reload'];
@@ -668,16 +677,8 @@ export class Scheduler implements SchedulerType {
         const jsonString = JSON.stringify(taskInstance.schedule, null, 2);
 
         const jsonFile = new File(server, jsonFilePath);
-        await jsonFile.create(true, { superuser: 'require' })
-            .match(
-                () => console.log(` recreated ${jsonFilePath}`),
-                err => console.error(` recreate json failed:`, err)
-            );
-        await jsonFile.write(jsonString, { superuser: 'require' })
-            .match(
-                () => console.log(` updated schedule JSON`),
-                err => console.error(` update JSON failed:`, err)
-            );
+        await unwrap(jsonFile.create(true, { superuser: 'require' }));
+        await unwrap(jsonFile.write(jsonString, { superuser: 'require' }));
 
         if (taskInstance.schedule.enabled) {
             await createScheduleForTask(fullTaskName, templateTimerPath, jsonFilePath);
@@ -691,6 +692,119 @@ export class Scheduler implements SchedulerType {
             state = useSpawn(command, { superuser: 'try' });
             await state.promise();
         }
+    }
+
+    /**
+     * Batch delete multiple tasks. Sequentially stops and unregisters each task,
+     * collecting results. Continues on individual failures.
+     */
+    async batchDeleteTasks(
+        tasks: TaskInstanceType[]
+    ): Promise<{ deleted: string[]; errors: { task: string; error: string }[] }> {
+        const result = { deleted: [] as string[], errors: [] as { task: string; error: string }[] };
+
+        for (const task of tasks) {
+            try {
+                await this.unregisterTaskInstance(task);
+                result.deleted.push(task.name);
+            } catch (e: any) {
+                result.errors.push({
+                    task: task.name,
+                    error: e?.message ?? String(e),
+                });
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Import tasks from a JSON config string. Creates and registers each task.
+     * Config format: { tasks: [{ name, template, parameters, schedule, notes }] }
+     * Returns import results.
+     */
+    async importTasksFromConfig(
+        jsonString: string
+    ): Promise<{ imported: string[]; errors: string[] }> {
+        const result = { imported: [] as string[], errors: [] as string[] };
+
+        let data: any;
+        try {
+            data = JSON.parse(jsonString);
+        } catch {
+            result.errors.push('Invalid JSON config.');
+            return result;
+        }
+
+        const tasks = data?.tasks;
+        if (!Array.isArray(tasks)) {
+            result.errors.push('No tasks array found in config.');
+            return result;
+        }
+
+        for (const t of tasks) {
+            try {
+                if (!t?.name || !t?.template) {
+                    result.errors.push('Skipped invalid entry (missing name or template).');
+                    continue;
+                }
+
+                const makeTemplate = resolveTaskTemplate(t.template);
+                if (!makeTemplate) {
+                    result.errors.push(`${t.name}: Unknown template "${t.template}".`);
+                    continue;
+                }
+                const tpl: any = makeTemplate();
+
+                const paramNode = this.createParameterNodeFromSchema(tpl.parameterSchema, t.parameters || {});
+                const intervals = (t.schedule?.intervals || []).map((i: any) => new TaskScheduleInterval(i));
+                const schedule = new TaskSchedule(!!t.schedule?.enabled, intervals);
+                this.migrateEnvRetentionToIntervals(formatTemplateName(tpl.name), t.parameters || {}, schedule);
+
+                const inst = new TaskInstance(t.name, tpl, paramNode, schedule, t.notes || '');
+                await this.registerTaskInstance(inst);
+                result.imported.push(t.name);
+            } catch (e: any) {
+                result.errors.push(`${t.name}: ${e?.message ?? String(e)}`);
+            }
+        }
+
+        return result;
+    }
+
+    private migrateEnvRetentionToIntervals(
+        templateKey: string,
+        params: Record<string, any>,
+        schedule: TaskInstanceType['schedule']
+    ): boolean {
+        if (!schedule.intervals.length) return false;
+
+        const prefixes = templateKey === 'ZfsReplicationTask'
+            ? ['zfsRepConfig_snapshotRetention_source', 'zfsRepConfig_snapshotRetention_destination']
+            : templateKey === 'AutomatedSnapshotTask'
+                ? ['autoSnapConfig_snapshotRetention']
+                : [];
+        const hasOldKeys = prefixes.some(prefix =>
+            `${prefix}_retentionTime` in params || `${prefix}_retentionUnit` in params
+        );
+        if (!hasOldKeys) return false;
+
+        if (!schedule.intervals.some(interval => interval.retention)) {
+            const sourceTime = parseInt(params[`${prefixes[0]}_retentionTime`] || '0', 10);
+            const sourceUnit = params[`${prefixes[0]}_retentionUnit`] || '';
+            const destinationTime = parseInt(params[`${prefixes[1]}_retentionTime`] || '0', 10);
+            const destinationUnit = params[`${prefixes[1]}_retentionUnit`] || '';
+
+            if (sourceTime > 0 || destinationTime > 0) {
+                for (const interval of schedule.intervals) {
+                    interval.retention = {
+                        ...(sourceTime > 0 ? { source: { retentionTime: sourceTime, retentionUnit: sourceUnit } } : {}),
+                        ...(destinationTime > 0 ? { destination: { retentionTime: destinationTime, retentionUnit: destinationUnit } } : {}),
+                    };
+                }
+            }
+        }
+        return true;
     }
 
     parseIntervalIntoString(interval: TaskScheduleInterval) {

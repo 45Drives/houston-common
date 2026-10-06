@@ -118,9 +118,9 @@ defineExpose({
       <template #header>
         {{ headerText }}
       </template>
-      <div class="flex flex-row items-center gap-2">
-        <ExclamationCircleIcon v-if="isDangerous" class="size-icon-xl icon-danger shrink-0" />
-        <div class="grow overflow-x-auto whitespace-pre-wrap">
+      <div class="flex flex-row items-start gap-3">
+        <ExclamationCircleIcon v-if="isDangerous" class="size-icon-xl icon-danger shrink-0 mt-0.5" />
+        <div class="grow max-w-prose whitespace-pre-wrap">
           {{ bodyText }}
         </div>
       </div>

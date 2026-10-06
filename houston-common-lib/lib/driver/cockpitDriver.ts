@@ -42,14 +42,24 @@ export function factory(): IHoustonDriver {
             return reject(new ProcessError(this.prefixMessage("Process never started!")));
           }
           const handle = this.spawnHandle;
+          // wait() drops the handle, so nothing can close it later. Release the
+          // bridge's channel here or its pipes outlive the process.
+          const settle = () => {
+            if (this.spawnHandle === handle) this.spawnHandle = undefined;
+            try {
+              handle.close();
+            } catch {
+              /* already closed by the bridge */
+            }
+          };
           handle
             .then((stdout, stderr) => {
-              if (this.spawnHandle === handle) this.spawnHandle = undefined;
+              settle();
               const exitStatus = 0;
               resolve(new ExitedProcess(this.server, this.command, exitStatus, stdout, stderr));
             })
             .catch((ex, stdout) => {
-              if (this.spawnHandle === handle) this.spawnHandle = undefined;
+              settle();
               if (
                 (ex.problem !== null && ex.problem !== undefined) ||
                 ex.exit_status === null ||

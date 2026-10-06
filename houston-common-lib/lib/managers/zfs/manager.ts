@@ -68,6 +68,9 @@ export interface IZFSManager {
 export class ZFSManager implements IZFSManager {
   private commandOptions: CommandOptions;
 
+  /** Called for problems that don't fail the operation but should still reach the user. */
+  onWarning?: (message: string) => void;
+
   constructor(protected server: Server = new Server()) {
     this.commandOptions = { superuser: "try" };
   }
@@ -170,14 +173,20 @@ export class ZFSManager implements IZFSManager {
 
     const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
     console.log('createPool output:', proc.getStdout());
+
     if (options.refreservationPercent !== undefined) {
       try {
         await this.setPoolRefreservation(pool, options.refreservationPercent);
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
-        throw Object.assign(new Error(`Pool '${pool.name}' was created, but its reservation could not be set: ${detail}`), { poolCreated: true });
+        console.warn(`[ZFS] refreservation failed on '${pool.name}':`, error);
+        this.onWarning?.(
+          `Pool '${pool.name}' was created, but the ${options.refreservationPercent}% space reservation could not be applied (${detail}). ` +
+            `Storage is usable. To apply it manually, run: zfs set refreservation=<bytes> ${pool.name}`
+        );
       }
     }
+
     return proc;
   }
 

@@ -47,7 +47,7 @@ export function factory(): IHoustonDriver["Process"] {
         throw new ProcessError("Empty argv!");
       }
       const argv0 = argv[0]!;
-      if (this.command.options.superuser && !process.env.VITEST) {
+      if (this.command.options.superuser && !process.env.VITEST && !process.env.__HOUSTON_SKIP_PKEXEC) {
         argv.unshift("pkexec");
       }
       if (this.server.host && this.server.host !== "localhost") {

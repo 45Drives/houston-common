@@ -11,14 +11,6 @@ import {
   ValueError,
   Scheduler,
   ZFSReplicationTaskTemplate,
-  TaskInstance,
-  ParameterNode,
-  ZfsDatasetParameter,
-  BoolParameter,
-  IntParameter,
-  StringParameter,
-  SnapshotRetentionParameter,
-  TaskScheduleInterval,
   SambaShareConfig,
   LocalUser
 } from "@/index";
@@ -29,9 +21,13 @@ import {
   flushConsoleFileLogger,
 } from "./logConfig";
 import { ZFSManager } from "@/index";
-import * as defaultConfigs from "@/defaultconfigs";
+import { smbconf, zfsconf } from "@/defaultconfigs";
 import { okAsync } from "neverthrow";
-import { AutomatedSnapshotTaskTemplate, ScrubTaskTemplate, TaskSchedule } from "@/scheduler";
+import {
+  AutomatedSnapshotTaskTemplate,
+  ScrubTaskTemplate,
+  generateAllDefaultConfigs,
+} from "@/scheduler";
 
 // List of required Samba ports
 const sambaPorts = [
@@ -39,20 +35,185 @@ const sambaPorts = [
   { port: 138, protocol: "udp" },
   { port: 139, protocol: "tcp" },
   { port: 445, protocol: "tcp" },
+  // Clients address the share by the server's .local name, so mDNS has to be
+  // reachable too or the hostname never resolves.
+  { port: 5353, protocol: "udp" },
 ];
 
 const decode = (buf: Uint8Array) => new TextDecoder().decode(buf);
+
+/** Only paths matching this are ever passed to the destructive wipe script. */
+const DEVICE_PATH_REGEX = /^\/dev\/[A-Za-z0-9._\/-]+$/;
+
+/** How many drives are erased concurrently in "full" mode. */
+const FULL_WIPE_CONCURRENCY = 8;
+
+/**
+ * Shell helpers shared by the guard and the wipe script so both judge "is this a
+ * system disk?" identically. Emits nothing on its own.
+ */
+const systemDiskProbe = `
+# Canonical whole-disk node for a path that may be a symlink, a partition, or a disk.
+canon() {
+  p=$(readlink -f "$1" 2>/dev/null) || return 0
+  [ -b "$p" ] || return 0
+  if [ "$(lsblk -ndo TYPE "$p" 2>/dev/null)" = "part" ]; then
+    parent=$(lsblk -ndo PKNAME "$p" 2>/dev/null)
+    [ -n "$parent" ] && p="/dev/$parent"
+  fi
+  printf '%s\\n' "$p"
+}
+
+# Every whole disk underneath a device, walking down through md/LVM/LUKS stacks
+# so both halves of a mirrored boot device are reported, not just the array node.
+holders() {
+  lsblk -nrso NAME,TYPE "$1" 2>/dev/null | awk '$2=="disk"{print "/dev/" $1}'
+}
+
+# Disks the running OS depends on, as "<device><TAB><reason>".
+system_disks() {
+  for mp in / /boot /boot/efi /usr /etc /var; do
+    src=$(findmnt -nvo SOURCE --target "$mp" 2>/dev/null | head -n1)
+    [ -n "$src" ] || continue
+    case "$src" in
+      /dev/*)
+        for d in $(holders "$src"); do printf '%s\\t%s\\n' "$d" "holds $mp"; done
+        ;;
+      *)
+        # ZFS root: SOURCE is a dataset, so expand the pool to its leaf vdevs.
+        pool=\${src%%/*}
+        case "$pool" in ""|*[!A-Za-z0-9_.:-]*) continue ;; esac
+        for leaf in $(zpool list -vHPL "$pool" 2>/dev/null | awk '$1 ~ /^\\/dev\\//{print $1}'); do
+          for d in $(holders "$leaf"); do
+            printf '%s\\t%s\\n' "$d" "is a member of root pool '$pool' holding $mp"
+          done
+        done
+        ;;
+    esac
+  done
+  if [ -r /proc/swaps ]; then
+    for s in $(awk 'NR>1 && $1 ~ /^\\/dev\\//{print $1}' /proc/swaps); do
+      for d in $(holders "$s"); do printf '%s\\t%s\\n' "$d" "holds active swap"; done
+    done
+  fi
+}
+`;
+
+/**
+ * Run as \`bash -c <script> disk-guard <devicePath...>\`.
+ * Prints one \`<severity><TAB><path><TAB><reason>\` line per problem drive and nothing for clean ones.
+ */
+const systemDiskGuardScript = `
+set -u
+${systemDiskProbe}
+protected=$(system_disks)
+
+for arg in "$@"; do
+  dev=$(canon "$arg")
+  if [ -z "$dev" ]; then
+    printf 'missing\\t%s\\t%s\\n' "$arg" "does not resolve to a block device"
+    continue
+  fi
+
+  reason=$(printf '%s\\n' "$protected" | awk -F'\\t' -v d="$dev" '$1==d{print $2; exit}')
+  if [ -n "$reason" ]; then
+    printf 'system\\t%s\\t%s (resolves to %s)\\n' "$arg" "$reason" "$dev"
+    continue
+  fi
+
+  parttypes=$(lsblk -nro PARTTYPE "$dev" 2>/dev/null | tr 'A-Z' 'a-z')
+  case "$parttypes" in
+    *c12a7328-f81f-11d2-ba4b-00a0c93ec93b*)
+      printf 'boot\\t%s\\t%s\\n' "$arg" "carries an EFI System Partition ($dev)"
+      ;;
+    *21686148-6449-6e6f-744e-656564454649*)
+      printf 'boot\\t%s\\t%s\\n' "$arg" "carries a BIOS boot partition ($dev)"
+      ;;
+  esac
+done
+`;
+
+/** Run as `bash -c <script> wipe-drive <devicePath> <quick|full>` so neither argument is interpolated into shell text. */
+const wipeDriveScript = `
+set -u
+${systemDiskProbe}
+disk="$1"
+mode="$2"
+method=""
+
+if [ ! -b "$disk" ]; then
+  echo "skipped (not a block device): $disk"
+  exit 0
+fi
+
+# Re-checked here rather than trusting the caller: a full erase runs for hours,
+# so the disk behind this path may not be the one that passed the earlier guard.
+canonical=$(canon "$disk")
+guard=$(system_disks | awk -F'\\t' -v d="$canonical" '$1==d{print $2; exit}')
+if [ -n "$guard" ]; then
+  echo "REFUSED: $disk resolves to $canonical which $guard" >&2
+  exit 3
+fi
+
+# Metadata teardown, both modes: pool labels, RAID superblocks, filesystem magic, partition table.
+for dev in "$disk" "$disk"?*; do
+  [ -b "$dev" ] || continue
+  zpool labelclear -f "$dev" >/dev/null 2>&1 || true
+  wipefs -a -f "$dev" >/dev/null 2>&1 || true
+  mdadm --zero-superblock --force "$dev" >/dev/null 2>&1 || true
+done
+sgdisk --zap-all "$disk" >/dev/null 2>&1 || true
+
+if [ "$mode" = "full" ]; then
+  case "$disk" in
+    *nvme*)
+      if nvme format "$disk" --ses=1 --force >/dev/null 2>&1; then method="nvme-format"; fi
+      ;;
+  esac
+  if [ -z "$method" ] && blkdiscard -f "$disk" >/dev/null 2>&1; then method="blkdiscard"; fi
+  if [ -z "$method" ] && blkdiscard "$disk" >/dev/null 2>&1; then method="blkdiscard"; fi
+  if [ -z "$method" ]; then
+    # oflag=direct is unsupported on some HBAs, so probe before committing to the long write
+    if dd if=/dev/zero of="$disk" bs=4M count=1 oflag=direct >/dev/null 2>&1; then
+      ddflags="oflag=direct"
+    else
+      ddflags=""
+    fi
+    dd if=/dev/zero of="$disk" bs=64M $ddflags >/dev/null 2>&1 || true
+    sync
+    method="zero-overwrite"
+  fi
+  sgdisk --zap-all "$disk" >/dev/null 2>&1 || true
+else
+  method="signatures-only"
+  dd if=/dev/zero of="$disk" bs=1M count=16 conv=fsync >/dev/null 2>&1 || true
+  sectors=$(blockdev --getsz "$disk" 2>/dev/null || echo 0)
+  case "$sectors" in ''|*[!0-9]*) sectors=0 ;; esac
+  if [ "$sectors" -gt 32768 ]; then
+    dd if=/dev/zero of="$disk" bs=512 seek=$((sectors - 32768)) count=32768 conv=fsync >/dev/null 2>&1 || true
+  fi
+fi
+
+partprobe "$disk" >/dev/null 2>&1 || true
+udevadm settle >/dev/null 2>&1 || true
+echo "wiped ($mode/$method): $disk"
+`;
 
 export interface EasySetupProgress {
   message: string;
   step: number;
   total: number;
+  /** Non-fatal problem. Setup continues; step/total do not advance. */
+  warning?: boolean;
 }
 
 export class EasySetupConfigurator {
   sambaManager: SambaManagerNet;
   zfsManager: ZFSManager;
   commandOptions: CommandOptions;
+
+  /** Set for the duration of applyConfig so nested steps can surface non-fatal problems. */
+  private reportWarning?: (message: string) => void;
 
   constructor() {
     this.sambaManager = new SambaManagerNet();
@@ -94,17 +255,30 @@ export class EasySetupConfigurator {
     config: EasySetupConfig,
     progressCallback: (progress: EasySetupProgress) => void
   ) {
-    const total = 10;
+    // The optional drive wipe is a real step, so the count shifts with it.
+    // `total` is one past the last announced step: a step report means that step is
+    // *starting*, so completion is only signalled once all work has actually finished.
+    const announcedSteps = config.wipeDrives ? 11 : 10;
+    const total = announcedSteps + 1;
 
-    const report = (step: number, message: string) =>
-      progressCallback({ step, total, message });
+    let stepNumber = 0;
+    const report = (message: string) =>
+      progressCallback({ step: ++stepNumber, total, message });
+
+    // step 0 never matches an advance, an error (< 0) or completion (=== total)
+    const reportWarning = (message: string) => {
+      console.warn(`[EasySetup] ${message}`);
+      progressCallback({ step: 0, total, message, warning: true });
+    };
+    this.reportWarning = reportWarning;
+    this.zfsManager.onWarning = reportWarning;
 
 
     // Start logging to /tmp immediately (works even if admin is denied)
     const run = startEasySetupRunLogging();
 
     try {
-      report(1, "Initializing Storage Setup...");
+      report("Initializing Storage Setup...");
 
       try {
         await this.ensureAdminSession();
@@ -122,33 +296,49 @@ export class EasySetupConfigurator {
         return;
       }
 
-      report(2, "Configuring SSH Security and Root Access...");
+      // Fail before the first destructive step if the OS lives on a selected drive.
+      await this.assertNoSystemDisks(config, "pre-flight");
+
+      await this.checkRootDirectoryOwnership();
+
+      report("Configuring SSH Security and Root Access...");
       await this.applyServerConfig(config);
 
-      report(3, "Clearing any existing ZFS and Samba data...");
-      await this.deleteZFSPoolAndSMBShares(config);
+      report("Clearing any existing ZFS and Samba data...");
+      if (config.skipClearExisting) {
+        console.log("[EasySetup] Skipping pool/share destruction (skipClearExisting=true)");
+      } else {
+        await this.deleteZFSPoolAndSMBShares(config);
+      }
 
-      report(4, "Updating Server Name (if changed)...");
+      if (config.wipeDrives) {
+        report(
+          config.wipeMode === "full"
+            ? "Erasing every block on the selected drives (this can take hours)..."
+            : "Erasing partition tables and signatures on the selected drives..."
+        );
+        await this.wipeConfiguredDrives(config);
+      }
+
+      report("Updating Server Name (if changed)...");
       await this.updateHostname(config);
 
-      report(5, "Creating Users and Groups...");
+      report("Creating Users and Groups...");
       await this.applyUsersAndGroups(config);
 
-      report(6, "Configuring ZFS Storage with available drives...");
+      report("Configuring ZFS Storage with available drives...");
       await this.applyZFSConfig(config);
 
-      report(7, "Configuring Storage Sharing...");
+      report("Configuring Storage Sharing...");
       await this.applySambaConfig(config);
 
-      report(8, "Opening Samba Port...");
+      report("Opening Samba Port...");
       await this.applyOpenSambaPorts();
 
-      report(9, "Ensuring Required Node Version (18)...");
-      const version = await this.getNodeVersion();
-      if (!version?.startsWith("18.")) await this.ensureNode18();
-
-      report(10, config.splitPools ? "Scheduling Active Backup tasks..." : "Scheduling Snapshot tasks...");
+      report("Scheduling Snapshot tasks...");
       await this.scheduleTasks(config);
+
+      report("Checking Services and Storage...");
 
       // Post-setup verification: confirm critical services are active and pools are imported
       await this.verifyPostSetup(config);
@@ -161,6 +351,9 @@ export class EasySetupConfigurator {
       const ok = await storeEasySetupConfig(config, serverName);
       console.log(`[EasySetup] simple-setup-log.json write ${ok ? "OK" : "FAILED"}`);
 
+      // Every step has finished; only now is it safe to tell the UI setup is complete.
+      progressCallback({ step: total, total, message: "Setup complete." });
+
     } catch (error: any) {
       console.error("Error in setupStorage:", error);
       progressCallback({ message: `Error: ${error.message}`, step: -1, total: -1 });
@@ -168,6 +361,33 @@ export class EasySetupConfigurator {
       await flushConsoleFileLogger();
     }
 
+  }
+
+  /**
+   * systemd-tmpfiles refuses to canonicalize a path that crosses from a user-owned
+   * directory into a root-owned one, so a bad `/` silently stops every runtime
+   * directory from being created and services like smbd exit before they open a socket.
+   */
+  private async checkRootDirectoryOwnership() {
+    try {
+      const proc = await unwrap(
+        server.execute(new Command(["stat", "-c", "%u %g %a", "/"], { superuser: "try" }), true)
+      );
+      const [uid, gid, mode] = decode(proc.stdout).trim().split(/\s+/);
+      if (uid === undefined || gid === undefined || mode === undefined) return;
+
+      const bits = parseInt(mode, 8);
+      if (uid === "0" && (bits & 0o022) === 0) return;
+
+      this.reportWarning?.(
+        `The server's root directory / is owned by uid ${uid}:gid ${gid} with permissions ${mode}, ` +
+          `instead of root:root 755. This blocks systemd from creating runtime directories, which can ` +
+          `stop Samba and other services from starting, and lets non-root users modify the top level of ` +
+          `the filesystem. Run "chown root:root / && chmod 755 /" on the server, then run setup again.`
+      );
+    } catch (err) {
+      console.warn("[EasySetup] Could not check / ownership:", err);
+    }
   }
 
   // Detect the Linux distro
@@ -221,6 +441,7 @@ export class EasySetupConfigurator {
           ["ufw", "allow", "138/udp"],
           ["ufw", "allow", "139/tcp"],
           ["ufw", "allow", "445/tcp"],
+          ["ufw", "allow", "5353/udp"],
         ];
         for (const args of allowCmds) {
           await unwrap(server.execute(new Command(args, this.commandOptions)));
@@ -238,122 +459,35 @@ export class EasySetupConfigurator {
     }
   }
 
-  // Check current Node.js version
-  private async getNodeVersion(): Promise<string | null> {
-    try {
-      const result = await unwrap(
-        server.execute(new Command(["node", "-v"], { superuser: "try" }))
-      );
-      const output = new TextDecoder().decode(result.stdout);
-      return output.replace(/^v/, "");
-    } catch {
-      return null;
-    }
-  }
-
-  // Ensure NVM is installed
-  private async ensureNvmInstalled(): Promise<void> {
-    const check = `export NVM_DIR="$HOME/.nvm"; test -s "$NVM_DIR/nvm.sh"`;
-    const has: any = await server.execute(new Command(["bash", "-lc", check], this.commandOptions), true);
-
-    if (has.exited === 0) return;
-
-    const installGit = `
-if ! command -v git >/dev/null 2>&1; then
-  if command -v apt-get >/dev/null 2>&1; then
-    if [ "$(id -u)" -ne 0 ]; then sudo apt-get update && sudo apt-get install -y git; else apt-get update && apt-get install -y git; fi
-  elif command -v dnf >/dev/null 2>&1; then
-    if [ "$(id -u)" -ne 0 ]; then sudo dnf install -y git; else dnf install -y git; fi
-  elif command -v yum >/dev/null 2>&1; then
-    if [ "$(id -u)" -ne 0 ]; then sudo yum install -y git; else yum install -y git; fi
-  else
-    echo "git is required to install nvm" >&2
-    exit 1
-  fi
-fi
-`;
-
-    await unwrap(
-      server.execute(
-        new Command(["bash", "-lc", installGit], this.commandOptions)
-      )
-    );
-
-    await unwrap(
-      server.execute(
-        new Command(["bash", "-lc", "rm -rf \"$HOME/.nvm\" && git clone --depth 1 --branch v0.39.7 https://github.com/nvm-sh/nvm.git \"$HOME/.nvm\""], this.commandOptions)
-      )
-    );
-  }
-
-  // Load NVM into the current shell
-  private loadNvm() {
-    return 'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"';
-  }
-
-  // Ensure Node.js v18 is installed and set as default
-  private async ensureNode18() {
-    await this.ensureNvmInstalled();
-
-    const shellLoadNvm = this.loadNvm();
-
-    // Install Node 18 if not present
-    try {
-      await unwrap(
-        server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm ls 18`], this.commandOptions))
-      );
-      console.log(" Node 18 is already installed.");
-    } catch {
-      console.log(" Installing Node.js v18...");
-      await unwrap(
-        server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm install 18`], this.commandOptions))
-      );
-    }
-
-    // Set Node 18 as default
-    await unwrap(
-      server.execute(new Command(["bash", "-c", `${shellLoadNvm} && nvm alias default 18`], this.commandOptions))
-    );
-    console.log(" Node.js v18 set as default.");
-  }
-
   private async scheduleTasks(config: EasySetupConfig) {
     const storageZfsConfig = config.zfsConfigs![0]!;
-    const backupZfsConfig = config.zfsConfigs![1]!;
 
     const taskTemplates = [
-      new ZFSReplicationTaskTemplate(),
       new AutomatedSnapshotTaskTemplate(),
       new ScrubTaskTemplate(),
     ];
 
-    const taskInstances: TaskInstance[] = [];
-    const myScheduler = new Scheduler(taskTemplates, taskInstances);
+    const myScheduler = new Scheduler(taskTemplates, []);
 
-    if (config.splitPools) {
-      const repTasks = await this.createReplicationTasks(storageZfsConfig, backupZfsConfig);
-      for (const task of repTasks) {
-        taskInstances.push(task);
-        myScheduler.registerTaskInstance(task);
-      }
+    const taskConfig = generateAllDefaultConfigs({
+      storagePool: {
+        poolName: storageZfsConfig.pool.name,
+        datasetName: storageZfsConfig.dataset.name,
+      },
+      snapshotPolicy: config.snapshotPolicy,
+    });
 
-      const scrubTasks = await this.createScrubTasks(storageZfsConfig, backupZfsConfig);
-      for (const task of scrubTasks) {
-        taskInstances.push(task);
-        myScheduler.registerTaskInstance(task);
-      }
-    } else {
-      const snapTasks = await this.createAutoSnapshotTasks(storageZfsConfig);
-      for (const task of snapTasks) {
-        taskInstances.push(task);
-        myScheduler.registerTaskInstance(task);
-      }
+    const result = await myScheduler.importTasksFromConfig(JSON.stringify(taskConfig));
 
-      const scrubTasks = await this.createScrubTasks(storageZfsConfig);
-      for (const task of scrubTasks) {
-        taskInstances.push(task);
-        myScheduler.registerTaskInstance(task);
-      }
+    if (result.errors.length > 0) {
+      console.error('Task import errors:', result.errors);
+      this.reportWarning?.(
+        `${result.errors.length} scheduled ${result.errors.length === 1 ? "task" : "tasks"} could not be created, ` +
+          `so automatic snapshots and/or scrubs are not configured: ${result.errors.join(" ")}`
+      );
+    }
+    if (result.imported.length > 0) {
+      console.log('Tasks imported:', result.imported.join(', '));
     }
   }
 
@@ -413,7 +547,7 @@ fi
     // 3) Bounce daemons that read hostname (quietly in case a unit is missing)
     await server.execute(new Command(["systemctl", "restart", "systemd-hostnamed"], this.commandOptions), true);
     await server.execute(new Command(["systemctl", "restart", "avahi-daemon"], this.commandOptions), true);
-    await server.execute(new Command(["systemctl", "restart", "houston-broadcaster-legacy.service"], this.commandOptions), true);
+    await server.execute(new Command(["systemctl", "restart", "--no-block", "houston-broadcaster.service"], this.commandOptions), true);
   }
 
   private async getAdminGroupName(): Promise<"wheel" | "sudo"> {
@@ -466,7 +600,10 @@ fi
     }
 
     console.log(`Unmounting and destroying ${poolName}...`);
-    await this.stopSambaIfRunning();
+    await this.stopServicesUsingPool();
+
+    // Kill any processes using the pool mountpoint (lsof/fuser)
+    await this.killProcessesOnMount(poolPath);
 
     await this.tryDestroyPoolWithRetries(poolName);
 
@@ -480,14 +617,25 @@ fi
   }
 
 
+  /** A failed probe returns true so a transient error never deletes a working share. */
+  private async pathExists(path: string): Promise<boolean> {
+    if (!path.startsWith("/")) return true;
+    try {
+      const proc = await unwrap(
+        server.execute(new Command(["test", "-d", path], { superuser: "try" }), false)
+      );
+      return proc.succeeded();
+    } catch (err) {
+      console.warn(`[EasySetup] Could not probe share path ${path}:`, err);
+      return true;
+    }
+  }
+
   private async deleteZFSPoolAndSMBShares(config: EasySetupConfig) {
     if (!config.zfsConfigs) return;
 
-    // Pools from config (e.g., tank, tank-backup)
     const storageZfsConfig = config.zfsConfigs[0]!;
-    const backupZfsConfig = config.zfsConfigs[1];
     const storagePoolName = storageZfsConfig.pool.name;
-    const backupPoolName = backupZfsConfig?.pool?.name;
 
     // 1) Enumerate all existing pools
     const allPools = await this.listAllPools();
@@ -501,7 +649,13 @@ fi
       for (const share of allShares) {
         // Match if path starts with /<poolName> for any current pool
         const owningPool = allPools.find(p => share.path.startsWith(`/${p}`));
-        if (!owningPool) continue;
+
+        // Shares left over from a pool that was destroyed outside this wizard point at a
+        // path that no longer exists, and would otherwise survive every future setup run.
+        if (!owningPool) {
+          if (await this.pathExists(share.path)) continue;
+          console.log(`Removing orphaned share '${share.name}': ${share.path} no longer exists`);
+        }
 
         try {
           await unwrap(this.sambaManager.closeSambaShare(share.name));
@@ -526,20 +680,182 @@ fi
     if (allPools.includes(storagePoolName)) {
       console.log(`Verified destruction of storage pool '${storagePoolName}'.`);
     }
-    if (backupPoolName && allPools.includes(backupPoolName)) {
-      console.log(`Verified destruction of backup pool '${backupPoolName}'.`);
-    }
   }
 
 
-  private async stopSambaIfRunning() {
-    const distro = await this.getLinuxDistro();
-    const services = (distro === "ubuntu") ? ["smbd", "nmbd"] : ["smb", "nmb"];
+  /**
+   * Every disk path that will be handed to `zpool create`, de-duplicated.
+   */
+  private collectConfiguredDiskPaths(config: EasySetupConfig): string[] {
+    const zfsConfigs = config.zfsConfigs ?? [];
+    const paths = new Set<string>();
+    for (const zfsConfig of zfsConfigs) {
+      for (const vdev of zfsConfig?.pool?.vdevs ?? []) {
+        for (const disk of vdev.disks ?? []) {
+          // Same order ZFSManager.formatVDevArgv uses, so the wipe and the pool
+          // always target the identical device rather than an unstable /dev/sdX.
+          const path = [disk.path, disk.vdev_path, disk.sd_path, disk.phy_path].find(
+            (candidate) => candidate && candidate !== "N/A"
+          );
+          if (!path) continue;
+          if (!DEVICE_PATH_REGEX.test(path)) {
+            console.warn(`[EasySetup] Ignoring unexpected device path: ${path}`);
+            continue;
+          }
+          paths.add(path);
+        }
+      }
+    }
+    return [...paths];
+  }
 
-    for (const svc of services) {
+  /**
+   * Refuse to touch any configured drive that backs the running OS.
+   *
+   * The wizard only lists bay-aliased drives, so on a normal install this never
+   * fires. It exists so an unusual OS location fails loudly instead of silently
+   * being erased, and it is re-run immediately before `zpool create` because a
+   * full wipe can leave hours between the first check and the destructive step.
+   */
+  private async assertNoSystemDisks(config: EasySetupConfig, stage: string) {
+    const diskPaths = this.collectConfiguredDiskPaths(config);
+    if (diskPaths.length === 0) return;
+
+    let findings: string[];
+    try {
+      const proc = await unwrap(
+        server.execute(
+          new Command(["bash", "-c", systemDiskGuardScript, "disk-guard", ...diskPaths], this.commandOptions),
+          true
+        )
+      );
+      findings = decode(proc.stdout).split("\n").filter((line) => line.trim() !== "");
+    } catch (err) {
+      console.error(`[EasySetup] System-disk guard failed to run (${stage}):`, err);
+      throw new Error(
+        "Could not verify that the selected drives are safe to erase. Aborting before any destructive step."
+      );
+    }
+
+    const blocked: string[] = [];
+    for (const line of findings) {
+      const [severity, path, reason] = line.split("\t");
+      if (!severity || !path || !reason) continue;
+      if (severity === "system") {
+        blocked.push(`${path} — ${reason}`);
+      } else if (severity === "boot") {
+        console.warn(
+          `[EasySetup] WARNING (${stage}): ${path} ${reason}, but nothing is mounted from it. ` +
+            `Treating it as a leftover from a previous OS install; it will be erased.`
+        );
+      } else {
+        console.warn(`[EasySetup] WARNING (${stage}): ${path} ${reason}`);
+      }
+    }
+
+    if (blocked.length > 0) {
+      const detail = blocked.map((entry) => `  • ${entry}`).join("\n");
+      console.error(`[EasySetup] ABORT (${stage}): system disks are in the storage configuration:\n${detail}`);
+      throw new Error(
+        `Refusing to continue: ${blocked.length} selected drive(s) are part of the running system, ` +
+          `and erasing them would destroy this installation.\n${detail}\n\n` +
+          `Remove these drives from the storage configuration and run setup again.`
+      );
+    }
+  }
+
+  /**
+   * Destroy all on-disk metadata for the configured drives so `zpool create` sees blank media.
+   */
+  private async wipeConfiguredDrives(config: EasySetupConfig) {
+    const diskPaths = this.collectConfiguredDiskPaths(config);
+    if (diskPaths.length === 0) {
+      console.warn("[EasySetup] wipeDrives requested but no drives were resolved from the config");
+      return;
+    }
+
+    await this.assertNoSystemDisks(config, "pre-wipe");
+
+    const mode = config.wipeMode === "full" ? "full" : "quick";
+    console.log(`[EasySetup] Wiping ${diskPaths.length} drive(s) in "${mode}" mode:`, diskPaths);
+    await this.stopServicesUsingPool();
+
+    const wipeOne = async (diskPath: string) => {
+      const startedAt = Date.now();
+      try {
+        const proc = await unwrap(
+          server.execute(
+            new Command(["bash", "-c", wipeDriveScript, "wipe-drive", diskPath, mode], this.commandOptions),
+            true
+          )
+        );
+        const elapsed = Math.round((Date.now() - startedAt) / 1000);
+        console.log(`[EasySetup] ${decode(proc.stdout).trim()} (${elapsed}s)`);
+      } catch (err) {
+        console.error(`[EasySetup] Failed to wipe ${diskPath}:`, err);
+        throw new Error(`Failed to wipe drive ${diskPath}. Aborting before pool creation.`);
+      }
+    };
+
+    if (mode === "quick") {
+      for (const diskPath of diskPaths) {
+        await wipeOne(diskPath);
+      }
+      return;
+    }
+
+    // A full erase is bound by per-drive throughput, so overlap drives instead of serializing hours of writes.
+    const queue = [...diskPaths];
+    const workers = Array.from(
+      { length: Math.min(FULL_WIPE_CONCURRENCY, queue.length) },
+      async () => {
+        for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+          await wipeOne(next);
+        }
+      }
+    );
+    await Promise.all(workers);
+  }
+
+  /**
+   * Stop services that may hold open files on pool mountpoints.
+   */
+  private async stopServicesUsingPool() {    const distro = await this.getLinuxDistro();
+    const sambaServices = (distro === "ubuntu") ? ["smbd", "nmbd"] : ["smb", "nmb"];
+    const allServices = ["houston-broadcaster", ...sambaServices];
+
+    for (const svc of allServices) {
       // ignore if not present
       await server.execute(new Command(["systemctl", "stop", svc], { superuser: "try" }), true);
     }
+    // Brief delay to let file handles be released
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  /**
+   * Kill any processes with open files/cwd under the given mountpoint.
+   * Best-effort — fuser may not be installed on all distros.
+   */
+  private async killProcessesOnMount(mountPath: string) {
+    // Try fuser first (sends SIGKILL to all processes using the mount)
+    try {
+      await server.execute(
+        new Command(["fuser", "-km", mountPath], { superuser: "try" }), true
+      );
+      console.log(`fuser killed processes on ${mountPath}`);
+    } catch {
+      // fuser not installed or no processes found — that's fine
+    }
+    // Also try lsof-based kill as fallback
+    try {
+      await server.execute(
+        new Command(["bash", "-c", `lsof +D "${mountPath}" 2>/dev/null | awk 'NR>1{print $2}' | sort -u | xargs -r kill -9`], { superuser: "try" }), true
+      );
+    } catch {
+      // best effort
+    }
+    // Give processes a moment to die
+    await new Promise(r => setTimeout(r, 500));
   }
 
   private async poolExists(poolName: string): Promise<boolean> {
@@ -588,7 +904,7 @@ fi
     }
   }
 
-  private async tryDestroyPoolWithRetries(poolName: string, maxRetries = 3, delayMs = 1000) {
+  private async tryDestroyPoolWithRetries(poolName: string, maxRetries = 3, delayMs = 2000) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       if (!(await this.poolExists(poolName))) {
         console.log(`Pool ${poolName} already gone (before attempt ${attempt}).`);
@@ -601,6 +917,8 @@ fi
       } catch (err) {
         console.error(`Attempt ${attempt} failed to destroy pool:`, err);
         if (attempt < maxRetries) {
+          // Kill any lingering processes and retry
+          await this.killProcessesOnMount(`/${poolName}`);
           await new Promise((r) => setTimeout(r, delayMs));
         } else {
           await this.logPoolUsers(poolName);   // <- key addition
@@ -615,7 +933,7 @@ fi
   private async applyServerConfig(config: EasySetupConfig) {
     const serverCfg = config.serverConfig;
 
-    if (serverCfg?.disableRootSSH !== false) {
+    if (serverCfg?.disableRootSSH === true) {
       // Replace existing line (commented or uncommented)
       await unwrap(server.execute(
         new Command([
@@ -640,7 +958,7 @@ fi
       await unwrap(server.execute(new Command(["timedatectl", "set-ntp", "true"], this.commandOptions)));
     }
 
-    if (serverCfg?.newRootPass) {
+    if (serverCfg?.changeRootPassword && serverCfg.newRootPass) {
       const chpasswdProc = server.spawnProcess(
         new Command(["chpasswd"], this.commandOptions)
       );
@@ -770,379 +1088,48 @@ fi
   }
 
   private async applyZFSConfig(config: EasySetupConfig) {
-    let storageZfsConfig = config!.zfsConfigs![0];
-    let backupZfsConfig = config!.zfsConfigs![1];
+    const storageZfsConfig = config!.zfsConfigs![0]!;
 
-    await this.zfsManager.createPool(storageZfsConfig!.pool, storageZfsConfig!.poolOptions);
+    await this.assertNoSystemDisks(config, "pre-pool-create");
+
+    await this.zfsManager.createPool(storageZfsConfig.pool, storageZfsConfig.poolOptions);
     await this.zfsManager.addDataset(
-      storageZfsConfig!.pool.name,
-      storageZfsConfig!.dataset.name,
-      storageZfsConfig!.datasetOptions
+      storageZfsConfig.pool.name,
+      storageZfsConfig.dataset.name,
+      storageZfsConfig.datasetOptions
     );
-    // Create additional datasets on the storage pool
-    if (storageZfsConfig!.additionalDatasets) {
-      for (const extra of storageZfsConfig!.additionalDatasets) {
-        await this.zfsManager.addDataset(
-          storageZfsConfig!.pool.name,
-          extra.dataset.name,
-          extra.datasetOptions
-        );
-      }
-    }
-
-    if (config.splitPools) {
-      await this.zfsManager.createPool(backupZfsConfig!.pool, backupZfsConfig!.poolOptions);
+    for (const extra of storageZfsConfig.additionalDatasets ?? []) {
       await this.zfsManager.addDataset(
-        backupZfsConfig!.pool.name,
-        backupZfsConfig!.dataset.name,
-        backupZfsConfig!.datasetOptions
+        storageZfsConfig.pool.name,
+        extra.dataset.name,
+        extra.datasetOptions
       );
-      // Create additional datasets on the backup pool
-      if (backupZfsConfig!.additionalDatasets) {
-        for (const extra of backupZfsConfig!.additionalDatasets) {
-          await this.zfsManager.addDataset(
-            backupZfsConfig!.pool.name,
-            extra.dataset.name,
-            extra.datasetOptions
-          );
-        }
-      }
-      await this.clearReplicationTasks();
-      await this.clearSnapshotTasks();
-      await this.clearScrubTasks();
-    } else {
-      await this.clearReplicationTasks();
-      await this.clearSnapshotTasks();
-      await this.clearScrubTasks();
     }
 
+    await this.clearAllSchedulerTasks();
   }
 
-  private async clearReplicationTasks() {
-    const scheduler = new Scheduler([new ZFSReplicationTaskTemplate()], []);
+  private async clearAllSchedulerTasks() {
+    const taskTemplates = [
+      new ZFSReplicationTaskTemplate(),
+      new AutomatedSnapshotTaskTemplate(),
+      new ScrubTaskTemplate(),
+    ];
+    const scheduler = new Scheduler(taskTemplates, []);
     await scheduler.loadTaskInstances();
 
-    const replicationTasks = scheduler.taskInstances.filter(
-      task => task.template instanceof ZFSReplicationTaskTemplate
-    );
+    if (scheduler.taskInstances.length === 0) return;
 
-    for (const task of replicationTasks) {
-      try {
-        await scheduler.unregisterTaskInstance(task);
-        // console.log(` Unregistered replication task: ${task.name}`);
-      } catch (error) {
-        console.error(` Failed to unregister task ${task.name}:`, error);
+    const result = await scheduler.batchDeleteTasks(scheduler.taskInstances);
+
+    if (result.deleted.length > 0) {
+      console.log(`Cleared ${result.deleted.length} scheduler tasks: ${result.deleted.join(', ')}`);
+    }
+    if (result.errors.length > 0) {
+      for (const err of result.errors) {
+        console.error(`Failed to unregister task ${err.task}: ${err.error}`);
       }
     }
-  }
-
-  private async clearSnapshotTasks() {
-    const scheduler = new Scheduler([new AutomatedSnapshotTaskTemplate()], []);
-    await scheduler.loadTaskInstances();
-
-    const replicationTasks = scheduler.taskInstances.filter(
-      task => task.template instanceof AutomatedSnapshotTaskTemplate
-    );
-
-    for (const task of replicationTasks) {
-      try {
-        await scheduler.unregisterTaskInstance(task);
-        // console.log(` Unregistered snapshot task: ${task.name}`);
-      } catch (error) {
-        console.error(` Failed to unregister task ${task.name}:`, error);
-      }
-    }
-  }
-
-
-  private async clearScrubTasks() {
-    const scheduler = new Scheduler([new ScrubTaskTemplate()], []);
-    await scheduler.loadTaskInstances();
-
-    const scrubTasks = scheduler.taskInstances.filter(
-      task => task.template instanceof ScrubTaskTemplate
-    );
-
-    for (const task of scrubTasks) {
-      try {
-        await scheduler.unregisterTaskInstance(task);
-        console.log(` Unregistered scrub task: ${task.name}`);
-      } catch (error) {
-        console.error(` Failed to unregister task ${task.name}:`, error);
-      }
-    }
-  }
-
-  private async createReplicationTasks(sourceData: ZFSConfig, destData: ZFSConfig): Promise<TaskInstance[]> {
-    const tasks: TaskInstance[] = []
-
-    // Create HourlyForADay Task
-    const hourlyParams = new ParameterNode("ZFS Replication Task Config", "zfsRepConfig")
-      .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
-      .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, `${destData.pool.name}/${destData.dataset.name}`))
-      .addChild(new ParameterNode('Send Options', 'sendOptions')
-        .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
-        .addChild(new BoolParameter('Raw', 'raw_flag', false))
-        .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
-        .addChild(new IntParameter('MBuffer Size', 'mbufferSize', 1))
-        .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
-        .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-        .addChild(new StringParameter('Custom Name', 'customName', ''))
-        .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
-      )
-      .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
-        .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'days'))  // Hourly task keeps snapshots for 1 day
-        .addChild(new SnapshotRetentionParameter('Destination', 'destination', 1, 'days'))  // Hourly task keeps snapshots for 1 day
-      );
-
-    const hourlyTask = new TaskInstance(
-      'ActiveBackup_HourlyForADay',
-      new ZFSReplicationTaskTemplate(),
-      hourlyParams,
-      new TaskSchedule(true, [
-        new TaskScheduleInterval({
-          minute: { value: '0' }, // At 0 minutes
-          hour: { value: '*' }, // Every hour
-          day: { value: '*' }, // Every day
-          month: { value: '*' }, // Every month
-          year: { value: '*' }, // Every year
-        }) // Every hour
-      ]),
-      'Take snapshots hourly and save for a day.'
-    );
-
-    // Create DailyForAWeek Task
-    const dailyParams = new ParameterNode("ZFS Replication Task Config", "zfsRepConfig")
-      .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
-      .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, `${destData.pool.name}/${destData.dataset.name}`))
-      .addChild(new ParameterNode('Send Options', 'sendOptions')
-        .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
-        .addChild(new BoolParameter('Raw', 'raw_flag', false))
-        .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
-        .addChild(new IntParameter('MBuffer Size', 'mbufferSize', 1))
-        .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
-        .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-        .addChild(new StringParameter('Custom Name', 'customName', ''))
-        .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
-      )
-      .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
-        .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'weeks'))  // Daily task keeps snapshots for 1 week
-        .addChild(new SnapshotRetentionParameter('Destination', 'destination', 1, 'weeks'))  // Daily task keeps snapshots for 1 week
-      );
-
-    const dailyTask = new TaskInstance(
-      'ActiveBackup_DailyForAWeek',
-      new ZFSReplicationTaskTemplate(),
-      dailyParams,
-      new TaskSchedule(true, [
-        new TaskScheduleInterval({
-          minute: { value: '0' }, // At 0 minutes
-          hour: { value: '0' }, // At midnight
-          day: { value: '*' }, // Every day
-          month: { value: '*' }, // Every month
-          year: { value: '*' }, // Every year
-        }) // Daily at midnight
-      ]),
-      'Take snapshots daily and save for a week.'
-    );
-
-    // Create WeeklyForAMonth Task
-    const weeklyParams = new ParameterNode("ZFS Replication Task Config", "zfsRepConfig")
-      .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
-      .addChild(new ZfsDatasetParameter('Destination Dataset', 'destDataset', '', 0, '', destData.pool.name, `${destData.pool.name}/${destData.dataset.name}`))
-      .addChild(new ParameterNode('Send Options', 'sendOptions')
-        .addChild(new BoolParameter('Compressed', 'compressed_flag', false))
-        .addChild(new BoolParameter('Raw', 'raw_flag', false))
-        .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
-        .addChild(new IntParameter('MBuffer Size', 'mbufferSize', 1))
-        .addChild(new StringParameter('MBuffer Unit', 'mbufferUnit', 'G'))
-        .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-        .addChild(new StringParameter('Custom Name', 'customName', ''))
-        .addChild(new StringParameter('Transfer Method', 'transferMethod', 'local'))
-      )
-      .addChild(new ParameterNode('Snapshot Retention', 'snapshotRetention')
-        .addChild(new SnapshotRetentionParameter('Source', 'source', 1, 'months'))  // Weekly task keeps snapshots for 1 month
-        .addChild(new SnapshotRetentionParameter('Destination', 'destination', 1, 'months'))  // Weekly task keeps snapshots for 1 month
-      );
-
-    const weeklyTask = new TaskInstance(
-      'ActiveBackup_WeeklyForAMonth',
-      new ZFSReplicationTaskTemplate(),
-      weeklyParams,
-      new TaskSchedule(true, [
-        new TaskScheduleInterval({
-          minute: { value: '0' }, // At 0 minutes
-          hour: { value: '0' }, // At midnight
-          day: { value: '*' }, // Every day
-          month: { value: '*' }, // Every month
-          year: { value: '*' }, // Every year
-          dayOfWeek: ['Fri'] // on Friday
-        }) // Weekly on Friday at midnight
-      ]),
-      'Take snapshots weekly and save for a month.'
-    );
-
-    // Push all tasks to the array
-    tasks.push(hourlyTask, dailyTask, weeklyTask);
-    // console.log('tasks:', tasks);
-    return tasks;
-  }
-
-  private async createAutoSnapshotTasks(zfsData: ZFSConfig): Promise<TaskInstance[]> {
-    //  .addChild(new ZfsDatasetParameter('Source Dataset', 'sourceDataset', '', 0, '', sourceData.pool.name, `${sourceData.pool.name}/${sourceData.dataset.name}`))
-    const tasks: TaskInstance[] = [];
-
-    const baseParams = (
-      retentionValue: number,
-      retentionUnit: 'days' | 'weeks' | 'months',
-      taskName: string,
-      schedule: TaskSchedule,
-      notes: string
-    ): TaskInstance => {
-      const autoSnapParams = new ParameterNode("Automated Snapshot Task Config", "autoSnapConfig")
-        .addChild(new ZfsDatasetParameter('Filesystem', 'filesystem', '', 0, '', zfsData.pool.name, `${zfsData.pool.name}/${zfsData.dataset.name}`))
-        .addChild(new BoolParameter('Recursive', 'recursive_flag', false))
-        .addChild(new BoolParameter('Custom Name Flag', 'customName_flag', false))
-        .addChild(new StringParameter('Custom Name', 'customName', ''))
-        .addChild(new SnapshotRetentionParameter('Snapshot Retention', 'snapshotRetention', retentionValue, retentionUnit));
-
-      return new TaskInstance(
-        taskName,
-        new AutomatedSnapshotTaskTemplate(),
-        autoSnapParams,
-        schedule,
-        notes
-      );
-    };
-
-    // Hourly snapshots retained for 1 day
-    const hourlySchedule = new TaskSchedule(true, [
-      new TaskScheduleInterval({
-        minute: { value: '0' },
-        hour: { value: '*' },
-        day: { value: '*' },
-        month: { value: '*' },
-        year: { value: '*' },
-      }),
-    ]);
-    const hourlyTask = baseParams(
-      1,
-      'days',
-      'AutoSnapshot_HourlyForADay',
-      hourlySchedule,
-      'Take snapshots every hour and keep them for 1 day.'
-    );
-
-    // Daily snapshots retained for 1 week
-    const dailySchedule = new TaskSchedule(true, [
-      new TaskScheduleInterval({
-        minute: { value: '0' },
-        hour: { value: '0' },
-        day: { value: '*' },
-        month: { value: '*' },
-        year: { value: '*' },
-      }),
-    ]);
-    const dailyTask = baseParams(
-      1,
-      'weeks',
-      'AutoSnapshot_DailyForAWeek',
-      dailySchedule,
-      'Take snapshots daily and keep them for 1 week.'
-    );
-
-    // Weekly snapshots retained for 1 month (on Fridays at midnight)
-    const weeklySchedule = new TaskSchedule(true, [
-      new TaskScheduleInterval({
-        minute: { value: '0' },
-        hour: { value: '0' },
-        day: { value: '*' },
-        month: { value: '*' },
-        year: { value: '*' },
-        dayOfWeek: ['Fri'],
-      }),
-    ]);
-    const weeklyTask = baseParams(
-      1,
-      'months',
-      'AutoSnapshot_WeeklyForAMonth',
-      weeklySchedule,
-      'Take snapshots every Friday and keep them for 1 month.'
-    );
-
-    tasks.push(hourlyTask, dailyTask, weeklyTask);
-    // console.log('autoSnapshotTasks:', tasks);
-    return tasks;
-  }
-
-  private async createScrubTasks(zfsData: ZFSConfig, backupZfsData?: ZFSConfig) {
-    const tasks: TaskInstance[] = [];
-
-    const baseParams = (
-      taskName: string,
-      schedule: TaskSchedule,
-      notes: string
-    ): TaskInstance => {
-      const scrubParams = new ParameterNode('Scrub Task Config', 'scrubConfig')
-        .addChild(new ZfsDatasetParameter('Pool', 'pool', '', 0, '', zfsData.pool.name, `${zfsData.pool.name}`))
-
-      return new TaskInstance(
-        taskName,
-        new ScrubTaskTemplate(),
-        scrubParams,
-        schedule,
-        notes
-      );
-    };
-
-    //  Weekly snapshots retained for 1 month (on Fridays at midnight)
-    const weeklySchedule = new TaskSchedule(true, [
-      new TaskScheduleInterval({
-        minute: { value: '0' },
-        hour: { value: '0' },
-        day: { value: '*' },
-        month: { value: '*' },
-        year: { value: '*' },
-        dayOfWeek: ['Fri'],
-      }),
-    ]);
-    const weeklyScrub = baseParams(
-      'WeeklyScrub',
-      weeklySchedule,
-      'Scrub storage pool weekly to ensure data integrity.'
-    );
-
-    tasks.push(weeklyScrub);
-
-    if (backupZfsData) {
-      const baseParams = (
-        taskName: string,
-        schedule: TaskSchedule,
-        notes: string
-      ): TaskInstance => {
-        const scrubParams = new ParameterNode('Scrub Task Config', 'scrubConfig')
-          .addChild(new ZfsDatasetParameter('Pool', 'pool', '', 0, '', backupZfsData.pool.name, `${backupZfsData.pool.name}`))
-
-        return new TaskInstance(
-          taskName,
-          new ScrubTaskTemplate(),
-          scrubParams,
-          schedule,
-          notes
-        );
-      };
-
-      const weeklyBackupScrub = baseParams(
-        'WeeklyScrub-Backup',
-        weeklySchedule,
-        'Scrub backup pool weekly to ensure data integrity.'
-      );
-
-      tasks.push(weeklyBackupScrub);
-    }
-
-    // console.log('scrubtasks:', tasks);
-    return tasks;
   }
 
   private withSmbusersSemantics(share: SambaShareConfig): SambaShareConfig {
@@ -1186,26 +1173,35 @@ fi
     };
   }
 
+  /** A unit whose start job is queued behind a slow dependency would otherwise block forever. */
+  private enableNowCommand(svc: string) {
+    return new Command(["timeout", "120s", "systemctl", "enable", "--now", svc], this.commandOptions);
+  }
+
   private async verifyPostSetup(config: EasySetupConfig) {
     const distro = await this.getLinuxDistro();
     const sambaServices = distro === "ubuntu" ? ["smbd"] : ["smb"];
+    const criticalServices = [...sambaServices, "houston-broadcaster"];
 
-    // Verify samba services are active
-    for (const svc of sambaServices) {
+    await this.ensureSambaRuntimeDirs();
+
+    // Verify critical services are active
+    for (const svc of criticalServices) {
       try {
+        // `is-active` exits non-zero for inactive/failed units, so don't treat that as a throw
         const result = await unwrap(
-          server.execute(new Command(["systemctl", "is-active", svc], this.commandOptions), true)
+          server.execute(new Command(["systemctl", "is-active", svc], this.commandOptions), false)
         );
         const status = new TextDecoder().decode(result.stdout).trim();
         if (status !== "active") {
           console.error(`[EasySetup] Service ${svc} is not active (status: ${status}), attempting restart...`);
-          await unwrap(server.execute(new Command(["systemctl", "restart", svc], this.commandOptions)));
+          await unwrap(server.execute(this.enableNowCommand(svc)));
         }
       } catch (err) {
         console.error(`[EasySetup] Service ${svc} verification failed:`, err);
         // Attempt recovery
         try {
-          await unwrap(server.execute(new Command(["systemctl", "restart", svc], this.commandOptions)));
+          await unwrap(server.execute(this.enableNowCommand(svc)));
           console.log(`[EasySetup] Service ${svc} recovered after restart.`);
         } catch (restartErr) {
           console.error(`[EasySetup] Service ${svc} could not be recovered:`, restartErr);
@@ -1214,11 +1210,8 @@ fi
     }
 
     // Verify ZFS pools are imported and share paths exist
-    const zfsConfigs = config.zfsConfigs ?? [];
-    for (let i = 0; i < zfsConfigs.length; i++) {
-      // Skip the backup pool (index 1) when splitPools is not enabled
-      if (i === 1 && !config.splitPools) continue;
-      const poolName = zfsConfigs[i]!.pool.name;
+    for (const zfsConfig of config.zfsConfigs ?? []) {
+      const poolName = zfsConfig.pool.name;
       if (!await this.poolExists(poolName)) {
         console.error(`[EasySetup] ZFS pool '${poolName}' is not imported after setup!`);
         throw new Error(`ZFS pool '${poolName}' failed to import after creation.`);
@@ -1228,9 +1221,41 @@ fi
     console.log("[EasySetup] Post-setup verification passed.");
   }
 
+  /**
+   * /run is tmpfs and Samba's runtime dirs come from tmpfiles at boot, so smbd exits
+   * 255 ("Failed to create pipe directory /run/samba/ncalrpc") on any box where samba
+   * was installed after the last reboot.
+   */
+  private async ensureSambaRuntimeDirs() {
+    const script = [
+      `for f in /usr/lib/tmpfiles.d/samba.conf /etc/tmpfiles.d/samba.conf; do`,
+      `  [ -f "$f" ] && systemd-tmpfiles --create "$f" >/dev/null 2>&1`,
+      `done`,
+      `mkdir -p /run/samba/ncalrpc /run/samba/msg.lock /run/samba/private`,
+      `chmod 755 /run/samba /run/samba/ncalrpc`,
+      `chmod 700 /run/samba/msg.lock /run/samba/private`,
+      `command -v restorecon >/dev/null 2>&1 && restorecon -R /run/samba >/dev/null 2>&1`,
+      `exit 0`,
+    ].join("\n");
+
+    await server.execute(new Command(["bash", "-c", script], this.commandOptions), true);
+  }
+
+  /** Bring Samba and the broadcaster back up without re-running the whole wizard. */
+  async restartFailedServices() {
+    await this.ensureSambaRuntimeDirs();
+    try {
+      await this.restartSambaServices();
+    } finally {
+      await this.restartBroadcaster();
+    }
+  }
+
   private async restartSambaServices() {
     const distro = await this.getLinuxDistro();
     const services = distro === "ubuntu" ? ["smbd", "nmbd"] : ["smb", "nmb"];
+
+    await this.ensureSambaRuntimeDirs();
 
     for (const svc of services) {
       try {
@@ -1245,6 +1270,28 @@ fi
         }
       }
     }
+  }
+
+  /**
+   * Strip the distro's stock auto-shares from /etc/samba/smb.conf. `[homes]`
+   * surfaces as a share named after the logged-in user, which users mistake for
+   * the share the wizard created.
+   */
+  private async removeStockSambaSections() {
+    const script = [
+      `conf=/etc/samba/smb.conf`,
+      `[ -f "$conf" ] || exit 0`,
+      `awk '`,
+      `  /^[[:space:]]*\\[/ {`,
+      `    s = $0`,
+      `    gsub(/[[:space:]]/, "", s)`,
+      `    drop = (s == "[homes]" || s == "[printers]" || s == "[print$]")`,
+      `  }`,
+      `  !drop`,
+      `' "$conf" > "$conf.45d.tmp" && mv "$conf.45d.tmp" "$conf"`,
+    ].join("\n");
+
+    await server.execute(new Command(["bash", "-c", script], this.commandOptions), true);
   }
 
   private async applySambaConfig(config: EasySetupConfig) {
@@ -1267,6 +1314,8 @@ fi
             : this.sambaManager.patchSambaConfIncludeRegistry("/etc/samba/smb.conf")
         )
     );
+
+    await this.removeStockSambaSections();
 
     // Apply shares
     const shares = config.sambaConfig.shares ?? [];
@@ -1291,28 +1340,114 @@ fi
       // enforce group semantics via advancedOptions
       share = this.withSmbusersSemantics(share);
 
+      // `net conf addshare` and the chown/chmod below both require the directory to exist.
+      // Shares pointing at a subfolder of a dataset have no directory until now.
+      await unwrap(
+        server.execute(new Command(["mkdir", "-p", share.path], this.commandOptions), true)
+      );
+
       await unwrap(this.sambaManager.addShare(share));
 
       // filesystem ownership: group-owned by smbusers (not a specific user)
       await this.setGroupOwnedTree(share.path, "smbusers");
     }
 
-    await this.restartSambaServices();
+    // stopServicesUsingPool() took the broadcaster down, so it has to come back even
+    // when Samba refuses to start; otherwise the server vanishes from the client app.
+    try {
+      await this.restartSambaServices();
+    } finally {
+      await this.restartBroadcaster();
+    }
+  }
+
+  /**
+   * Registration normally happens over HTTP from the desktop client, which needs the
+   * broadcaster up. If it is down the server bootstraps in stock mode forever, so seed
+   * the app config locally instead.
+   */
+  private async registerStorageWizardApp() {
+    const script = [
+      "import json, os, datetime",
+      'p = "/etc/45drives/houston-apps.json"',
+      "os.makedirs(os.path.dirname(p), exist_ok=True)",
+      "try:",
+      "    with open(p) as f:",
+      "        cfg = json.load(f)",
+      "except Exception:",
+      "    cfg = {}",
+      "if not isinstance(cfg, dict):",
+      "    cfg = {}",
+      'apps = cfg.get("apps")',
+      "if not isinstance(apps, list):",
+      "    apps = []",
+      'if "storage-wizard" not in apps:',
+      '    apps.append("storage-wizard")',
+      'cfg["apps"] = apps',
+      'settings = cfg.get("settings")',
+      "if not isinstance(settings, dict):",
+      "    settings = {}",
+      'settings.setdefault("http_port", 80)',
+      'settings.setdefault("https_port", 443)',
+      'settings.setdefault("bcast_port", 9095)',
+      'settings.setdefault("manage_nginx", True)',
+      'settings.setdefault("manage_firewall", True)',
+      'cfg["settings"] = settings',
+      'registered = cfg.get("registered_at")',
+      "if not isinstance(registered, dict):",
+      "    registered = {}",
+      'registered.setdefault("storage-wizard", datetime.datetime.utcnow().isoformat() + "Z")',
+      'cfg["registered_at"] = registered',
+      'tmp = p + ".tmp"',
+      'with open(tmp, "w") as f:',
+      "    json.dump(cfg, f, indent=2)",
+      "os.replace(tmp, p)",
+    ].join("\n");
+
+    try {
+      await unwrap(
+        server.execute(new Command(["python3", "-c", script], this.commandOptions), true)
+      );
+      console.log("[EasySetup] Registered storage-wizard in /etc/45drives/houston-apps.json");
+    } catch (err) {
+      console.warn("[EasySetup] Could not register storage-wizard app:", err);
+    }
+  }
+
+  /** stopServicesUsingPool() takes the broadcaster down; bring it back once the pool and shares exist. */
+  private async restartBroadcaster() {
+    // Must precede the restart: the bootstrap unit reads this file at start, and an empty
+    // app list sends it down the stock/discovery-only path.
+    await this.registerStorageWizardApp();
+
+    try {
+      await unwrap(
+        server.execute(
+          new Command(["systemctl", "enable", "houston-broadcaster"], this.commandOptions),
+          true
+        )
+      );
+      // --no-block: the unit is ordered After=bootstrap-houston-broadcaster.service, whose
+      // first-run job can take minutes. Waiting on it stalls the whole wizard.
+      await unwrap(
+        server.execute(
+          new Command(["systemctl", "restart", "--no-block", "houston-broadcaster"], this.commandOptions),
+          true
+        )
+      );
+    } catch (err) {
+      console.warn("[EasySetup] Could not start houston-broadcaster:", err);
+    }
   }
 
 
-  static async loadConfig(
-    easyConfigName: keyof typeof defaultConfigs
-  ): Promise<EasySetupConfig | null> {
-    // console.log("loading config for:", easyConfigName);
-    // console.log("list of defaultconfigs:", defaultConfigs);
-    const dc = defaultConfigs[easyConfigName];
+  static async loadConfig(): Promise<EasySetupConfig | null> {
     return SambaConfParser()
-      .apply(dc.smbconf)
+      .apply(smbconf)
       .map((sambaConfig): EasySetupConfig => {
         return {
           sambaConfig,
-          zfsConfigs: dc.zfsconf as ZFSConfig[],
+          zfsConfigs: zfsconf as ZFSConfig[],
         };
       })
       .unwrapOr(null);

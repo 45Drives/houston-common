@@ -49,6 +49,7 @@ export interface SnapshotRollbackOptions {
 
 export interface IZFSManager {
   createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<ExitedProcess>;
+  setPoolRefreservation(pool: ZPoolBase | string, percent: number): Promise<void>;
   destroyPool(name: string): Promise<void>;
   addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<ExitedProcess>;
   addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<ExitedProcess>;
@@ -123,6 +124,9 @@ export class ZFSManager implements IZFSManager {
 
   async createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<ExitedProcess> {
     validateZfsName(pool.name, "pool name");
+    if (options.refreservationPercent !== undefined && !Number.isFinite(options.refreservationPercent)) {
+      throw new ValueError("Invalid refreservation percentage");
+    }
     const argv = ["zpool", "create", pool.name];
     
     // set up pool properties
@@ -152,18 +156,6 @@ export class ZFSManager implements IZFSManager {
     if (options.recordsize !== undefined) fsProps.push(`recordsize=${options.recordsize}`);
     if (options.dedup !== undefined) fsProps.push(`dedup=${options.dedup}`);
 
-    // Handle refreservation
-    if (options.refreservationPercent !== undefined) {
-      // Estimate total disk capacity from all vdevs
-      const totalBytes = pool.vdevs.flatMap(v => v.disks)
-        .map(disk => convertToBytes(disk.capacity ?? "0"))
-        .reduce((acc, curr) => acc + curr, 0);
-
-      const fraction = Math.min(Math.max(options.refreservationPercent, 0), 100) / 100;
-      const refreservationBytes = Math.floor(totalBytes * fraction);
-      fsProps.push(`refreservation=${refreservationBytes}`);
-    }
-
     // fs props are ['-O', 'prop=value']
     argv.push(...fsProps.flatMap((prop) => ["-O", prop]));
 
@@ -178,7 +170,40 @@ export class ZFSManager implements IZFSManager {
 
     const proc = await unwrap(this.server.execute(new Command(argv, this.commandOptions)));
     console.log('createPool output:', proc.getStdout());
+    if (options.refreservationPercent !== undefined) {
+      try {
+        await this.setPoolRefreservation(pool, options.refreservationPercent);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw Object.assign(new Error(`Pool '${pool.name}' was created, but its reservation could not be set: ${detail}`), { poolCreated: true });
+      }
+    }
     return proc;
+  }
+
+  async setPoolRefreservation(pool: ZPoolBase | string, percent: number): Promise<void> {
+    const poolName = typeof pool === "string" ? pool : pool.name;
+    validateZfsName(poolName, "pool name");
+    if (!Number.isFinite(percent)) throw new ValueError("Invalid refreservation percentage");
+    const fraction = Math.min(Math.max(percent, 0), 100) / 100;
+    let reservation = "none";
+    if (fraction > 0) {
+      const result = await unwrap(this.server.execute(new Command(
+        ["zfs", "get", "-Hp", "-o", "property,value", "available,used,usedbyrefreservation", poolName], this.commandOptions
+      )));
+      const properties = Object.fromEntries(result.getStdout().trim().split("\n").map(line => line.split("\t")));
+      const values = ["available", "used", "usedbyrefreservation"].map(property => {
+        const raw = properties[property];
+        if (!raw || !/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw))) {
+          throw new ValueError(`Invalid usable-space property '${property}' for '${poolName}'`);
+        }
+        return Number(raw);
+      });
+      const usable = values[0]! + values[1]! - values[2]!;
+      if (!Number.isSafeInteger(usable) || usable < 0) throw new ValueError("Invalid usable dataset capacity");
+      reservation = String(Math.floor(usable * fraction));
+    }
+    await unwrap(this.server.execute(new Command(["zfs", "set", `refreservation=${reservation}`, poolName], this.commandOptions)));
   }
 
   async destroyPool(pool: ZPoolBase | string, options: ZPoolDestroyOptions = {}): Promise<void> {

@@ -49,6 +49,7 @@ export interface SnapshotRollbackOptions {
 
 export interface IZFSManager {
   createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<ExitedProcess>;
+  setPoolRefreservation(pool: ZPoolBase | string, percent: number): Promise<void>;
   destroyPool(name: string): Promise<void>;
   addVDevsToPool(pool: ZPoolBase, vdevs: VDev[], options: ZPoolAddVDevOptions): Promise<ExitedProcess>;
   addDataset(parent: string, name: string, options: DatasetCreateOptions): Promise<ExitedProcess>;
@@ -126,6 +127,9 @@ export class ZFSManager implements IZFSManager {
 
   async createPool(pool: ZPoolBase, options: ZpoolCreateOptions): Promise<ExitedProcess> {
     validateZfsName(pool.name, "pool name");
+    if (options.refreservationPercent !== undefined && !Number.isFinite(options.refreservationPercent)) {
+      throw new ValueError("Invalid refreservation percentage");
+    }
     const argv = ["zpool", "create", pool.name];
     
     // set up pool properties
@@ -171,12 +175,11 @@ export class ZFSManager implements IZFSManager {
     console.log('createPool output:', proc.getStdout());
 
     if (options.refreservationPercent !== undefined) {
-      // Non-fatal: the pool is already created, so throwing here would strand it un-retryable.
       try {
-        await this.applyRefreservation(pool.name, options.refreservationPercent);
-      } catch (e) {
-        const detail = e instanceof Error ? e.message : String(e);
-        console.warn(`[ZFS] refreservation failed on '${pool.name}':`, e);
+        await this.setPoolRefreservation(pool, options.refreservationPercent);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        console.warn(`[ZFS] refreservation failed on '${pool.name}':`, error);
         this.onWarning?.(
           `Pool '${pool.name}' was created, but the ${options.refreservationPercent}% space reservation could not be applied (${detail}). ` +
             `Storage is usable. To apply it manually, run: zfs set refreservation=<bytes> ${pool.name}`
@@ -187,42 +190,29 @@ export class ZFSManager implements IZFSManager {
     return proc;
   }
 
-  /**
-   * Reserve a share of the pool's real post-parity capacity.
-   *
-   * Sizing this from the raw sum of disk capacities overshoots badly on raidz/mirror
-   * and on pools with mismatched drive sizes, and passing it to `zpool create` as
-   * `-O refreservation=` has the pool reject the whole create with ENOSPC, which libzfs
-   * reports as "one or more devices is out of space". Both problems go away by asking
-   * the finished pool what it actually has.
-   */
-  private async applyRefreservation(poolName: string, percent: number): Promise<void> {
+  async setPoolRefreservation(pool: ZPoolBase | string, percent: number): Promise<void> {
+    const poolName = typeof pool === "string" ? pool : pool.name;
+    validateZfsName(poolName, "pool name");
+    if (!Number.isFinite(percent)) throw new ValueError("Invalid refreservation percentage");
     const fraction = Math.min(Math.max(percent, 0), 100) / 100;
-    if (fraction === 0) return;
-
-    const availProc = await unwrap(
-      this.server.execute(
-        new Command(["zfs", "get", "-Hp", "-o", "value", "available", poolName], this.commandOptions)
-      )
-    );
-    const availableBytes = Number(availProc.getStdout().trim());
-
-    if (!Number.isFinite(availableBytes) || availableBytes <= 0) {
-      throw new Error(
-        `could not read available space for '${poolName}' (got "${availProc.getStdout().trim()}")`
-      );
+    let reservation = "none";
+    if (fraction > 0) {
+      const result = await unwrap(this.server.execute(new Command(
+        ["zfs", "get", "-Hp", "-o", "property,value", "available,used,usedbyrefreservation", poolName], this.commandOptions
+      )));
+      const properties = Object.fromEntries(result.getStdout().trim().split("\n").map(line => line.split("\t")));
+      const values = ["available", "used", "usedbyrefreservation"].map(property => {
+        const raw = properties[property];
+        if (!raw || !/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw))) {
+          throw new ValueError(`Invalid usable-space property '${property}' for '${poolName}'`);
+        }
+        return Number(raw);
+      });
+      const usable = values[0]! + values[1]! - values[2]!;
+      if (!Number.isSafeInteger(usable) || usable < 0) throw new ValueError("Invalid usable dataset capacity");
+      reservation = String(Math.floor(usable * fraction));
     }
-
-    const bytes = Math.floor(availableBytes * fraction);
-    console.log(
-      `[ZFS] Setting refreservation=${bytes} on '${poolName}' (${percent}% of ${availableBytes} usable bytes)`
-    );
-
-    await unwrap(
-      this.server.execute(
-        new Command(["zfs", "set", `refreservation=${bytes}`, poolName], this.commandOptions)
-      )
-    );
+    await unwrap(this.server.execute(new Command(["zfs", "set", `refreservation=${reservation}`, poolName], this.commandOptions)));
   }
 
   async destroyPool(pool: ZPoolBase | string, options: ZPoolDestroyOptions = {}): Promise<void> {

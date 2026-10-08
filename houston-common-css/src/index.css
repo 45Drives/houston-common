@@ -396,6 +396,10 @@
 		@apply text-gray-50 bg-danger;
 	}
 
+	.btn-success {
+		@apply text-gray-50 bg-success;
+	}
+
 	.btn-warning {
 		@apply text-gray-50 bg-warning;
 	}

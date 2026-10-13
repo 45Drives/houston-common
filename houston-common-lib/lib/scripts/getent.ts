@@ -1,4 +1,4 @@
-export const getentBashScriptJsonOuptut = (db: "passwd" | "group", domain: boolean) => {
+export const getentBashScriptJsonOutput = (db: "passwd" | "group", domain: boolean) => {
 	const [nameKey, idKey, wbinfoFlag] = {
 		'passwd': ['login', 'uid', '-u'],
 		'group': ['name', 'gid', '-g']

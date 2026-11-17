@@ -16,7 +16,7 @@ If not, see <https://www.gnu.org/licenses/>.
 -->
 
 <script lang="ts">
-import { ref, reactive, computed, type ComputedRef } from "vue";
+import { ref, reactive, computed, type ComputedRef, type Ref, type UnwrapRef } from "vue";
 import {
   InformationCircleIcon,
   ExclamationCircleIcon,
@@ -125,7 +125,7 @@ export class Notification {
   }
 }
 
-export const notificationList = ref<Notification[]>([]);
+export const notificationList: Ref<UnwrapRef<Notification>[]> = ref<Notification[]>([]);
 
 /**
  * Push a notification

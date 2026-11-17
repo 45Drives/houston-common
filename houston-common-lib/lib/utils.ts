@@ -344,7 +344,9 @@ export function hasProp<T, TPartial extends Partial<T>, PropName extends keyof T
   return obj[prop] !== undefined;
 }
 
-export function assertProp<T, TPartial extends Partial<T>, PropName extends keyof TPartial>(prop: PropName) {
+export function assertProp<T, TPartial extends Partial<T>, PropName extends keyof TPartial>(
+  prop: PropName
+): (partial: TPartial) => Result<TPartial & Required<Pick<TPartial, PropName>>, TypeError> {
   return (partial: TPartial) => hasProp(partial, prop) ? ok(partial) : err(new TypeError(`missing property: ${String(prop)}`));
 }
 

@@ -3,6 +3,7 @@ export * from "./useGlobalProcessingState";
 export * from "./useTempObjectStaging";
 export * from "./wrapActions";
 export {
+  type GlobalModalConfirmFunctions,
   confirm,
   confirmBeforeAction,
   assertConfirm,

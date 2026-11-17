@@ -1,8 +1,8 @@
 import { IPCMessageRouter, IPCMessageTypes, IPCMessage, isIPCMessage } from "./types";
 
-interface ElectronApi {
+export interface ElectronApi {
   ipcRenderer: {
-    send: (channel: string, data: any) => void;
+    send: (channel: string, data?: any) => void;
     on: (channel: string, callback: (...args: any[]) => void) => void;
     once: (channel: string, callback: (...args: any[]) => void) => void;
     invoke: <T = any>(channel: string, ...args: any[]) => Promise<T>;

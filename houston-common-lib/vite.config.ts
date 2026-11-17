@@ -54,6 +54,10 @@ export default defineConfig({
     dts({
       copyDtsFiles: true,
       beforeWriteFile(filePath, content) {
+        const relative = path.relative(path.resolve(__dirname, "typings"), filePath);
+        if (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
+          filePath = path.resolve(__dirname, "dist/typings", relative);
+        }
         return {
           filePath,
           content: /import.*?\?raw/.test(content)
